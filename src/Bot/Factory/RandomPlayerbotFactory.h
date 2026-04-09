@@ -7,16 +7,16 @@
 #define _PLAYERBOT_RANDOMPLAYERBOTFACTORY_H
 
 #include <map>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "ArenaTeam.h"
 #include "Common.h"
 #include "DBCEnums.h"
 
 class Player;
 class WorldSession;
-
-enum ArenaType : uint8;
 
 class RandomPlayerbotFactory
 {
@@ -51,15 +51,22 @@ public:
 
     Player* CreateRandomBot(WorldSession* session, uint8 cls, std::unordered_map<NameRaceAndGender, std::vector<std::string>>& names);
     static void CreateRandomBots();
-    static void CreateRandomArenaTeams(ArenaType slot, uint32 count);
     static std::string const CreateRandomGuildName();
     static uint32 CalculateTotalAccountCount();
     static uint32 CalculateAvailableCharsPerAccount();
 
+    // Arena team utilities (static — no bot instance needed)
+    static void DeleteBotArenaTeams();
+    static uint32 GetBotArenaTeamCount(ArenaType type);
+    static bool IsBotArenaTeam(ArenaTeam const* team);
+    static void LoadArenaTeamNames();
+    static std::string CreateRandomArenaTeamName();
+
 private:
     static bool IsValidRaceClassCombination(uint8 race, uint8 class_, uint32 expansion);
     std::string const CreateRandomBotName(NameRaceAndGender raceAndGender);
-    static std::string const CreateRandomArenaTeamName();
+
+    static inline std::vector<std::string> _availableArenaTeamNames;
 };
 
 #endif

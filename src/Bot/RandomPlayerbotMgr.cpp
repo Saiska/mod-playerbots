@@ -1763,6 +1763,47 @@ void RandomPlayerbotMgr::Init()
     PlayerbotsDatabase.Execute("DELETE FROM playerbots_random_bots WHERE event = 'add'");
 }
 
+void RandomPlayerbotMgr::InitArenaTeams()
+{
+    if (sPlayerbotAIConfig.deleteRandomBotArenaTeams)
+    {
+        RandomPlayerbotFactory::DeleteBotArenaTeams();
+        return;
+    }
+
+    RandomPlayerbotFactory::LoadArenaTeamNames();
+
+    uint32 existing2v2 = RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_2v2);
+    uint32 existing3v3 = RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_3v3);
+    uint32 existing5v5 = RandomPlayerbotFactory::GetBotArenaTeamCount(ARENA_TYPE_5v5);
+
+    auto deficit = [](uint32 existing, uint32 target) -> uint32
+    {
+        return existing < target ? target - existing : 0;
+    };
+
+    arenaCaptainsNeeded[ARENA_TYPE_2v2] = deficit(existing2v2, sPlayerbotAIConfig.randomBotArenaTeam2v2Count);
+    arenaCaptainsNeeded[ARENA_TYPE_3v3] = deficit(existing3v3, sPlayerbotAIConfig.randomBotArenaTeam3v3Count);
+    arenaCaptainsNeeded[ARENA_TYPE_5v5] = deficit(existing5v5, sPlayerbotAIConfig.randomBotArenaTeam5v5Count);
+
+    LOG_INFO("playerbots", "Bot arena teams: 2v2={}/{}, 3v3={}/{}, 5v5={}/{} (captains needed: {}/{}/{})",
+             existing2v2, sPlayerbotAIConfig.randomBotArenaTeam2v2Count,
+             existing3v3, sPlayerbotAIConfig.randomBotArenaTeam3v3Count,
+             existing5v5, sPlayerbotAIConfig.randomBotArenaTeam5v5Count,
+             arenaCaptainsNeeded[ARENA_TYPE_2v2],
+             arenaCaptainsNeeded[ARENA_TYPE_3v3],
+             arenaCaptainsNeeded[ARENA_TYPE_5v5]);
+}
+
+void RandomPlayerbotMgr::OnBotLoginArenaTeam(Player* bot)
+{
+    if (!bot)
+        return;
+
+    PlayerbotFactory factory(bot, bot->GetLevel());
+    factory.InitArenaTeam();
+}
+
 void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
 {
     if (bot->InBattleground())
@@ -2538,6 +2579,9 @@ void RandomPlayerbotMgr::OnBotLoginInternal(Player* const bot)
         PlayerbotFactory factory(bot, bot->GetLevel());
         factory.InitGuild();
     }
+
+    // Assign bot to an arena team if eligible
+    OnBotLoginArenaTeam(bot);
 
     if (sPlayerbotAIConfig.randomBotFixedLevel)
     {

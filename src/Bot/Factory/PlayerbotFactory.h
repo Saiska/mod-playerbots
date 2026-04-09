@@ -6,6 +6,7 @@
 #ifndef _PLAYERBOT_PLAYERBOTFACTORY_H
 #define _PLAYERBOT_PLAYERBOTFACTORY_H
 
+#include "Battleground.h"
 #include "InventoryAction.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -119,6 +120,8 @@ private:
     void InitInventorySkill();
     Item* StoreItem(uint32 itemId, uint32 count);
     void InitArenaTeam();
+    bool CreateArenaTeamWithCaptain(ArenaType type);
+    void AssignToArenaTeam();
     void InitImmersive();
     static void AddPrevQuests(uint32 questId, std::list<uint32>& questIds);
     void LoadEnchantContainer();

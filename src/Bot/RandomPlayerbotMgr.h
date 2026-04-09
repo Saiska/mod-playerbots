@@ -6,6 +6,7 @@
 #ifndef _PLAYERBOT_RANDOMPLAYERBOTMGR_H
 #define _PLAYERBOT_RANDOMPLAYERBOTMGR_H
 
+#include "Battleground.h"
 #include "NewRpgInfo.h"
 #include "ObjectGuid.h"
 #include "PlayerbotMgr.h"
@@ -120,6 +121,10 @@ public:
     Player* GetRandomPlayer();
     std::vector<Player*> GetPlayers() { return players; };
     PlayerBotMap GetAllBots() { return playerBots; };
+    void InitArenaTeams();
+    void OnBotLoginArenaTeam(Player* bot);
+    std::map<ArenaType, uint32> arenaCaptainsNeeded;
+    bool arenaTeamsFull = false;
     void PrintStats();
     double GetBuyMultiplier(Player* bot);
     double GetSellMultiplier(Player* bot);
