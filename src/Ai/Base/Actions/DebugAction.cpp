@@ -275,7 +275,7 @@ bool DebugAction::Execute(Event event)
             []
             {
                 TravelNodeMap::instance().removeNodes();
-                TravelNodeMap::instance().loadNodeStore();
+                TravelNodeMap::instance().LoadNodeStore();
             });
 
         t.detach();
@@ -297,7 +297,7 @@ bool DebugAction::Execute(Event event)
 
                 // uint32 time = 60 * IN_MILLISECONDS; //not used, line marked for removal.
 
-                std::vector<WorldPosition> ppath = l.second->getPath();
+                std::vector<WorldPosition> ppath = l.second->GetPath();
 
                 for (auto p : ppath)
                 {

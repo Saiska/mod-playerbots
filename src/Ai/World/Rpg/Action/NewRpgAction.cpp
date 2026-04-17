@@ -468,26 +468,21 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
         data.inFlight = true;
         return false;
     }
-    Creature* flightMaster = ObjectAccessor::GetCreature(*bot, data.fromFlightMaster);
+
+    if (bot->GetDistance(data.fromPos) > INTERACTION_DISTANCE)
+        return MoveFarTo(data.fromPos);
+
+    Creature* flightMaster = ObjectAccessor::GetCreature(*bot, data.fromFlightMasterGuid);
     if (!flightMaster || !flightMaster->IsAlive())
     {
         botAI->rpgInfo.ChangeToIdle();
         return true;
     }
-    if (bot->GetDistance(flightMaster) > INTERACTION_DISTANCE)
-        return MoveFarTo(flightMaster);
 
-    std::vector<uint32> nodes = data.path;
-
-    botAI->RemoveShapeshift();
-    if (bot->IsMounted())
-        bot->Dismount();
-
-    if (!bot->ActivateTaxiPathTo(nodes, flightMaster, 0))
+    if (!TakeFlight(data.path, flightMaster))
     {
-        LOG_DEBUG("playerbots", "[New RPG] {} active taxi path {} (from {} to {}) failed", bot->GetName(),
-                  flightMaster->GetEntry(), nodes[0], nodes[nodes.size() - 1]);
         botAI->rpgInfo.ChangeToIdle();
+        return true;
     }
     return true;
 }
