@@ -1966,8 +1966,6 @@ void TravelNodeMap::Init()
 
     BuildZoneIndex();
     PrecomputeReachability();
-    LOG_INFO("playerbots", "TravelNodeMap initialized: {} nodes, zone index and reachability built.",
-             nodes.size());
 }
 
 void TravelNodeMap::printMap()
@@ -2215,6 +2213,7 @@ void TravelNodeMap::LoadNodeStore()
     std::string const query = "SELECT id, name, map_id, x, y, z, linked FROM playerbots_travelnode";
 
     std::unordered_map<uint32, TravelNode*> saveNodes;
+    uint32 loadedNodes = 0, loadedLinks = 0, loadedPathPoints = 0;
 
     {
         if (PreparedQueryResult result =
@@ -2241,7 +2240,7 @@ void TravelNodeMap::LoadNodeStore()
 
             } while (result->NextRow());
 
-            LOG_INFO("playerbots", ">> Loaded {} travelNodes.", saveNodes.size());
+            loadedNodes = saveNodes.size();
         }
         else
         {
@@ -2284,7 +2283,7 @@ void TravelNodeMap::LoadNodeStore()
 
             } while (result->NextRow());
 
-            LOG_INFO("playerbots", ">> Loaded {} travelNode links.", result->GetRowCount());
+            loadedLinks = result->GetRowCount();
         }
         else
         {
@@ -2325,13 +2324,16 @@ void TravelNodeMap::LoadNodeStore()
 
             } while (result->NextRow());
 
-            LOG_INFO("playerbots", ">> Loaded {} travelNode paths points.", result->GetRowCount());
+            loadedPathPoints = result->GetRowCount();
         }
         else
         {
             LOG_ERROR("playerbots", ">> Error loading travelNode paths.");
         }
     }
+
+    LOG_INFO("playerbots", ">> Loaded travel data: {} nodes, {} links, {} path points.",
+             loadedNodes, loadedLinks, loadedPathPoints);
 }
 
 void TravelNodeMap::calcMapOffset()
@@ -2554,8 +2556,6 @@ void TravelNodeMap::BuildZoneIndex()
         if (zoneId)
             m_zoneIndex[zoneId].push_back(node);
     }
-
-    LOG_INFO("playerbots", "[ZoneIndex] Built index: {} zones, {} maps", m_zoneIndex.size(), m_mapIndex.size());
 }
 
 TravelNode* TravelNodeMap::GetNearestNodeInZone(WorldPosition pos, uint32 zoneId)
@@ -2673,32 +2673,17 @@ void TravelNodeMap::PrecomputeReachability()
             singletons++;
     }
 
-    LOG_INFO("playerbots", "[Reachability] {} nodes in {} connected components ({} singletons)",
-             totalNodes, components.size(), singletons);
-
-    // Log top 10 largest components
-    for (uint32 i = 0; i < std::min<uint32>(10, components.size()); ++i)
+    std::string topComponents;
+    for (uint32 i = 0; i < std::min<uint32>(3, components.size()); ++i)
     {
         auto const& c = components[i];
         std::string sampleName = c.front() ? c.front()->getName() : "?";
-        uint32 mapId = c.front() ? c.front()->GetMapId() : 0;
-        LOG_INFO("playerbots", "  Component {}: {} nodes, map={}, sample='{}'", i, c.size(), mapId, sampleName);
+        if (i > 0)
+            topComponents += ", ";
+        topComponents += sampleName + "(" + std::to_string(c.size()) + ")";
     }
-    if (singletons > 0)
-    {
-        LOG_INFO("playerbots", "  Singleton nodes (no links):");
-        uint32 logged = 0;
-        for (auto const& c : components)
-        {
-            if (c.size() == 1 && logged < 20)
-            {
-                auto* n = c.front();
-                LOG_INFO("playerbots", "    '{}' map={} pos=({:.0f},{:.0f},{:.0f})", n->getName(), n->GetMapId(),
-                         n->getPosition()->GetPositionX(), n->getPosition()->GetPositionY(), n->getPosition()->GetPositionZ());
-                logged++;
-            }
-        }
-        if (singletons > 20)
-            LOG_INFO("playerbots", "    ... and {} more singletons", singletons - 20);
-    }
+
+    LOG_INFO("playerbots",
+             "TravelNodeMap ready: {} nodes, {} zones, {} maps, {} components ({} singletons). Top: {}.",
+             totalNodes, m_zoneIndex.size(), m_mapIndex.size(), components.size(), singletons, topComponents);
 }
