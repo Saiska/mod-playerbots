@@ -196,18 +196,18 @@ bool DebugAction::Execute(Event event)
     {
         WorldPosition pos(bot);
 
-        std::string const name = "USER:" + text.substr(9);
+        std::string suffix = text.size() > 9 ? text.substr(9) : pos.getAreaName();
+        std::string const name = "USER:" + suffix;
 
-        /* TravelNode* startNode  = */ TravelNodeMap::instance().addNode(pos, name, false, false); // startNode not used, but addNode as side effect, fragment marked for removal.
-
-        for (auto& endNode : TravelNodeMap::instance().getNodes(pos, 2000))
         {
-            endNode->setLinked(false);
+            std::lock_guard<std::shared_timed_mutex> lock(TravelNodeMap::instance().m_nMapMtx);
+            TravelNodeMap::instance().addNode(pos, name, false, true);
+
+            for (auto& endNode : TravelNodeMap::instance().getNodes(pos, 2000))
+                endNode->setLinked(false);
         }
 
-        botAI->TellMasterNoFacing("Node " + name + " created.");
-
-        TravelNodeMap::instance().setHasToGen();
+        botAI->TellMasterNoFacing("Node " + name + " created. Run 'gen path' when done adding nodes.");
 
         return true;
     }
@@ -223,14 +223,15 @@ bool DebugAction::Execute(Event event)
         if (startNode->isImportant())
         {
             botAI->TellMasterNoFacing("Node can not be removed.");
+            return true;
         }
 
-        TravelNodeMap::instance().m_nMapMtx.lock();
-        TravelNodeMap::instance().removeNode(startNode);
-        botAI->TellMasterNoFacing("Node removed.");
-        TravelNodeMap::instance().m_nMapMtx.unlock();
+        {
+            std::lock_guard<std::shared_timed_mutex> lock(TravelNodeMap::instance().m_nMapMtx);
+            TravelNodeMap::instance().removeNode(startNode);
+        }
 
-        TravelNodeMap::instance().setHasToGen();
+        botAI->TellMasterNoFacing("Node removed. Run 'gen path' when done editing nodes.");
 
         return true;
     }
@@ -249,13 +250,14 @@ bool DebugAction::Execute(Event event)
     }
     else if (text.find("gen node") != std::string::npos)
     {
-        // Pathfinder
-        TravelNodeMap::instance().generateNodes();
+        botAI->TellMasterNoFacing("Regenerating travel nodes...");
+        std::thread([]() { TravelNodeMap::instance().generateAll(); }).detach();
         return true;
     }
     else if (text.find("gen path") != std::string::npos)
     {
-        TravelNodeMap::instance().generatePaths();
+        botAI->TellMasterNoFacing("Regenerating travel paths...");
+        std::thread([]() { TravelNodeMap::instance().generateAll(); }).detach();
         return true;
     }
     else if (text.find("crop path") != std::string::npos)
