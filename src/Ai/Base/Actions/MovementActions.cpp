@@ -3119,8 +3119,7 @@ bool MovementAction::GetTravelPlan(TravelPlan& plan, WorldPosition destination)
                          bot->GetPositionY(), bot->GetPositionZ());
 
     bool havePlan = sTravelNodeMap.GetFullPath(plan, botPos,
-        bot->GetZoneId(), bot->GetTeamId(),
-        destination);
+        bot->GetZoneId(), destination);
 
     if (!havePlan)
         TeleportFallback(plan, destination, "no plan");
