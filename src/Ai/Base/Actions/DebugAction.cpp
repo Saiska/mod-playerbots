@@ -233,7 +233,6 @@ bool DebugAction::Execute(Event event)
 
         botAI->TellMasterNoFacing("Node removed. Use console command '.playerbots travel generatenode' to finalize nodes.");
 
-
         return true;
     }
     else if (text.find("reset node") != std::string::npos)
