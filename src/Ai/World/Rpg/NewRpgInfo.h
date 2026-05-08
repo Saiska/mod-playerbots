@@ -83,22 +83,6 @@ struct NewRpgInfo
     bool HasActiveTravelPlan() const { return travelPlan.IsActive(); }
     void ClearTravel() { travelPlan.Reset(); }
 
-    // MoveFar attempt history. Records the last 3 path commits
-    // (node plan or mmap) so MoveFarTo can detect when the same
-    // dest + strategy has failed repeatedly and force the
-    // alternative routing this tick. Breaks deterministic-loop
-    // scenarios where the chained probe (or node graph) keeps
-    // returning the same dead-end path.
-    struct MoveFarAttempt
-    {
-        WorldPosition dest;            // requested destination
-        bool wasNodeTravel{false};     // true=node plan, false=mmap/spline
-        uint32 timestamp{0};
-    };
-    std::deque<MoveFarAttempt> recentMoveFarAttempts;
-    void RecordMoveFarAttempt(WorldPosition const& dest, bool wasNodeTravel);
-    int CountRecentAttempts(WorldPosition const& dest, bool wasNodeTravel) const;
-
     using RpgData = std::variant<
         Idle,
         GoGrind,

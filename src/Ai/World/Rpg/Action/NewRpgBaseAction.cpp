@@ -97,12 +97,8 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
                 float distFromBotToBack = bot->GetExactDist(&lastBack);
                 if (lastBack.distance(dest) < maxDistChange && distFromBotToBack > 10.0f)
                 {
-                    char fails[32];
-                    snprintf(fails, sizeof(fails), "mF=%d nF=%d",
-                        botAI->rpgInfo.CountRecentAttempts(dest, false),
-                        botAI->rpgInfo.CountRecentAttempts(dest, true));
                     EmitDebugMove("MoveFar", "reuse",
-                        dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), fails);
+                        dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
                     return true;
                 }
             }
@@ -118,90 +114,37 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
     //
     //   2. Long-distance move (>= nodeFirstDis) and travel nodes
     //      enabled: try the node graph FIRST. The graph holds
-    //      curated waypoints that avoid known bad terrain (fence
-    //      edges, off-mesh holes, etc.); the chained mmap probe
-    //      doesn't and routinely picks "longest reachable mesh"
-    //      over "geometrically toward dest".
+    //      curated waypoints that avoid known bad terrain.
     //
-    //   3. If no node plan returned (or loop-breaker forced mmap):
-    //      run the 40-step chained mmap probe and dispatch its
-    //      waypoint chain.
+    //   3. If no node plan returned: run the 40-step chained mmap
+    //      probe and dispatch its waypoint chain.
     //
     //   4. Empty / non-progressing probe: fall back to single-
     //      waypoint spline at dest.
     bool tryNodes = (dis >= nodeFirstDis && sPlayerbotAIConfig.enableTravelNodes);
 
-    // Loop-breaker: count recent attempts of each strategy to this
-    // dest. If 3 of one strategy → flip to the other. If both have
-    // failed 3 times each → both exhausted; fall through to
-    // MoveFar:spline and rely on UnstuckAction (5/10 min) for the
-    // eventual hearthstone-out. Without the "both exhausted" branch
-    // we'd flip-flop forever as the buffer evicts.
-    bool forceMmapOverNodes = false;  // 3 nodes failed -> try mmap
-    bool forceNodesOverMmap = false;  // 3 mmap failed -> try nodes
-    bool bothExhausted = false;
-    if (tryNodes)
-    {
-        int nodeFails = botAI->rpgInfo.CountRecentAttempts(dest, /*wasNodeTravel=*/true);
-        int mmapFails = botAI->rpgInfo.CountRecentAttempts(dest, /*wasNodeTravel=*/false);
-
-        if (nodeFails >= 3 && mmapFails >= 3)
-            bothExhausted = true;  // give up, spline at dest
-        else if (nodeFails >= 3)
-            forceMmapOverNodes = true;
-        else if (mmapFails >= 3)
-            forceNodesOverMmap = true;
-
-        if (forceMmapOverNodes || forceNodesOverMmap || bothExhausted)
-        {
-            // Drop the in-flight plan if any; we're about to flip
-            // (or give up). Buffer is intentionally NOT cleared so
-            // we remember which strategies have already been tried
-            // — otherwise we'd flip-flop indefinitely as the buffer
-            // evicts old entries.
-            if (botAI->rpgInfo.HasActiveTravelPlan())
-                botAI->rpgInfo.ClearTravel();
-        }
-    }
-
-    // If a node plan is already active, ride it. The plan executor
-    // owns its own per-step transitions.
-    if (tryNodes && !forceMmapOverNodes && !bothExhausted && botAI->rpgInfo.HasActiveTravelPlan())
+    // If a node plan is already active, ride it.
+    if (tryNodes && botAI->rpgInfo.HasActiveTravelPlan())
         return UpdateTravelPlan();
 
     // PRIORITY: try the travel-node graph FIRST when the move is
-    // long enough to need it. Mirrors cmangos ResolveMovePath:
-    // curated graph paths avoid the "longest reachable mesh"
-    // failure mode of the raw chained mmap probe (e.g. routing
-    // a bot up a tree because the wooden road extends 191y while
-    // the leftward terrain has a navmesh seam).
-    if (tryNodes && !forceMmapOverNodes && !bothExhausted)
+    // long enough to need it.
+    if (tryNodes)
     {
         StartTravelPlan(dest);
         if (botAI->rpgInfo.HasActiveTravelPlan())
         {
-            LOG_INFO("playerbots", "[MoveFar] {} nodetravel | dis={:.0f} | mmapFails={} nodeFails={} | flags={}{}{}",
-                bot->GetName(), dis,
-                botAI->rpgInfo.CountRecentAttempts(dest, false),
-                botAI->rpgInfo.CountRecentAttempts(dest, true),
-                forceMmapOverNodes ? "F-mmap " : "",
-                forceNodesOverMmap ? "F-nodes " : "",
-                bothExhausted ? "EXHAUST " : "");
-            char fails[32];
-            snprintf(fails, sizeof(fails), "mF=%d nF=%d",
-                botAI->rpgInfo.CountRecentAttempts(dest, false),
-                botAI->rpgInfo.CountRecentAttempts(dest, true));
+            LOG_INFO("playerbots", "[MoveFar] {} nodetravel | dis={:.0f}",
+                bot->GetName(), dis);
             EmitDebugMove("MoveFar", "travelplan",
-                          dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), fails);
-            botAI->rpgInfo.RecordMoveFarAttempt(dest, /*wasNodeTravel=*/true);
+                          dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
             return UpdateTravelPlan();
         }
         // Graph returned no plan — fall through to mmap probe.
     }
     else if (botAI->rpgInfo.HasActiveTravelPlan())
     {
-        // We're forcing mmap (loop-breaker) or move dropped below
-        // node-first threshold — drop any leftover plan.
+        // Move dropped below node-first threshold — drop any leftover plan.
         botAI->rpgInfo.ClearTravel();
     }
 
@@ -213,11 +156,8 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
     // Walk the chained probe's full waypoint chain via MoveSplinePath.
     // Handing the full waypoint vector to the motion master removes
     // its discretion to introduce a straight-line shortcut between
-    // intermediate points — that shortcut produced the diagonal-
-    // through-air bug when we used MoveTo(endpoint) and let the
-    // motion master replan.
-    // Skip when both routing strategies have failed 3 times each.
-    if (!probe.empty() && !bothExhausted && probe.size() >= 2)
+    // intermediate points.
+    if (!probe.empty() && probe.size() >= 2)
     {
         WorldPosition stepDest = probe.back();
         float endDistToDest = dest.GetExactDist(stepDest.GetPositionX(),
@@ -260,22 +200,10 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
                         points.resize(cutoff);
                 }
 
-                LOG_INFO("playerbots", "[MoveFar] {} mmap-path | dis={:.0f} | endDist={:.0f} | wp={} | mmapFails={} nodeFails={} | flags={}{}{}",
-                    bot->GetName(), dis, endDistToDest, (uint32)points.size(),
-                    botAI->rpgInfo.CountRecentAttempts(dest, false),
-                    botAI->rpgInfo.CountRecentAttempts(dest, true),
-                    forceMmapOverNodes ? "F-mmap " : "",
-                    forceNodesOverMmap ? "F-nodes " : "",
-                    bothExhausted ? "EXHAUST " : "");
-                {
-                    char fails[32];
-                    snprintf(fails, sizeof(fails), "mF=%d nF=%d",
-                        botAI->rpgInfo.CountRecentAttempts(dest, false),
-                        botAI->rpgInfo.CountRecentAttempts(dest, true));
-                    EmitDebugMove("MoveFar", "mmap",
-                                  points.back().x, points.back().y, points.back().z, fails);
-                }
-                botAI->rpgInfo.RecordMoveFarAttempt(dest, /*wasNodeTravel=*/false);
+                LOG_INFO("playerbots", "[MoveFar] {} mmap-path | dis={:.0f} | endDist={:.0f} | wp={}",
+                    bot->GetName(), dis, endDistToDest, (uint32)points.size());
+                EmitDebugMove("MoveFar", "mmap",
+                              points.back().x, points.back().y, points.back().z);
 
                 // Mount up if outdoors and not in combat.
                 if (!bot->IsMounted() && !bot->IsInCombat() && bot->IsOutdoors() && bot->IsAlive())
@@ -315,23 +243,17 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
     }
 
     // Probe failed or didn't progress — emit visibility whisper so
-    // the user can see WHY mmap didn't dispatch. Without this the
-    // do-quest action's `MoveRandomNear` nudge appears with no
-    // preceding MoveFar whisper, and the failure mode is invisible.
+    // the user can see WHY mmap didn't dispatch.
     {
         bool const probeProgressed = !probe.empty() && probe.size() >= 2 &&
             (dest.GetExactDist(probe.back().GetPositionX(),
                 probe.back().GetPositionY(), probe.back().GetPositionZ()) + 5.0f < disToDest);
         if (!probeProgressed)
         {
-            char fails[32];
-            snprintf(fails, sizeof(fails), "mF=%d nF=%d",
-                botAI->rpgInfo.CountRecentAttempts(dest, false),
-                botAI->rpgInfo.CountRecentAttempts(dest, true));
             char const* reason = (probe.empty() || probe.size() < 2) ? "mmap-empty" : "mmap-noprogress";
             EmitDebugMove("MoveFar", reason,
                           dest.GetPositionX(), dest.GetPositionY(),
-                          dest.GetPositionZ(), fails);
+                          dest.GetPositionZ());
         }
     }
 
@@ -341,35 +263,19 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
     // produces visible clipping/glitching. If LOS is blocked we
     // refuse and let UnstuckAction (5/10 min) catch the stuck.
     bool const inLOS = bot->IsWithinLOS(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
-    LOG_INFO("playerbots", "[MoveFar] {} spline | dis={:.0f} | probe.empty={} | LOS={} | mmapFails={} nodeFails={} | flags={}{}{}",
+    LOG_INFO("playerbots", "[MoveFar] {} spline | dis={:.0f} | probe.empty={} | LOS={}",
         bot->GetName(), dis,
         probe.empty() ? "y" : "n",
-        inLOS ? "y" : "n",
-        botAI->rpgInfo.CountRecentAttempts(dest, false),
-        botAI->rpgInfo.CountRecentAttempts(dest, true),
-        forceMmapOverNodes ? "F-mmap " : "",
-        forceNodesOverMmap ? "F-nodes " : "",
-        bothExhausted ? "EXHAUST " : "");
+        inLOS ? "y" : "n");
     if (!inLOS)
     {
-        char fails[32];
-        snprintf(fails, sizeof(fails), "mF=%d nF=%d",
-            botAI->rpgInfo.CountRecentAttempts(dest, false),
-            botAI->rpgInfo.CountRecentAttempts(dest, true));
         EmitDebugMove("MoveFar", "spline-blocked",
                       dest.GetPositionX(), dest.GetPositionY(),
-                      dest.GetPositionZ(), fails);
+                      dest.GetPositionZ());
         return false;  // Refuse to dispatch a straight line through geometry.
     }
-    {
-        char fails[32];
-        snprintf(fails, sizeof(fails), "mF=%d nF=%d",
-            botAI->rpgInfo.CountRecentAttempts(dest, false),
-            botAI->rpgInfo.CountRecentAttempts(dest, true));
-        EmitDebugMove("MoveFar", "spline",
-                      dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), fails);
-    }
-    botAI->rpgInfo.RecordMoveFarAttempt(dest, /*wasNodeTravel=*/false);
+    EmitDebugMove("MoveFar", "spline",
+                  dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
     // Same exact_waypoint=false rationale as the mmap branch — terrain-
     // following spline, not a straight diagonal.
     return MoveTo(dest.GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(),
