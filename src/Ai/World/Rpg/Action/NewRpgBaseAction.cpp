@@ -314,6 +314,27 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
         }
     }
 
+    // Probe failed or didn't progress — emit visibility whisper so
+    // the user can see WHY mmap didn't dispatch. Without this the
+    // do-quest action's `MoveRandomNear` nudge appears with no
+    // preceding MoveFar whisper, and the failure mode is invisible.
+    {
+        bool const probeProgressed = !probe.empty() && probe.size() >= 2 &&
+            (dest.GetExactDist(probe.back().GetPositionX(),
+                probe.back().GetPositionY(), probe.back().GetPositionZ()) + 5.0f < disToDest);
+        if (!probeProgressed)
+        {
+            char fails[32];
+            snprintf(fails, sizeof(fails), "mF=%d nF=%d",
+                botAI->rpgInfo.CountRecentAttempts(dest, false),
+                botAI->rpgInfo.CountRecentAttempts(dest, true));
+            char const* reason = (probe.empty() || probe.size() < 2) ? "mmap-empty" : "mmap-noprogress";
+            EmitDebugMove("MoveFar", reason,
+                          dest.GetPositionX(), dest.GetPositionY(),
+                          dest.GetPositionZ(), fails);
+        }
+    }
+
     // Empty / non-progressing path falls back to dispatching the
     // destination as a single waypoint. Spline only when target is
     // line-of-sight: dispatching a straight line through walls
@@ -330,7 +351,16 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
         forceNodesOverMmap ? "F-nodes " : "",
         bothExhausted ? "EXHAUST " : "");
     if (!inLOS)
+    {
+        char fails[32];
+        snprintf(fails, sizeof(fails), "mF=%d nF=%d",
+            botAI->rpgInfo.CountRecentAttempts(dest, false),
+            botAI->rpgInfo.CountRecentAttempts(dest, true));
+        EmitDebugMove("MoveFar", "spline-blocked",
+                      dest.GetPositionX(), dest.GetPositionY(),
+                      dest.GetPositionZ(), fails);
         return false;  // Refuse to dispatch a straight line through geometry.
+    }
     {
         char fails[32];
         snprintf(fails, sizeof(fails), "mF=%d nF=%d",
