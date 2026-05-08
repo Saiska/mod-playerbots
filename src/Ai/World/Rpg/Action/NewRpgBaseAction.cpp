@@ -100,7 +100,7 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
                 if (lastBack.distance(dest) < maxDistChange && distFromBotToBack > 10.0f)
                 {
                     WorldPosition botPos(bot);
-                    lastMove.lastPath.makeShortCut(botPos, sPlayerbotAIConfig.reactDistance);
+                    lastMove.lastPath.makeShortCut(botPos, sPlayerbotAIConfig.reactDistance, bot);
 
                     // makeShortCut may clear the path if the bot drifted
                     // too far off (>reactDistance from any waypoint). In

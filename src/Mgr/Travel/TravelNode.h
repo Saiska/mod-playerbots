@@ -427,6 +427,16 @@ struct PathNodePoint
     WorldPosition point;
     PathNodeType type = PathNodeType::NODE_PATH;
     uint32 entry = 0;
+
+    bool operator==(const PathNodePoint& p1) const
+    {
+        return point == p1.point && type == p1.type && entry == p1.entry;
+    }
+    // A "walkable" node is one we traverse on foot. Portals/transports/
+    // taxis/teleports are entry/exit hops, not points to anchor a
+    // shortcut on. Used by makeShortCut to skip them when picking the
+    // closest-point-on-path to the bot.
+    bool isWalkable() const { return (uint8)type <= (uint8)PathNodeType::NODE_NODE; }
 };
 
 // A complete list of points the bots has to walk to or teleport to.
@@ -481,7 +491,7 @@ public:
         return retVec;
     }
 
-    bool makeShortCut(WorldPosition startPos, float maxDist);
+    bool makeShortCut(WorldPosition startPos, float maxDist, Unit* bot = nullptr);
 
     std::ostringstream const print();
 

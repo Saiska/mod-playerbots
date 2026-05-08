@@ -678,7 +678,7 @@ void TravelNode::print([[maybe_unused]] bool printFailed)
 }
 
 // Attempts to move ahead of the path.
-bool TravelPath::makeShortCut(WorldPosition startPos, float maxDist)
+bool TravelPath::makeShortCut(WorldPosition startPos, float maxDist, Unit* bot)
 {
     if (GetPath().empty())
         return false;
@@ -691,10 +691,10 @@ bool TravelPath::makeShortCut(WorldPosition startPos, float maxDist)
 
     for (auto& p : fullPath)  // cycle over the full path
     {
-        // if (p.point.GetMapId() != startPos.GetMapId())
-        //    continue;
-
-        if (p.point.GetMapId() == startPos.GetMapId())
+        // Walkability filter (cmangos parity): portals/transports/taxis
+        // aren't valid anchor points — picking one as the new start of
+        // the trimmed path would leave the bot anchored on a hop.
+        if (p.point.GetMapId() == startPos.GetMapId() && p.isWalkable())
         {
             float curDist = p.point.sqDistance(startPos);
 
@@ -737,8 +737,10 @@ bool TravelPath::makeShortCut(WorldPosition startPos, float maxDist)
 
     WorldPosition beginPos = newPath.begin()->point;
 
-    // The old path seems to be the best.
-    if (beginPos.distance(firstNode) < sPlayerbotAIConfig.tooCloseDistance)
+    // The old path seems to be the best — either the closest walkable
+    // point IS the original front, or it's within tooCloseDistance.
+    if (newPath.front() == fullPath.front() ||
+        beginPos.distance(firstNode) < sPlayerbotAIConfig.tooCloseDistance)
         return false;
 
     // We are (nearly) on the new path. Just follow the rest.
@@ -748,7 +750,11 @@ bool TravelPath::makeShortCut(WorldPosition startPos, float maxDist)
         return true;
     }
 
-    std::vector<WorldPosition> toPath = startPos.getPathTo(beginPos, nullptr);
+    // Pass the bot into getPathTo so PathGenerator picks up its
+    // collision / swimming / flying flags. cmangos parity — passing
+    // nullptr here drops to a default mover and can produce a path
+    // the bot itself can't actually walk.
+    std::vector<WorldPosition> toPath = startPos.getPathTo(beginPos, bot);
 
     // We can not reach the new begin position. Follow the complete path.
     if (!beginPos.isPathTo(toPath))
