@@ -3270,6 +3270,17 @@ bool MovementAction::MoveToSpline(TravelPlan& state, WorldPosition target)
     // Generate path
     state.walkPoints.clear();
     PathResult path = GeneratePath(target.GetPositionX(), target.GetPositionY(), target.GetPositionZ());
+    // Reject paths that PathGenerator marked unreachable. The default
+    // accept mask is NORMAL | INCOMPLETE; anything else (NOT_USING_PATH
+    // from BuildShortcut on invalid polys, NOPATH, etc.) means the
+    // dispatched waypoints would either be a straight-line through
+    // geometry or stop short of the target. Abort the plan instead so
+    // MoveFarTo can re-derive via its own probe.
+    if (!path.reachable)
+    {
+        state.walkPoints.clear();
+        return false;
+    }
     for (auto const& pt : path.points)
         state.walkPoints.push_back(G3D::Vector3(pt.x, pt.y, pt.z));
 
@@ -3380,6 +3391,25 @@ bool MovementAction::ExecuteTravelPlan(TravelPlan& state)
             {
                 state.stepIdx = bestIdx;
                 return true;
+            }
+
+            // Validate the path before MoveTo. PathGenerator can
+            // return NORMAL | NOT_USING_PATH when start or end poly
+            // is invalid (BuildShortcut → 2-point straight line).
+            // PointMovementGenerator would then dispatch the bot
+            // straight through any geometry between bot and target.
+            // The default accept mask (NORMAL | INCOMPLETE) rejects
+            // NOT_USING_PATH, so abort the plan and let MoveFarTo
+            // re-derive instead of walking a known-bad shortcut.
+            PathResult validate = GeneratePath(
+                target.GetPositionX(), target.GetPositionY(), target.GetPositionZ(),
+                DEFAULT_PATH_ACCEPT_MASK, false);
+            if (!validate.reachable)
+            {
+                EmitDebugMove("TravelPlan", "prepath-unreachable",
+                              target.GetPositionX(), target.GetPositionY(), target.GetPositionZ());
+                state.Reset();
+                return false;
             }
 
             return MoveTo(target.GetMapId(),
