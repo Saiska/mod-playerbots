@@ -44,9 +44,9 @@ VALUES
 
   -- Alliance (original 8)
   (NULL, 'Stormwind Vanguard',       'wow_guild_stormwind_vanguard',       0, 0x001, 0x001, 0x002 | 0x010, 0x004 | 0x040, 30, 65, 65, 7, 3, 11, 14),
-  (NULL, 'Ashenvale Sentinels',      'wow_guild_ashenvale_sentinels',      0, 0x004, 0x008, 0x400, 0,             20, 35, 30,  9,  2, 9,  4),
+  (NULL, 'Ashenvale Sentinels',      'wow_guild_ashenvale_sentinels',      0, 0x001, 0x008, 0x004 | 0x008, 0,     20, 35, 30,  9,  2, 9,  4),
   (NULL, 'Knights of the Ebon Hold', 'wow_guild_knights_ebon_hold',        0, 0x020, 0x004, 0,     0x001 | 0x008 | 0x040, 55, 55, 100, 0, 5, 0, 21),
-  (NULL, 'Stalkers of Teldrassil',   'wow_guild_stalkers_teldrassil',      0, 0x004, 0x008, 0x400, 0,             15, 30, 31,  7,  2, 9,  4),
+  (NULL, 'Stalkers of Teldrassil',   'wow_guild_stalkers_teldrassil',      0, 0x004, 0x008, 0x010, 0,             15, 30, 31,  7,  2, 9,  4),
   (NULL, 'Daughters of Cenarius',    'wow_guild_daughters_cenarius',       0, 0x400, 0x008, 0,     0,             30, 25, 30,  12, 2, 11, 4),
   (NULL, 'Aldor Lightbearers',       'wow_guild_aldor_lightbearers',       0, 0x010, 0x400, 0x002, 0,             40, 35, 27,  11, 3, 14, 14),
   (NULL, 'Acolytes of Acherus',      'wow_guild_acolytes_acherus',         0, 0x020, 0x004, 0,     0x001 | 0x008 | 0x040, 55, 35, 99, 0, 5, 0,  21),
@@ -67,4 +67,4 @@ VALUES
   -- Neutral (new 3)
   (NULL, 'Earthen Ring Conclave',    'wow_guild_earthen_ring_conclave',    2, 0x040, 0x020 | 0x400, 0, 0x002 | 0x080, 40, 35, 25, 12, 3, 8, 3),
   (NULL, 'Kirin Tor Magistrate',     'wow_guild_kirin_tor_magistrate',     2, 0x080, 0,     0x010, 0,             60, 40, 50,  6,  3, 0,  6),
-  (NULL, 'The Stalwart Vigil',       'wow_guild_stalwart_vigil',           2, 0,     0,     0,     0,             80, 80, 89,  0,  0, 0,  21);
+  (NULL, 'The Stalwart Vigil',       'wow_guild_stalwart_vigil',           2, 0,     0,     0,     0,             80, 50, 89,  0,  0, 0,  21);
