@@ -156,20 +156,32 @@ AiPlayerbot.AllowGuildBots = 1
 # Allow linking accounts for shared altbot control
 AiPlayerbot.AllowTrustedAccountBots = 1
 
+# DEPRECATED (themed-guilds fork): the themed name pool itself caps creation
+# (one guild per theme_slug). This setting is ignored by the themed selector.
 # Randombots will create guilds with nearby randombots
 # Note: currently, randombots will not invite more bots after a guild is created,
 # meaning randombot guilds will have only the 10 initial randombots needed to sign the charter
 # Default: 0 (disabled)
 AiPlayerbot.RandomBotGuildNearby = 0
 
+# DEPRECATED (themed-guilds fork): ignored. Kept for backward compat.
 # Number of guilds created by randombots
 AiPlayerbot.RandomBotGuildCount = 20
 
+# Overridden by per-guild `target_size` in playerbots_guild_names.
+# Falls back to this value only for guilds without theme metadata.
 # Maximum number of members in randombot guilds (minimum is hardcoded to 10)
 AiPlayerbot.RandomBotGuildSizeMax = 15
 
 # Delete all randombot guilds if set to 1
 AiPlayerbot.DeleteRandomBotGuilds = 0
+
+# Temperature for themed-guild recruitment scoring.
+# Each candidate guild gets a match score (0..3) from class/race + affinity matching.
+# weight = exp(score / ThemedGuildTemperature) * headroom_factor
+# Lower  = stricter theme adherence (1.0 -> perfect-fit ~7x more likely than no-fit).
+# Higher = more cross-pollination.
+AiPlayerbot.ThemedGuildTemperature = 1.0
 
 # Randombots will invite players to groups/raids/guilds
 AiPlayerbot.RandomBotInvitePlayer = 0
