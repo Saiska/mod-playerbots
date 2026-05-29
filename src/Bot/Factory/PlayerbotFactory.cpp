@@ -4563,10 +4563,12 @@ void PlayerbotFactory::InitGuild()
     }
     else
     {
-        if (guild->AddMember(bot->GetGUID(),urand(GR_OFFICER, GR_INITIATE)))
+        GuildTheme const& th = PlayerbotGuildMgr::instance().GetThemeByName(guildName);
+        uint8 rank = PlayerbotGuildMgr::instance().PickRankForBot(th, bot);
+        if (guild->AddMember(bot->GetGUID(), rank))
             PlayerbotGuildMgr::instance().OnGuildUpdate(guild);
         else
-            LOG_ERROR("playerbots","Bot {} failed to join guild {}.", bot->GetName(), guildName);
+            LOG_ERROR("playerbots", "Bot {} failed to join guild {}.", bot->GetName(), guildName);
     }
     // add guild tabard
     if (bot->GetGuildId() && bot->GetLevel() > 9 && urand(0, 4) && !bot->HasItemCount(5976, 1))
