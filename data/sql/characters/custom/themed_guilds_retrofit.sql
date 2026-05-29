@@ -22,6 +22,3 @@ UPDATE guild_rank gr
   JOIN playerbots_guild_names n ON n.name = g.name
   JOIN playerbots_guild_rank_names rn ON rn.theme_slug = n.theme_slug AND rn.rid = gr.rid
    SET gr.rname = rn.rname;
-
--- Report rows touched.
-SELECT 'Tabard rows updated:' AS phase, ROW_COUNT() AS rows;
