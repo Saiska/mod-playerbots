@@ -1,12 +1,12 @@
 -- themed_guilds_retrofit.sql
+-- Operator must select the correct DB before running (mysql -u... <db> < this_file).
 -- One-time (re-applicable): stamp themed tabards + rank labels onto live guilds
 -- whose name matches a row in playerbots_guild_names.
 -- Prereq: dbupdater has applied 2026_05_29_00_themed_guilds_schema.sql (theme
 --         columns present) and the base seed for playerbots_guild_names is the
 --         themed 20-row version.
+-- Run against the configured CharacterDatabase.
 -- Safe to re-run.
-
-USE acore_characters;
 
 UPDATE guild g
   JOIN playerbots_guild_names n ON g.name = n.name
