@@ -216,9 +216,14 @@ bool RaidSimSpike::Start(ChatHandler* handler, std::string const& guildName)
     }
 
     // Gather online, level-80, non-busy bots of this guild.
+    // NOTE: must iterate ObjectAccessor::GetPlayers() (all online players), NOT
+    // RandomPlayerbotMgr::GetPlayers() — the latter only holds non-random "alt" bots with a
+    // human master; autologin random bots take the IsRandomBot branch in OnPlayerLogin and are
+    // never added to that vector, so it returns ~0 for the random-bot population.
     std::vector<ObjectGuid> eligible;
-    for (Player* bot : sRandomPlayerbotMgr.GetPlayers())
+    for (auto const& itr : ObjectAccessor::GetPlayers())
     {
+        Player* bot = itr.second;
         if (!bot || !bot->IsInWorld())
             continue;
         if (bot->GetGuildId() != guild->GetId())
