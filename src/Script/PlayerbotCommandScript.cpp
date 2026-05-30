@@ -18,6 +18,7 @@
 #include "GuildTaskMgr.h"
 #include "PerfMonitor.h"
 #include "PlayerbotMgr.h"
+#include "RaidSimSpike.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 
@@ -41,11 +42,18 @@ public:
             {"unlink", HandleUnlinkAccountCommand, SEC_PLAYER, Console::No},
         };
 
+        static ChatCommandTable playerbotsRaidSimCommandTable = {
+            {"start", HandleRaidSimStartCommand, SEC_GAMEMASTER, Console::Yes},
+            {"stop", HandleRaidSimStopCommand, SEC_GAMEMASTER, Console::Yes},
+            {"status", HandleRaidSimStatusCommand, SEC_GAMEMASTER, Console::Yes},
+        };
+
         static ChatCommandTable playerbotsCommandTable = {
             {"bot", HandlePlayerbotCommand, SEC_PLAYER, Console::No},
             {"gtask", HandleGuildTaskCommand, SEC_GAMEMASTER, Console::Yes},
             {"pmon", HandlePerfMonCommand, SEC_GAMEMASTER, Console::Yes},
             {"rndbot", HandleRandomPlayerbotCommand, SEC_GAMEMASTER, Console::Yes},
+            {"raidsim", playerbotsRaidSimCommandTable},
             {"debug", playerbotsDebugCommandTable},
             {"account", playerbotsAccountCommandTable},
         };
@@ -109,6 +117,48 @@ public:
     static bool HandleDebugBGCommand(ChatHandler* handler, char const* args)
     {
         return BGTactics::HandleConsoleCommand(handler, args);
+    }
+
+    // --- RaidSim spike (throwaway; see docs/.../2026-05-29-raid-sim-spike-botraidbind.md) ---
+    static bool TrimArg(char const* args, std::string& out)
+    {
+        if (!args || !*args)
+            return false;
+        std::string s(args);
+        size_t b = s.find_first_not_of(" \t");
+        size_t e = s.find_last_not_of(" \t");
+        if (b == std::string::npos)
+            return false;
+        out = s.substr(b, e - b + 1);
+        return !out.empty();
+    }
+
+    static bool HandleRaidSimStartCommand(ChatHandler* handler, char const* args)
+    {
+        std::string guildName;
+        if (!TrimArg(args, guildName))
+        {
+            handler->PSendSysMessage("Usage: .playerbots raidsim start <guild name>");
+            return false;
+        }
+        return sRaidSimSpike.Start(handler, guildName);
+    }
+
+    static bool HandleRaidSimStopCommand(ChatHandler* handler, char const* args)
+    {
+        std::string guildName;
+        if (!TrimArg(args, guildName))
+        {
+            handler->PSendSysMessage("Usage: .playerbots raidsim stop <guild name>");
+            return false;
+        }
+        return sRaidSimSpike.Stop(handler, guildName);
+    }
+
+    static bool HandleRaidSimStatusCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        sRaidSimSpike.Status(handler);
+        return true;
     }
 
     static bool HandleSetSecurityKeyCommand(ChatHandler* handler, char const* args)
