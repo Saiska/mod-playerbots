@@ -95,13 +95,15 @@ public:
 
     void OnPlayerLogin(Player* player) override
     {
-        // RaidSim: feed real-player gear into the monotonic server base_ilvl. EXCLUDE bots —
-        // a freshly-looted bot must never ratchet the server frontier upward.
-        if (!GET_PLAYERBOT_AI(player))
-            sRaidSimulationMgr.ConsiderPlayerIlvl(player);
-
         if (!player->GetSession()->IsBot())
         {
+            // RaidSim: feed real-player gear into the monotonic server base_ilvl. EXCLUDE bots —
+            // a freshly-looted bot must never ratchet the frontier upward. GetSession()->IsBot()
+            // is reliable at login; GET_PLAYERBOT_AI() is NOT — a random bot's PlayerbotAI is not
+            // yet attached at OnPlayerLogin, so it would wrongly count autologin bots as real
+            // players (observed live: 2000 bots, 0 real players ratcheted base_ilvl to 200).
+            sRaidSimulationMgr.ConsiderPlayerIlvl(player);
+
             PlayerbotsMgr::instance().AddPlayerbotData(player, false);
             sRandomPlayerbotMgr.OnPlayerLogin(player);
 
