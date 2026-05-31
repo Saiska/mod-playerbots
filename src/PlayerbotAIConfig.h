@@ -440,6 +440,20 @@ public:
     uint32 botTaxiGapMs;
     uint32 botTaxiGapJitterMs;
 
+    // --- Autonomous Instance Simulation (RaidSim) ---
+    bool   raidSimEnable;
+    uint32 raidSimDuration;        // minutes a run lasts
+    uint32 raidSimLootInterval;    // minutes between loot awards
+    uint32 raidSimRollsPerInterval;// members rolled per interval (1 = trickle)
+    uint32 raidSimMinRaiders;      // minimum online members to launch
+    uint32 raidSimGuildCooldown;   // minutes before a guild can run again
+    bool   raidSimOnlyUpgrades;    // only equip rolled items that beat the current slot
+    // Guild-chat broadcast toggles (in-character immersion). Master gates the per-category ones.
+    bool   raidSimBroadcast;           // master switch for ALL guild-chat broadcasts
+    bool   raidSimBroadcastStartStop;  // "sets out for X" / "returns from X" lines
+    bool   raidSimBroadcastLoot;       // "<bot> receives <item>" lines
+    bool   raidSimAnnounce;            // server-wide SendWorldText announce (debug/flavor; orthogonal)
+
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)
     {

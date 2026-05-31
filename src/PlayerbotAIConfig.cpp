@@ -433,6 +433,19 @@ bool PlayerbotAIConfig::Initialize()
     botTaxiGapMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapMs", 200);
     botTaxiGapJitterMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapJitterMs", 100);
 
+    // --- Autonomous Instance Simulation (RaidSim) ---
+    raidSimEnable           = sConfigMgr->GetOption<bool>("RaidSim.Enable", false);
+    raidSimDuration         = sConfigMgr->GetOption<int32>("RaidSim.Duration", 90);
+    raidSimLootInterval     = sConfigMgr->GetOption<int32>("RaidSim.LootInterval", 10);
+    raidSimRollsPerInterval = sConfigMgr->GetOption<int32>("RaidSim.RollsPerInterval", 1);
+    raidSimMinRaiders       = sConfigMgr->GetOption<int32>("RaidSim.MinRaiders", 5);
+    raidSimGuildCooldown    = sConfigMgr->GetOption<int32>("RaidSim.GuildCooldown", 360);
+    raidSimOnlyUpgrades     = sConfigMgr->GetOption<bool>("RaidSim.OnlyUpgrades", true);
+    raidSimBroadcast          = sConfigMgr->GetOption<bool>("RaidSim.Broadcast", true);
+    raidSimBroadcastStartStop = sConfigMgr->GetOption<bool>("RaidSim.BroadcastStartStop", true);
+    raidSimBroadcastLoot      = sConfigMgr->GetOption<bool>("RaidSim.BroadcastLoot", true);
+    raidSimAnnounce         = sConfigMgr->GetOption<bool>("RaidSim.Announce", false);
+
     LOG_INFO("server.loading", "Loading TalentSpecs...");
 
     for (uint32 cls = 1; cls < MAX_CLASSES; ++cls)
