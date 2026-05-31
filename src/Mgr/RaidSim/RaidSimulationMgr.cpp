@@ -116,8 +116,10 @@ namespace
             return false;
         if (!GET_PLAYERBOT_AI(bot))
             return false;
-        if (bot->GetLevel() < 80)
-            return false;
+        if (!sRandomPlayerbotMgr.IsRandomBot(bot))
+            return false;  // autonomous random bots only — never conscript a real player's alt companion
+        if (bot->GetGroup())
+            return false;  // not in any group — the formation op disbands the bot's current group
         if (bot->isDead() || bot->IsInCombat())
             return false;
         if (bot->InBattleground() || bot->InBattlegroundQueue())
@@ -473,6 +475,26 @@ bool RaidSimulationMgr::ResolveGuildInstance(std::string const& guildName, uint3
 
         out = fillable[urand(0, fillable.size() - 1)];
         return true;
+    }
+    return false;
+}
+
+bool RaidSimulationMgr::ResolveLevelingInstance(std::vector<uint8> const& levels, RaidSimInstance& out) const
+{
+    // _leveling is pre-sorted by levelHi DESC (LoadFromDB). Highest dungeon whose in-range cohort
+    // reaches MinDungeon wins. All leveling dungeons are group_size 5, so the threshold is MinDungeon.
+    uint32 need = sPlayerbotAIConfig.raidSimMinDungeon;
+    for (RaidSimInstance const& inst : _leveling)
+    {
+        uint32 inRange = 0;
+        for (uint8 lv : levels)
+            if (lv >= inst.levelLo && lv <= inst.levelHi)
+                ++inRange;
+        if (inRange >= need)
+        {
+            out = inst;
+            return true;
+        }
     }
     return false;
 }
