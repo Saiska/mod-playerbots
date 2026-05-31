@@ -28,6 +28,7 @@
 #include "PlayerbotGuildMgr.h"
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
+#include "RaidSimulationMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "PlayerbotCommandScript.h"
@@ -96,6 +97,13 @@ public:
     {
         if (!player->GetSession()->IsBot())
         {
+            // RaidSim: feed real-player gear into the monotonic server base_ilvl. EXCLUDE bots —
+            // a freshly-looted bot must never ratchet the frontier upward. GetSession()->IsBot()
+            // is reliable at login; GET_PLAYERBOT_AI() is NOT — a random bot's PlayerbotAI is not
+            // yet attached at OnPlayerLogin, so it would wrongly count autologin bots as real
+            // players (observed live: 2000 bots, 0 real players ratcheted base_ilvl to 200).
+            sRaidSimulationMgr.ConsiderPlayerIlvl(player);
+
             PlayerbotsMgr::instance().AddPlayerbotData(player, false);
             sRandomPlayerbotMgr.OnPlayerLogin(player);
 
@@ -374,12 +382,17 @@ public:
         PlayerbotSpellRepository::Instance().Initialize();
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
+
+        // RaidSim: load the monotonic base_ilvl, banded ladder, and per-instance pools.
+        // Runs at world init (post-DB-connect, pre-tick); queries CharacterDatabase + WorldDatabase.
+        sRaidSimulationMgr.LoadFromDB();
     }
 
     void OnUpdate(uint32 diff) override
     {
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
+        sRaidSimulationMgr.Update(diff);
     }
 };
 

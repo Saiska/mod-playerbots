@@ -249,7 +249,7 @@ void PlayerbotGuildMgr::LoadGuildNames()
         "SELECT name, theme_slug, faction, class_mask, race_mask, "
         "       affinity_class_mask, affinity_race_mask, min_level, target_size, "
         "       tabard_emblem_style, tabard_emblem_color, tabard_border_style, "
-        "       tabard_border_color, tabard_bg_color "
+        "       tabard_border_color, tabard_bg_color, raid_offset, max_band "
         "FROM playerbots_guild_names");
 
     if (!result)
@@ -277,6 +277,8 @@ void PlayerbotGuildMgr::LoadGuildNames()
         t.tabardBorderStyle = f[11].IsNull() ? int16(-1) : f[11].Get<int16>();
         t.tabardBorderColor = f[12].IsNull() ? int16(-1) : f[12].Get<int16>();
         t.tabardBgColor     = f[13].IsNull() ? int16(-1) : f[13].Get<int16>();
+        t.raidOffset        = f[14].Get<int8>();
+        t.maxBand           = f[15].Get<uint8>();
         t.valid             = !t.slug.empty();
 
         _guildThemes[name] = t;

@@ -18,7 +18,7 @@
 #include "GuildTaskMgr.h"
 #include "PerfMonitor.h"
 #include "PlayerbotMgr.h"
-#include "RaidSimSpike.h"
+#include "RaidSimulationMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 
@@ -141,7 +141,7 @@ public:
             handler->PSendSysMessage("Usage: .playerbots raidsim start <guild name>");
             return false;
         }
-        return sRaidSimSpike.Start(handler, guildName);
+        return sRaidSimulationMgr.Start(handler, guildName);
     }
 
     static bool HandleRaidSimStopCommand(ChatHandler* handler, char const* args)
@@ -152,12 +152,12 @@ public:
             handler->PSendSysMessage("Usage: .playerbots raidsim stop <guild name>");
             return false;
         }
-        return sRaidSimSpike.Stop(handler, guildName);
+        return sRaidSimulationMgr.Stop(handler, guildName);
     }
 
     static bool HandleRaidSimStatusCommand(ChatHandler* handler, char const* /*args*/)
     {
-        sRaidSimSpike.Status(handler);
+        sRaidSimulationMgr.Status(handler);
         return true;
     }
 

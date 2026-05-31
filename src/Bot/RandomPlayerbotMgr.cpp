@@ -37,7 +37,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "RaceMgr.h"
-#include "RaidSimSpike.h"
+#include "RaidSimulationMgr.h"
 #include "Random.h"
 #include "RandomPlayerbotFactory.h"
 #include "ServerFacade.h"
@@ -1451,7 +1451,7 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
 
     // RaidSim spike: leave parked bots entirely alone. This single guard covers the group
     // auto-disband (below), randomize, and teleport events for a bot on a simulated run.
-    if (sRaidSimSpike.IsRaiding(bot->GetGUID()))
+    if (sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
         return false;
 
     if (bot->InBattleground())
@@ -1582,7 +1582,7 @@ void RandomPlayerbotMgr::Revive(Player* player)
 void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
 {
     // RaidSim spike: never relocate a bot on a simulated run (defensive; ProcessBot also guards).
-    if (sRaidSimSpike.IsRaiding(bot->GetGUID()))
+    if (sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
         return;
 
     // ignore when alrdy teleported or not in the world yet.
@@ -1850,7 +1850,7 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
 {
     // RaidSim spike: never re-randomize a bot on a simulated run (Randomize -> UnbindInstance
     // would wipe the instance bind). Defensive; ProcessBot also guards.
-    if (sRaidSimSpike.IsRaiding(bot->GetGUID()))
+    if (sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
         return;
 
     if (bot->InBattleground())
