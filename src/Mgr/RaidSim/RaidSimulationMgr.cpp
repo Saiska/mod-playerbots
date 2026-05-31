@@ -36,6 +36,8 @@ namespace
     // Home = Dalaran (safe city both factions use at 80). Reused from the validated spike.
     constexpr uint32 HOME_MAP = 571;
     constexpr float HOME_X = 5804.15f, HOME_Y = 624.77f, HOME_Z = 647.76f, HOME_O = 1.64f;
+    // Minimum rest after a run, so a long Duration can never yield a zero/negative next cooldown.
+    constexpr uint32 RAIDSIM_COOLDOWN_FLOOR_MS = 5u * 60u * 1000u;
 
     // Canonical map+difficulty -> equippable-item-entry query (v5 design). difficulty_entry_N is a
     // column name (cannot be a bind param) built from d; safe because d is 0..3 from our own table.
@@ -445,6 +447,7 @@ void RaidSimulationMgr::LaunchRun(uint32 guildId, std::string const& guildName, 
     run.instanceId = inst.id;
     run.mapId = inst.mapId;
     run.difficulty = inst.difficulty;
+    run.groupSize = inst.groupSize;
     run.label = inst.label;
     _runs[guildId] = run;
     for (ObjectGuid const& g : members)
@@ -469,7 +472,23 @@ void RaidSimulationMgr::EndRun(ActiveRun const& run)
         for (ObjectGuid const& g : run.members)
             _raiding.erase(g);
     }
-    _cooldownMs[run.guildId] = sPlayerbotAIConfig.raidSimGuildCooldown * 60u * 1000u;
+    // Per-content cadence: dungeons recur fast, raids slow. Jitter (redrawn each cycle) desyncs guilds.
+    // Period is a START-TO-START target, so subtract the run's own Duration to get the rest interval.
+    bool isDungeon = run.groupSize <= 5;
+    uint32 basePeriodMin = isDungeon ? sPlayerbotAIConfig.raidSimDungeonPeriod
+                                     : sPlayerbotAIConfig.raidSimRaidPeriod;
+    uint32 jitterPct = sPlayerbotAIConfig.raidSimJitterPct;
+    int32 signedDelta = 0;
+    if (jitterPct > 0)
+        signedDelta = int32(urand(0, 2u * jitterPct)) - int32(jitterPct);  // -jit .. +jit (percent)
+    int64 periodMin = int64(basePeriodMin) + int64(basePeriodMin) * signedDelta / 100;
+    if (periodMin < 1)
+        periodMin = 1;
+    uint32 periodMs = uint32(periodMin) * 60u * 1000u;
+    uint32 durationMs = sPlayerbotAIConfig.raidSimDuration * 60u * 1000u;
+    _cooldownMs[run.guildId] = (periodMs > durationMs + RAIDSIM_COOLDOWN_FLOOR_MS)
+                                 ? (periodMs - durationMs)
+                                 : RAIDSIM_COOLDOWN_FLOOR_MS;
     LOG_INFO("playerbots", "RaidSim: END guild='{}' inst {} ({})", run.guildName, run.instanceId, run.label);
 }
 
