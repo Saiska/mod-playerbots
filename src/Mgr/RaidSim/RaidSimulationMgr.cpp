@@ -680,32 +680,42 @@ void RaidSimulationMgr::Update(uint32 diff)
         uint32 guildId = cg.first;
         std::string const& guildName = cg.second;
 
-        RaidSimInstance inst;
-        if (!ResolveGuildInstance(guildName, inst))
-            continue;
+        // Boot-spread: the first time we ever consider a guild, give it a random initial cooldown in
+        // [0, DungeonPeriod] instead of launching, so guilds don't all fire on the first pass after a
+        // restart. (candidateGuilds already excludes guilds currently on cooldown or in a run.)
+        if (!_seenGuilds.count(guildId))
+        {
+            _seenGuilds.insert(guildId);
+            uint32 spreadMs = sPlayerbotAIConfig.raidSimDungeonPeriod * 60u * 1000u;
+            if (spreadMs > 0)
+            {
+                _cooldownMs[guildId] = urand(0, spreadMs);
+                continue;
+            }
+        }
 
+        // Gather ALL eligible L80 bots in the guild (no size cap) — headcount drives selection.
         std::vector<ObjectGuid> eligible;
         for (auto const& it : ObjectAccessor::GetPlayers())
         {
             Player* bot = it.second;
-            if (!bot || !bot->IsInWorld() || !GET_PLAYERBOT_AI(bot))
+            if (!BotPassesBaseEligibility(bot, guildId))
                 continue;
-            if (bot->GetGuildId() != guildId)
-                continue;
-            if (bot->GetLevel() < 80 || bot->isDead() || bot->IsInCombat())
-                continue;
-            if (bot->InBattleground() || bot->InBattlegroundQueue())
-                continue;
-            if (bot->GetMap() && bot->GetMap()->IsDungeon())
-                continue;  // already inside an instance
             if (_raiding.find(bot->GetGUID()) != _raiding.end())
                 continue;
             eligible.push_back(bot->GetGUID());
-            if (eligible.size() >= inst.groupSize)
-                break;
         }
-        if (eligible.size() >= sPlayerbotAIConfig.raidSimMinRaiders)
-            LaunchRun(guildId, guildName, inst, eligible);
+
+        if (eligible.size() < sPlayerbotAIConfig.raidSimMinDungeon)
+            continue;  // not enough online to field even a 5-man
+
+        RaidSimInstance inst;
+        if (!ResolveGuildInstance(guildName, uint32(eligible.size()), inst))
+            continue;  // nothing unlocked, or headcount can't fill any instance at/under the tier
+
+        if (eligible.size() > inst.groupSize)
+            eligible.resize(inst.groupSize);  // bring min(avail, group_size)
+        LaunchRun(guildId, guildName, inst, eligible);
     }
 }
 
