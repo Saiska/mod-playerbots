@@ -35,6 +35,8 @@ struct RaidSimInstance
     uint16 gateIlvl = 0;
     uint16 ilvlCap = 0;
     uint8  minQuality = 4;
+    uint8  levelLo = 0;   // leveling rows only: cohort window lower bound (endgame rows leave 0)
+    uint8  levelHi = 0;   // leveling rows only: cohort window upper bound
     std::string label;
     float entryX = 0, entryY = 0, entryZ = 0, entryO = 0;
     float parkX = 0, parkY = 0, parkZ = 0, parkO = 0;
@@ -81,6 +83,10 @@ private:
     // helpers (defined in the .cpp)
     bool  ResolveBaseBand(uint8& outBand) const;
     bool  ResolveGuildInstance(std::string const& guildName, uint32 avail, RaidSimInstance& out) const;
+    // Sub-80: highest seeded leveling dungeon whose in-range cohort (>= MinDungeon of the given bot
+    // levels) can field it. `levels` = the guild's grabbable bots' levels. Returns the dungeon only;
+    // the caller re-selects the in-range bots.
+    bool  ResolveLevelingInstance(std::vector<uint8> const& levels, RaidSimInstance& out) const;
     void  LaunchRun(uint32 guildId, std::string const& guildName, RaidSimInstance const& inst,
                     std::vector<ObjectGuid> const& members);
     void  EndRun(ActiveRun const& run);
@@ -90,6 +96,7 @@ private:
     std::mutex _mutex;
     uint16 _baseIlvl = 0;
     std::map<uint8, std::vector<RaidSimInstance>> _bands;   // band -> instances (ordered by band)
+    std::vector<RaidSimInstance> _leveling;                 // sub-80 dungeons, sorted by levelHi desc
     std::unordered_map<uint32, std::vector<uint32>> _pools; // instanceId -> equippable item entries
     std::unordered_map<uint32, ActiveRun> _runs;            // by guildId
     std::unordered_map<uint32, uint32> _cooldownMs;         // guildId -> remaining cooldown ms
