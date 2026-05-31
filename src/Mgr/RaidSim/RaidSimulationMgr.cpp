@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 namespace
 {
@@ -758,8 +759,11 @@ void RaidSimulationMgr::Update(uint32 diff)
             }
         }
 
-        // Gather ALL eligible L80 bots in the guild (no size cap) — headcount drives selection.
-        std::vector<ObjectGuid> eligible;
+        // Gather ALL grabbable bots (any level), keeping each bot's level so we can bucket: level-80
+        // bots feed the endgame ilvl regime; the rest feed the level-gated leveling regime.
+        std::vector<std::pair<ObjectGuid, uint8>> grabbable;
+        std::vector<ObjectGuid> bots80;
+        std::vector<uint8> levels;
         for (auto const& it : ObjectAccessor::GetPlayers())
         {
             Player* bot = it.second;
@@ -767,19 +771,39 @@ void RaidSimulationMgr::Update(uint32 diff)
                 continue;
             if (_raiding.find(bot->GetGUID()) != _raiding.end())
                 continue;
-            eligible.push_back(bot->GetGUID());
+            uint8 lv = bot->GetLevel();
+            grabbable.emplace_back(bot->GetGUID(), lv);
+            levels.push_back(lv);
+            if (lv >= 80)
+                bots80.push_back(bot->GetGUID());
         }
 
-        if (eligible.size() < sPlayerbotAIConfig.raidSimMinDungeon)
-            continue;  // not enough online to field even a 5-man
+        if (grabbable.size() < sPlayerbotAIConfig.raidSimMinDungeon)
+            continue;  // not enough grabbable to field even a 5-man
 
+        // Highest bracket first: endgame (level 80) wins when fillable.
         RaidSimInstance inst;
-        if (!ResolveGuildInstance(guildName, uint32(eligible.size()), inst))
-            continue;  // nothing unlocked, or headcount can't fill any instance at/under the tier
+        if (bots80.size() >= sPlayerbotAIConfig.raidSimMinDungeon &&
+            ResolveGuildInstance(guildName, uint32(bots80.size()), inst))
+        {
+            if (bots80.size() > inst.groupSize)
+                bots80.resize(inst.groupSize);
+            LaunchRun(guildId, guildName, inst, bots80);
+            continue;
+        }
 
-        if (eligible.size() > inst.groupSize)
-            eligible.resize(inst.groupSize);  // bring min(avail, group_size)
-        LaunchRun(guildId, guildName, inst, eligible);
+        // Else the highest seeded leveling dungeon whose in-range cohort reaches MinDungeon.
+        RaidSimInstance linst;
+        if (ResolveLevelingInstance(levels, linst))
+        {
+            std::vector<ObjectGuid> cohort;
+            for (auto const& gl : grabbable)
+                if (gl.second >= linst.levelLo && gl.second <= linst.levelHi)
+                    cohort.push_back(gl.first);
+            if (cohort.size() > linst.groupSize)
+                cohort.resize(linst.groupSize);
+            LaunchRun(guildId, guildName, linst, cohort);
+        }
     }
 }
 
