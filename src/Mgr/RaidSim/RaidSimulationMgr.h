@@ -3,7 +3,7 @@
  *
  * RaidSimulationMgr — autonomous instance simulation as the sole post-creation gear source for
  * bot guilds. See docs/superpowers/specs/2026-05-29-guild-raid-tier-gearing-design.md (v5) and
- * docs/superpowers/plans/2026-05-30-raid-simulation-mgr.md. Generalizes the validated RaidSimSpike.
+ * docs/superpowers/plans/2026-05-30-raid-simulation-mgr.md. Generalizes the earlier validated spike.
  *
  * Instances are grouped into ilvl bands; a guild runs a RANDOM instance within its highest
  * unlocked band each run.
