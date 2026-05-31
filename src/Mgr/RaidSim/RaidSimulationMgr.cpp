@@ -23,6 +23,8 @@
 #include "PlayerbotMgr.h"
 #include "PlayerbotOperations.h"
 #include "PlayerbotWorldThreadProcessor.h"
+#include "Playerbots.h"
+#include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "StatsWeightCalculator.h"
 
