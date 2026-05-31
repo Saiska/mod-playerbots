@@ -22,6 +22,8 @@ struct GuildTheme
     int16  tabardBorderStyle = -1;
     int16  tabardBorderColor = -1;
     int16  tabardBgColor = -1;
+    int8   raidOffset = -1;   // <0 = not a sim guild; else bands behind frontier
+    uint8  maxBand    = 127;  // ceiling: keep a casual guild on low bands
     bool   valid = false;
 };
 
