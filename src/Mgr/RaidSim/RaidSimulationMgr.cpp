@@ -501,7 +501,6 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
         return false;
     }
 
-    RaidSimInstance inst;
     {
         std::lock_guard<std::mutex> lock(_mutex);
         if (_runs.count(guild->GetId()))
@@ -509,46 +508,41 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
             handler->PSendSysMessage("RaidSim: '{}' already has an active run. Stop it first.", guildName);
             return false;
         }
-        if (!ResolveGuildInstance(guildName, inst))
-        {
-            handler->PSendSysMessage("RaidSim: '{}' has no eligible instance (raid_offset<0 or nothing unlocked).", guildName);
-            return false;
-        }
     }
 
     // CRITICAL: ObjectAccessor::GetPlayers() — the authoritative online-players map. NOT
     // sRandomPlayerbotMgr.GetPlayers() (only human-mastered alt bots; spike bug fixed in 12297d80).
+    // Gather ALL eligible L80 bots (no size cap) — headcount selects the content.
     std::vector<ObjectGuid> eligible;
     for (auto const& it : ObjectAccessor::GetPlayers())
     {
         Player* bot = it.second;
-        if (!bot || !bot->IsInWorld())
+        if (!BotPassesBaseEligibility(bot, guild->GetId()))
             continue;
-        if (bot->GetGuildId() != guild->GetId())
-            continue;
-        if (!GET_PLAYERBOT_AI(bot))
-            continue;
-        if (bot->GetLevel() < 80)
-            continue;
-        if (bot->isDead() || bot->IsInCombat())
-            continue;
-        if (bot->InBattleground() || bot->InBattlegroundQueue())
-            continue;
-        if (bot->GetMap() && bot->GetMap()->IsDungeon())
-            continue;  // already inside an instance; forming/disbanding would homebind it
         if (IsRaiding(bot->GetGUID()))
             continue;
         eligible.push_back(bot->GetGUID());
-        if (eligible.size() >= inst.groupSize)
-            break;
     }
 
-    if (eligible.size() < sPlayerbotAIConfig.raidSimMinRaiders)
+    if (eligible.size() < sPlayerbotAIConfig.raidSimMinDungeon)
     {
-        handler->PSendSysMessage("RaidSim: only {} eligible level-80 bots in '{}' (need {}).",
-                                 uint32(eligible.size()), guildName, sPlayerbotAIConfig.raidSimMinRaiders);
+        handler->PSendSysMessage("RaidSim: only {} eligible level-80 bots in '{}' (need {} to field a dungeon).",
+                                 uint32(eligible.size()), guildName, sPlayerbotAIConfig.raidSimMinDungeon);
         return false;
     }
+
+    RaidSimInstance inst;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (!ResolveGuildInstance(guildName, uint32(eligible.size()), inst))
+        {
+            handler->PSendSysMessage("RaidSim: '{}' has no fillable instance (nothing unlocked, or headcount too low for its tier).", guildName);
+            return false;
+        }
+    }
+
+    if (eligible.size() > inst.groupSize)
+        eligible.resize(inst.groupSize);  // bring min(avail, group_size)
 
     {
         std::lock_guard<std::mutex> lock(_mutex);
