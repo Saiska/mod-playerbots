@@ -438,8 +438,13 @@ bool PlayerbotAIConfig::Initialize()
     raidSimDuration         = sConfigMgr->GetOption<int32>("RaidSim.Duration", 90);
     raidSimLootInterval     = sConfigMgr->GetOption<int32>("RaidSim.LootInterval", 10);
     raidSimRollsPerInterval = sConfigMgr->GetOption<int32>("RaidSim.RollsPerInterval", 1);
-    raidSimMinRaiders       = sConfigMgr->GetOption<int32>("RaidSim.MinRaiders", 5);
-    raidSimGuildCooldown    = sConfigMgr->GetOption<int32>("RaidSim.GuildCooldown", 360);
+    raidSimDungeonPeriod    = sConfigMgr->GetOption<int32>("RaidSim.DungeonPeriod", 90);
+    raidSimRaidPeriod       = sConfigMgr->GetOption<int32>("RaidSim.RaidPeriod", 1440);
+    raidSimJitterPct        = sConfigMgr->GetOption<int32>("RaidSim.JitterPct", 30);
+    raidSimDefaultOffset    = sConfigMgr->GetOption<int32>("RaidSim.DefaultOffset", 1);
+    raidSimMinDungeon       = sConfigMgr->GetOption<int32>("RaidSim.MinDungeon", 5);
+    raidSimMinRaid10        = sConfigMgr->GetOption<int32>("RaidSim.MinRaid10", 8);
+    raidSimMinRaid25        = sConfigMgr->GetOption<int32>("RaidSim.MinRaid25", 25);
     raidSimOnlyUpgrades     = sConfigMgr->GetOption<bool>("RaidSim.OnlyUpgrades", true);
     raidSimBroadcast          = sConfigMgr->GetOption<bool>("RaidSim.Broadcast", true);
     raidSimBroadcastStartStop = sConfigMgr->GetOption<bool>("RaidSim.BroadcastStartStop", true);
