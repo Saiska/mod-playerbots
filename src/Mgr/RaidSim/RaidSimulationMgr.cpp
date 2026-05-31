@@ -583,8 +583,10 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
 
     // CRITICAL: ObjectAccessor::GetPlayers() — the authoritative online-players map. NOT
     // sRandomPlayerbotMgr.GetPlayers() (only human-mastered alt bots; spike bug fixed in 12297d80).
-    // Gather ALL eligible L80 bots (no size cap) — headcount selects the content.
-    std::vector<ObjectGuid> eligible;
+    // Gather ALL grabbable bots (any level), keeping levels so we can bucket endgame vs leveling.
+    std::vector<std::pair<ObjectGuid, uint8>> grabbable;
+    std::vector<ObjectGuid> bots80;
+    std::vector<uint8> levels;
     for (auto const& it : ObjectAccessor::GetPlayers())
     {
         Player* bot = it.second;
@@ -592,28 +594,45 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
             continue;
         if (IsRaiding(bot->GetGUID()))
             continue;
-        eligible.push_back(bot->GetGUID());
+        uint8 lv = bot->GetLevel();
+        grabbable.emplace_back(bot->GetGUID(), lv);
+        levels.push_back(lv);
+        if (lv >= 80)
+            bots80.push_back(bot->GetGUID());
     }
 
-    if (eligible.size() < sPlayerbotAIConfig.raidSimMinDungeon)
+    if (grabbable.size() < sPlayerbotAIConfig.raidSimMinDungeon)
     {
-        handler->PSendSysMessage("RaidSim: only {} eligible level-80 bots in '{}' (need {} to field a dungeon).",
-                                 uint32(eligible.size()), guildName, sPlayerbotAIConfig.raidSimMinDungeon);
+        handler->PSendSysMessage("RaidSim: only {} grabbable bots in '{}' (need {} to field a dungeon).",
+                                 uint32(grabbable.size()), guildName, sPlayerbotAIConfig.raidSimMinDungeon);
         return false;
     }
 
+    // Highest bracket first: endgame (level 80) when fillable, else the highest leveling dungeon.
     RaidSimInstance inst;
+    std::vector<ObjectGuid> party;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (!ResolveGuildInstance(guildName, uint32(eligible.size()), inst))
+        if (bots80.size() >= sPlayerbotAIConfig.raidSimMinDungeon &&
+            ResolveGuildInstance(guildName, uint32(bots80.size()), inst))
         {
-            handler->PSendSysMessage("RaidSim: '{}' has no fillable instance (nothing unlocked, or headcount too low for its tier).", guildName);
+            party = bots80;
+        }
+        else if (ResolveLevelingInstance(levels, inst))
+        {
+            for (auto const& gl : grabbable)
+                if (gl.second >= inst.levelLo && gl.second <= inst.levelHi)
+                    party.push_back(gl.first);
+        }
+        else
+        {
+            handler->PSendSysMessage("RaidSim: '{}' has no fillable content (no level-80 cohort and no leveling dungeon its bots can field).", guildName);
             return false;
         }
     }
 
-    if (eligible.size() > inst.groupSize)
-        eligible.resize(inst.groupSize);  // bring min(avail, group_size)
+    if (party.size() > inst.groupSize)
+        party.resize(inst.groupSize);  // bring min(cohort, group_size)
 
     {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -622,11 +641,11 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
             handler->PSendSysMessage("RaidSim: '{}' was launched concurrently; skipping.", guildName);
             return false;
         }
-        LaunchRun(guild->GetId(), guildName, inst, eligible);
+        LaunchRun(guild->GetId(), guildName, inst, party);
     }
 
     handler->PSendSysMessage("RaidSim: launching '{}' -> {} (band {}) with {} bots.",
-                             guildName, inst.label, uint32(inst.band), uint32(eligible.size()));
+                             guildName, inst.label, uint32(inst.band), uint32(party.size()));
     return true;
 }
 
