@@ -38,6 +38,9 @@ namespace
     constexpr float HOME_X = 5804.15f, HOME_Y = 624.77f, HOME_Z = 647.76f, HOME_O = 1.64f;
     // Minimum rest after a run, so a long Duration can never yield a zero/negative next cooldown.
     constexpr uint32 RAIDSIM_COOLDOWN_FLOOR_MS = 5u * 60u * 1000u;
+    // Leveling-instance ids are stored in the shared _pools map offset by this base so they never
+    // collide with endgame playerbots_raid_tier_instance ids (≈33 rows; 1,000,000 is safe headroom).
+    constexpr uint32 LEVELING_ID_BASE = 1000000u;
 
     // Canonical map+difficulty -> equippable-item-entry query (v5 design). difficulty_entry_N is a
     // column name (cannot be a bind param) built from d; safe because d is 0..3 from our own table.
@@ -320,6 +323,51 @@ void RaidSimulationMgr::LoadFromDB()
 
     LOG_INFO("playerbots", "RaidSim: loaded {} bands / {} instances, base_ilvl={}.",
              uint32(_bands.size()), instanceCount, uint32(_baseIlvl));
+
+    // --- Leveling dungeons (sub-80, level-gated). Same loot resolver, difficulty 0. ---
+    _leveling.clear();
+    if (QueryResult lr = CharacterDatabase.Query(
+            "SELECT id, map_id, difficulty, level_lo, level_hi, ilvl_cap, min_quality, label, "
+            "       entry_x, entry_y, entry_z, entry_o, park_x, park_y, park_z, park_o "
+            "FROM playerbots_leveling_instance ORDER BY level_hi DESC, id ASC"))
+    {
+        uint32 levelingCount = 0;
+        do
+        {
+            Field* f = lr->Fetch();
+            RaidSimInstance inst;
+            inst.id         = f[0].Get<uint32>() + LEVELING_ID_BASE;  // offset key for shared _pools
+            inst.band       = 0;
+            inst.mapId      = f[1].Get<uint32>();
+            inst.difficulty = f[2].Get<uint8>();
+            inst.groupSize  = 5;                                       // leveling is dungeons-only
+            inst.levelLo    = f[3].Get<uint8>();
+            inst.levelHi    = f[4].Get<uint8>();
+            inst.ilvlCap    = f[5].Get<uint16>();
+            inst.minQuality = f[6].Get<uint8>();
+            inst.label      = f[7].Get<std::string>();
+            inst.entryX = f[8].Get<float>();  inst.entryY = f[9].Get<float>();
+            inst.entryZ = f[10].Get<float>(); inst.entryO = f[11].Get<float>();
+            inst.parkX  = f[12].Get<float>(); inst.parkY  = f[13].Get<float>();
+            inst.parkZ  = f[14].Get<float>(); inst.parkO  = f[15].Get<float>();
+
+            std::vector<uint32> pool;
+            if (QueryResult pr = WorldDatabase.Query(
+                    BuildPoolQuery(inst.mapId, inst.difficulty, inst.minQuality, inst.ilvlCap).c_str()))
+            {
+                do { pool.push_back(pr->Fetch()[0].Get<uint32>()); } while (pr->NextRow());
+            }
+            if (pool.empty())
+                LOG_WARN("playerbots", "RaidSim: leveling '{}' (map {}) has EMPTY loot pool.",
+                         inst.label, inst.mapId);
+            _pools[inst.id] = std::move(pool);
+
+            _leveling.push_back(inst);
+            ++levelingCount;
+        } while (lr->NextRow());
+
+        LOG_INFO("playerbots", "RaidSim: loaded {} leveling dungeons.", levelingCount);
+    }
 }
 
 void RaidSimulationMgr::ConsiderPlayerIlvl(Player* player)
