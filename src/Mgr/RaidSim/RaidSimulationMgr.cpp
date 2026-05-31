@@ -334,3 +334,309 @@ void RaidSimulationMgr::ClearRaidingFlags(std::vector<ObjectGuid> const& members
     for (ObjectGuid const& g : members)
         _raiding.erase(g);
 }
+
+bool RaidSimulationMgr::ResolveBaseBand(uint8& outBand) const
+{
+    // _bands is ordered ascending. Highest band whose gate_ilvl <= base_ilvl.
+    bool any = false;
+    for (auto const& kv : _bands)
+    {
+        if (kv.second.empty())
+            continue;
+        if (kv.second.front().gateIlvl <= _baseIlvl)  // band-uniform gate
+        {
+            outBand = kv.first;
+            any = true;
+        }
+    }
+    return any;
+}
+
+bool RaidSimulationMgr::ResolveGuildInstance(std::string const& guildName, RaidSimInstance& out) const
+{
+    GuildTheme const& theme = PlayerbotGuildMgr::instance().GetThemeByName(guildName);
+    if (theme.raidOffset < 0)
+        return false;  // not a sim guild
+
+    uint8 baseBand = 0;
+    if (!ResolveBaseBand(baseBand))
+        return false;  // nothing unlocked yet (base_ilvl too low)
+
+    int band = int(baseBand) - int(theme.raidOffset);
+    if (band < 0)
+        band = 0;
+    if (band > int(theme.maxBand))
+        band = int(theme.maxBand);
+
+    auto it = _bands.find(uint8(band));
+    if (it == _bands.end() || it->second.empty())
+        return false;
+
+    // Random instance within the band (variety).
+    std::vector<RaidSimInstance> const& choices = it->second;
+    out = choices[urand(0, choices.size() - 1)];
+    return true;
+}
+
+void RaidSimulationMgr::LaunchRun(uint32 guildId, std::string const& guildName, RaidSimInstance const& inst,
+                                  std::vector<ObjectGuid> const& members)
+{
+    // Caller holds _mutex.
+    if (members.empty())
+    {
+        LOG_ERROR("playerbots", "RaidSim: LaunchRun called with empty member list for guild '{}'", guildName);
+        return;
+    }
+
+    ActiveRun run;
+    run.guildId = guildId;
+    run.guildName = guildName;
+    run.leader = members.front();
+    run.members = members;
+    run.instanceId = inst.id;
+    run.mapId = inst.mapId;
+    run.difficulty = inst.difficulty;
+    run.label = inst.label;
+    _runs[guildId] = run;
+    for (ObjectGuid const& g : members)
+        _raiding.insert(g);
+
+    PlayerbotWorldThreadProcessor::instance().QueueOperation(
+        std::make_unique<RaidSimFormationOperation>(run.leader, members, inst.mapId, inst.difficulty,
+                                                    inst.label, inst.entryX, inst.entryY, inst.entryZ, inst.entryO));
+
+    LOG_INFO("playerbots", "RaidSim: LAUNCH guild='{}' band {} inst {} ({}) bots={} leader={}",
+             guildName, uint32(inst.band), inst.id, inst.label, members.size(), run.leader.ToString());
+}
+
+void RaidSimulationMgr::EndRun(ActiveRun const& run)
+{
+    // Caller holds _mutex. _raiding stays set; the teardown op clears it once bots are home.
+    if (!PlayerbotWorldThreadProcessor::instance().QueueOperation(
+            std::make_unique<RaidSimTeardownOperation>(run.leader, run.members, run.label)))
+    {
+        LOG_ERROR("playerbots", "RaidSim: teardown op dropped for guild '{}'; clearing raiding flags directly.",
+                  run.guildName);
+        for (ObjectGuid const& g : run.members)
+            _raiding.erase(g);
+    }
+    _cooldownMs[run.guildId] = sPlayerbotAIConfig.raidSimGuildCooldown * 60u * 1000u;
+    LOG_INFO("playerbots", "RaidSim: END guild='{}' inst {} ({})", run.guildName, run.instanceId, run.label);
+}
+
+bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName)
+{
+    Guild* guild = sGuildMgr->GetGuildByName(guildName);
+    if (!guild)
+    {
+        handler->PSendSysMessage("RaidSim: guild '{}' not found.", guildName);
+        return false;
+    }
+
+    RaidSimInstance inst;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_runs.count(guild->GetId()))
+        {
+            handler->PSendSysMessage("RaidSim: '{}' already has an active run. Stop it first.", guildName);
+            return false;
+        }
+        if (!ResolveGuildInstance(guildName, inst))
+        {
+            handler->PSendSysMessage("RaidSim: '{}' has no eligible instance (raid_offset<0 or nothing unlocked).", guildName);
+            return false;
+        }
+    }
+
+    // CRITICAL: ObjectAccessor::GetPlayers() — the authoritative online-players map. NOT
+    // sRandomPlayerbotMgr.GetPlayers() (only human-mastered alt bots; spike bug fixed in 12297d80).
+    std::vector<ObjectGuid> eligible;
+    for (auto const& it : ObjectAccessor::GetPlayers())
+    {
+        Player* bot = it.second;
+        if (!bot || !bot->IsInWorld())
+            continue;
+        if (bot->GetGuildId() != guild->GetId())
+            continue;
+        if (!GET_PLAYERBOT_AI(bot))
+            continue;
+        if (bot->GetLevel() < 80)
+            continue;
+        if (bot->isDead() || bot->IsInCombat())
+            continue;
+        if (bot->InBattleground() || bot->InBattlegroundQueue())
+            continue;
+        if (bot->GetMap() && bot->GetMap()->IsDungeon())
+            continue;  // already inside an instance; forming/disbanding would homebind it
+        if (IsRaiding(bot->GetGUID()))
+            continue;
+        eligible.push_back(bot->GetGUID());
+        if (eligible.size() >= inst.groupSize)
+            break;
+    }
+
+    if (eligible.size() < sPlayerbotAIConfig.raidSimMinRaiders)
+    {
+        handler->PSendSysMessage("RaidSim: only {} eligible level-80 bots in '{}' (need {}).",
+                                 uint32(eligible.size()), guildName, sPlayerbotAIConfig.raidSimMinRaiders);
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_runs.count(guild->GetId()))
+        {
+            handler->PSendSysMessage("RaidSim: '{}' was launched concurrently; skipping.", guildName);
+            return false;
+        }
+        LaunchRun(guild->GetId(), guildName, inst, eligible);
+    }
+
+    handler->PSendSysMessage("RaidSim: launching '{}' -> {} (band {}) with {} bots.",
+                             guildName, inst.label, uint32(inst.band), uint32(eligible.size()));
+    return true;
+}
+
+bool RaidSimulationMgr::Stop(ChatHandler* handler, std::string const& guildName)
+{
+    Guild* guild = sGuildMgr->GetGuildByName(guildName);
+    if (!guild)
+    {
+        handler->PSendSysMessage("RaidSim: guild '{}' not found.", guildName);
+        return false;
+    }
+
+    ActiveRun run;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto it = _runs.find(guild->GetId());
+        if (it == _runs.end())
+        {
+            handler->PSendSysMessage("RaidSim: no active run for '{}'.", guildName);
+            return false;
+        }
+        run = it->second;
+        _runs.erase(it);
+        EndRun(run);
+    }
+
+    handler->PSendSysMessage("RaidSim: tearing down '{}' ({} bots) -> home.", guildName, uint32(run.members.size()));
+    return true;
+}
+
+void RaidSimulationMgr::Status(ChatHandler* handler)
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    uint32 instCount = 0;
+    for (auto const& kv : _bands)
+        instCount += kv.second.size();
+    handler->PSendSysMessage("RaidSim: base_ilvl={} | bands={} instances={} | runs={} | flagged={}",
+                             uint32(_baseIlvl), uint32(_bands.size()), instCount, uint32(_runs.size()),
+                             uint32(_raiding.size()));
+    for (auto const& kv : _runs)
+    {
+        ActiveRun const& run = kv.second;
+        uint32 onMap = 0, online = 0;
+        for (ObjectGuid const& g : run.members)
+        {
+            Player* p = ObjectAccessor::FindPlayer(g);
+            if (!p)
+                continue;
+            ++online;
+            if (p->GetMapId() == run.mapId)
+                ++onMap;
+        }
+        handler->PSendSysMessage("  '{}' {} | members {}, online {}, on-map {} | {}s elapsed",
+                                 run.guildName, run.label, uint32(run.members.size()), online, onMap,
+                                 run.elapsedMs / 1000u);
+    }
+}
+
+void RaidSimulationMgr::Update(uint32 diff)
+{
+    if (!sPlayerbotAIConfig.raidSimEnable)
+        return;
+
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    for (auto it = _cooldownMs.begin(); it != _cooldownMs.end(); )
+    {
+        if (it->second <= diff) it = _cooldownMs.erase(it);
+        else { it->second -= diff; ++it; }
+    }
+
+    uint32 lootIntervalMs = sPlayerbotAIConfig.raidSimLootInterval * 60u * 1000u;
+    uint32 durationMs = sPlayerbotAIConfig.raidSimDuration * 60u * 1000u;
+    std::vector<uint32> ended;
+    for (auto& kv : _runs)
+    {
+        ActiveRun& run = kv.second;
+        run.elapsedMs += diff;
+        run.lootTimerMs += diff;
+        if (run.lootTimerMs >= lootIntervalMs)
+        {
+            run.lootTimerMs = 0;
+            AwardLoot(run);  // Task 8
+        }
+        if (run.elapsedMs >= durationMs)
+            ended.push_back(kv.first);
+    }
+    for (uint32 guildId : ended)
+    {
+        EndRun(_runs[guildId]);
+        _runs.erase(guildId);
+    }
+
+    _schedTimerMs += diff;
+    if (_schedTimerMs < 60u * 1000u)
+        return;
+    _schedTimerMs = 0;
+
+    // Candidate sim guilds: have an online bot, no active run, off cooldown.
+    // ObjectAccessor::GetPlayers() (not sRandomPlayerbotMgr) — see the note in Start().
+    std::unordered_map<uint32, std::string> candidateGuilds;
+    for (auto const& it : ObjectAccessor::GetPlayers())
+    {
+        Player* bot = it.second;
+        if (!bot || !bot->IsInWorld() || !GET_PLAYERBOT_AI(bot))
+            continue;
+        uint32 gid = bot->GetGuildId();
+        if (!gid || _runs.count(gid) || _cooldownMs.count(gid))
+            continue;
+        if (Guild* g = sGuildMgr->GetGuildById(gid))
+            candidateGuilds[gid] = g->GetName();
+    }
+
+    for (auto const& cg : candidateGuilds)
+    {
+        uint32 guildId = cg.first;
+        std::string const& guildName = cg.second;
+
+        RaidSimInstance inst;
+        if (!ResolveGuildInstance(guildName, inst))
+            continue;
+
+        std::vector<ObjectGuid> eligible;
+        for (auto const& it : ObjectAccessor::GetPlayers())
+        {
+            Player* bot = it.second;
+            if (!bot || !bot->IsInWorld() || !GET_PLAYERBOT_AI(bot))
+                continue;
+            if (bot->GetGuildId() != guildId)
+                continue;
+            if (bot->GetLevel() < 80 || bot->isDead() || bot->IsInCombat())
+                continue;
+            if (bot->InBattleground() || bot->InBattlegroundQueue())
+                continue;
+            if (bot->GetMap() && bot->GetMap()->IsDungeon())
+                continue;  // already inside an instance
+            if (_raiding.find(bot->GetGUID()) != _raiding.end())
+                continue;
+            eligible.push_back(bot->GetGUID());
+            if (eligible.size() >= inst.groupSize)
+                break;
+        }
+        if (eligible.size() >= sPlayerbotAIConfig.raidSimMinRaiders)
+            LaunchRun(guildId, guildName, inst, eligible);
+    }
+}
