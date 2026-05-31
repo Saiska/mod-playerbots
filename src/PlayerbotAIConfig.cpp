@@ -444,7 +444,7 @@ bool PlayerbotAIConfig::Initialize()
     raidSimDefaultOffset    = sConfigMgr->GetOption<int32>("RaidSim.DefaultOffset", 1);
     raidSimMinDungeon       = sConfigMgr->GetOption<int32>("RaidSim.MinDungeon", 5);
     raidSimMinRaid10        = sConfigMgr->GetOption<int32>("RaidSim.MinRaid10", 8);
-    raidSimMinRaid25        = sConfigMgr->GetOption<int32>("RaidSim.MinRaid25", 25);
+    raidSimMinRaid25        = sConfigMgr->GetOption<int32>("RaidSim.MinRaid25", 20);
     raidSimOnlyUpgrades     = sConfigMgr->GetOption<bool>("RaidSim.OnlyUpgrades", true);
     raidSimBroadcast          = sConfigMgr->GetOption<bool>("RaidSim.Broadcast", true);
     raidSimBroadcastStartStop = sConfigMgr->GetOption<bool>("RaidSim.BroadcastStartStop", true);
