@@ -445,8 +445,13 @@ public:
     uint32 raidSimDuration;        // minutes a run lasts
     uint32 raidSimLootInterval;    // minutes between loot awards
     uint32 raidSimRollsPerInterval;// members rolled per interval (1 = trickle)
-    uint32 raidSimMinRaiders;      // minimum online members to launch
-    uint32 raidSimGuildCooldown;   // minutes before a guild can run again
+    uint32 raidSimDungeonPeriod;   // minutes between a guild's dungeon runs (start-to-start target)
+    uint32 raidSimRaidPeriod;      // minutes between a guild's raid runs (start-to-start target)
+    uint32 raidSimJitterPct;       // +/- percent jitter on the period, redrawn each cycle
+    uint32 raidSimDefaultOffset;   // tier offset applied to guilds with raid_offset < 0 (unassigned)
+    uint32 raidSimMinDungeon;      // min online L80 to field a 5-man
+    uint32 raidSimMinRaid10;       // min online L80 to field a 10-man
+    uint32 raidSimMinRaid25;       // min online L80 to field a 25-man
     bool   raidSimOnlyUpgrades;    // only equip rolled items that beat the current slot
     // Guild-chat broadcast toggles (in-character immersion). Master gates the per-category ones.
     bool   raidSimBroadcast;           // master switch for ALL guild-chat broadcasts

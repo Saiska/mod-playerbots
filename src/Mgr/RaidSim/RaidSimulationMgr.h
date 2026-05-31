@@ -72,6 +72,7 @@ private:
         uint32 instanceId = 0;            // chosen RaidSimInstance::id (keys the loot pool)
         uint32 mapId = 0;
         uint8  difficulty = 0;
+        uint8  groupSize = 5;             // content size actually run (drives per-content cadence)
         std::string label;
         uint32 elapsedMs = 0;
         uint32 lootTimerMs = 0;
@@ -79,7 +80,7 @@ private:
 
     // helpers (defined in the .cpp)
     bool  ResolveBaseBand(uint8& outBand) const;
-    bool  ResolveGuildInstance(std::string const& guildName, RaidSimInstance& out) const;
+    bool  ResolveGuildInstance(std::string const& guildName, uint32 avail, RaidSimInstance& out) const;
     void  LaunchRun(uint32 guildId, std::string const& guildName, RaidSimInstance const& inst,
                     std::vector<ObjectGuid> const& members);
     void  EndRun(ActiveRun const& run);
@@ -94,6 +95,7 @@ private:
     std::unordered_map<uint32, uint32> _cooldownMs;         // guildId -> remaining cooldown ms
     std::unordered_set<ObjectGuid> _raiding;
     uint32 _schedTimerMs = 0;
+    std::unordered_set<uint32> _seenGuilds;  // guilds given a boot-spread initial cooldown already
 };
 
 #define sRaidSimulationMgr RaidSimulationMgr::instance()

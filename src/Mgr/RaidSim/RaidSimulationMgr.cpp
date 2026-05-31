@@ -36,6 +36,8 @@ namespace
     // Home = Dalaran (safe city both factions use at 80). Reused from the validated spike.
     constexpr uint32 HOME_MAP = 571;
     constexpr float HOME_X = 5804.15f, HOME_Y = 624.77f, HOME_Z = 647.76f, HOME_O = 1.64f;
+    // Minimum rest after a run, so a long Duration can never yield a zero/negative next cooldown.
+    constexpr uint32 RAIDSIM_COOLDOWN_FLOOR_MS = 5u * 60u * 1000u;
 
     // Canonical map+difficulty -> equippable-item-entry query (v5 design). difficulty_entry_N is a
     // column name (cannot be a bind param) built from d; safe because d is 0..3 from our own table.
@@ -88,6 +90,38 @@ namespace
         ai->ChangeStrategy("-passive", BOT_STATE_NON_COMBAT);
         ai->ChangeStrategy("-passive", BOT_STATE_COMBAT);
         ai->Reset();
+    }
+
+    // Minimum online L80 bots needed to FIELD an instance of this group size (threshold sits below
+    // the nominal size — runs are present-only, so an under-filled group is fine cosmetically).
+    uint32 ThresholdFor(uint8 groupSize)
+    {
+        if (groupSize <= 5)
+            return sPlayerbotAIConfig.raidSimMinDungeon;
+        if (groupSize <= 10)
+            return sPlayerbotAIConfig.raidSimMinRaid10;
+        return sPlayerbotAIConfig.raidSimMinRaid25;
+    }
+
+    // Per-bot eligibility for a sim run, EXCLUDING the _raiding check (callers apply that with the
+    // correct locking). Shared by the GM Start path and the scheduler tick.
+    bool BotPassesBaseEligibility(Player* bot, uint32 guildId)
+    {
+        if (!bot || !bot->IsInWorld())
+            return false;
+        if (bot->GetGuildId() != guildId)
+            return false;
+        if (!GET_PLAYERBOT_AI(bot))
+            return false;
+        if (bot->GetLevel() < 80)
+            return false;
+        if (bot->isDead() || bot->IsInCombat())
+            return false;
+        if (bot->InBattleground() || bot->InBattlegroundQueue())
+            return false;
+        if (bot->GetMap() && bot->GetMap()->IsDungeon())
+            return false;  // already inside an instance; forming/disbanding would homebind it
+        return true;
     }
 
     class RaidSimFormationOperation : public PlayerbotOperation
@@ -354,30 +388,45 @@ bool RaidSimulationMgr::ResolveBaseBand(uint8& outBand) const
     return any;
 }
 
-bool RaidSimulationMgr::ResolveGuildInstance(std::string const& guildName, RaidSimInstance& out) const
+bool RaidSimulationMgr::ResolveGuildInstance(std::string const& guildName, uint32 avail, RaidSimInstance& out) const
 {
     GuildTheme const& theme = PlayerbotGuildMgr::instance().GetThemeByName(guildName);
-    if (theme.raidOffset < 0)
-        return false;  // not a sim guild
+
+    // raid_offset is now a pure TIER modifier (not an on/off flag). Unassigned (<0) -> DefaultOffset,
+    // so every guild participates; how high it reaches is offset/base_ilvl, capped by max_band.
+    int offset = theme.raidOffset < 0 ? int(sPlayerbotAIConfig.raidSimDefaultOffset) : int(theme.raidOffset);
 
     uint8 baseBand = 0;
     if (!ResolveBaseBand(baseBand))
-        return false;  // nothing unlocked yet (base_ilvl too low)
+        return false;  // nothing unlocked yet (no band's gate_ilvl met — band 0 gates at 0, so rare)
 
-    int band = int(baseBand) - int(theme.raidOffset);
-    if (band < 0)
-        band = 0;
-    if (band > int(theme.maxBand))
-        band = int(theme.maxBand);
+    int top = int(baseBand) - offset;
+    if (top < 0)
+        top = 0;
+    if (top > int(theme.maxBand))
+        top = int(theme.maxBand);
 
-    auto it = _bands.find(uint8(band));
-    if (it == _bands.end() || it->second.empty())
-        return false;
+    // "Field what you can": walk DOWN from the unlocked band; the first band holding an instance the
+    // roster can field (avail >= threshold(group_size)) wins; random-pick among that band's fillable
+    // instances for variety. Yields the highest-tier content this headcount supports.
+    for (int b = top; b >= 0; --b)
+    {
+        auto it = _bands.find(uint8(b));
+        if (it == _bands.end() || it->second.empty())
+            continue;
 
-    // Random instance within the band (variety).
-    std::vector<RaidSimInstance> const& choices = it->second;
-    out = choices[urand(0, choices.size() - 1)];
-    return true;
+        std::vector<RaidSimInstance> fillable;
+        for (RaidSimInstance const& inst : it->second)
+            if (avail >= ThresholdFor(inst.groupSize))
+                fillable.push_back(inst);
+
+        if (fillable.empty())
+            continue;
+
+        out = fillable[urand(0, fillable.size() - 1)];
+        return true;
+    }
+    return false;
 }
 
 void RaidSimulationMgr::LaunchRun(uint32 guildId, std::string const& guildName, RaidSimInstance const& inst,
@@ -398,6 +447,7 @@ void RaidSimulationMgr::LaunchRun(uint32 guildId, std::string const& guildName, 
     run.instanceId = inst.id;
     run.mapId = inst.mapId;
     run.difficulty = inst.difficulty;
+    run.groupSize = inst.groupSize;
     run.label = inst.label;
     _runs[guildId] = run;
     for (ObjectGuid const& g : members)
@@ -422,7 +472,23 @@ void RaidSimulationMgr::EndRun(ActiveRun const& run)
         for (ObjectGuid const& g : run.members)
             _raiding.erase(g);
     }
-    _cooldownMs[run.guildId] = sPlayerbotAIConfig.raidSimGuildCooldown * 60u * 1000u;
+    // Per-content cadence: dungeons recur fast, raids slow. Jitter (redrawn each cycle) desyncs guilds.
+    // Period is a START-TO-START target, so subtract the run's own Duration to get the rest interval.
+    bool isDungeon = run.groupSize <= 5;
+    uint32 basePeriodMin = isDungeon ? sPlayerbotAIConfig.raidSimDungeonPeriod
+                                     : sPlayerbotAIConfig.raidSimRaidPeriod;
+    uint32 jitterPct = sPlayerbotAIConfig.raidSimJitterPct;
+    int32 signedDelta = 0;
+    if (jitterPct > 0)
+        signedDelta = int32(urand(0, 2u * jitterPct)) - int32(jitterPct);  // -jit .. +jit (percent)
+    int64 periodMin = int64(basePeriodMin) + int64(basePeriodMin) * signedDelta / 100;
+    if (periodMin < 1)
+        periodMin = 1;
+    uint32 periodMs = uint32(periodMin) * 60u * 1000u;
+    uint32 durationMs = sPlayerbotAIConfig.raidSimDuration * 60u * 1000u;
+    _cooldownMs[run.guildId] = (periodMs > durationMs + RAIDSIM_COOLDOWN_FLOOR_MS)
+                                 ? (periodMs - durationMs)
+                                 : RAIDSIM_COOLDOWN_FLOOR_MS;
     LOG_INFO("playerbots", "RaidSim: END guild='{}' inst {} ({})", run.guildName, run.instanceId, run.label);
 }
 
@@ -435,7 +501,6 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
         return false;
     }
 
-    RaidSimInstance inst;
     {
         std::lock_guard<std::mutex> lock(_mutex);
         if (_runs.count(guild->GetId()))
@@ -443,46 +508,41 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
             handler->PSendSysMessage("RaidSim: '{}' already has an active run. Stop it first.", guildName);
             return false;
         }
-        if (!ResolveGuildInstance(guildName, inst))
-        {
-            handler->PSendSysMessage("RaidSim: '{}' has no eligible instance (raid_offset<0 or nothing unlocked).", guildName);
-            return false;
-        }
     }
 
     // CRITICAL: ObjectAccessor::GetPlayers() — the authoritative online-players map. NOT
     // sRandomPlayerbotMgr.GetPlayers() (only human-mastered alt bots; spike bug fixed in 12297d80).
+    // Gather ALL eligible L80 bots (no size cap) — headcount selects the content.
     std::vector<ObjectGuid> eligible;
     for (auto const& it : ObjectAccessor::GetPlayers())
     {
         Player* bot = it.second;
-        if (!bot || !bot->IsInWorld())
+        if (!BotPassesBaseEligibility(bot, guild->GetId()))
             continue;
-        if (bot->GetGuildId() != guild->GetId())
-            continue;
-        if (!GET_PLAYERBOT_AI(bot))
-            continue;
-        if (bot->GetLevel() < 80)
-            continue;
-        if (bot->isDead() || bot->IsInCombat())
-            continue;
-        if (bot->InBattleground() || bot->InBattlegroundQueue())
-            continue;
-        if (bot->GetMap() && bot->GetMap()->IsDungeon())
-            continue;  // already inside an instance; forming/disbanding would homebind it
         if (IsRaiding(bot->GetGUID()))
             continue;
         eligible.push_back(bot->GetGUID());
-        if (eligible.size() >= inst.groupSize)
-            break;
     }
 
-    if (eligible.size() < sPlayerbotAIConfig.raidSimMinRaiders)
+    if (eligible.size() < sPlayerbotAIConfig.raidSimMinDungeon)
     {
-        handler->PSendSysMessage("RaidSim: only {} eligible level-80 bots in '{}' (need {}).",
-                                 uint32(eligible.size()), guildName, sPlayerbotAIConfig.raidSimMinRaiders);
+        handler->PSendSysMessage("RaidSim: only {} eligible level-80 bots in '{}' (need {} to field a dungeon).",
+                                 uint32(eligible.size()), guildName, sPlayerbotAIConfig.raidSimMinDungeon);
         return false;
     }
+
+    RaidSimInstance inst;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (!ResolveGuildInstance(guildName, uint32(eligible.size()), inst))
+        {
+            handler->PSendSysMessage("RaidSim: '{}' has no fillable instance (nothing unlocked, or headcount too low for its tier).", guildName);
+            return false;
+        }
+    }
+
+    if (eligible.size() > inst.groupSize)
+        eligible.resize(inst.groupSize);  // bring min(avail, group_size)
 
     {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -614,32 +674,42 @@ void RaidSimulationMgr::Update(uint32 diff)
         uint32 guildId = cg.first;
         std::string const& guildName = cg.second;
 
-        RaidSimInstance inst;
-        if (!ResolveGuildInstance(guildName, inst))
-            continue;
+        // Boot-spread: the first time we ever consider a guild, give it a random initial cooldown in
+        // [0, DungeonPeriod] instead of launching, so guilds don't all fire on the first pass after a
+        // restart. (candidateGuilds already excludes guilds currently on cooldown or in a run.)
+        if (!_seenGuilds.count(guildId))
+        {
+            _seenGuilds.insert(guildId);
+            uint32 spreadMs = sPlayerbotAIConfig.raidSimDungeonPeriod * 60u * 1000u;
+            if (spreadMs > 0)
+            {
+                _cooldownMs[guildId] = urand(0, spreadMs);
+                continue;
+            }
+        }
 
+        // Gather ALL eligible L80 bots in the guild (no size cap) — headcount drives selection.
         std::vector<ObjectGuid> eligible;
         for (auto const& it : ObjectAccessor::GetPlayers())
         {
             Player* bot = it.second;
-            if (!bot || !bot->IsInWorld() || !GET_PLAYERBOT_AI(bot))
+            if (!BotPassesBaseEligibility(bot, guildId))
                 continue;
-            if (bot->GetGuildId() != guildId)
-                continue;
-            if (bot->GetLevel() < 80 || bot->isDead() || bot->IsInCombat())
-                continue;
-            if (bot->InBattleground() || bot->InBattlegroundQueue())
-                continue;
-            if (bot->GetMap() && bot->GetMap()->IsDungeon())
-                continue;  // already inside an instance
             if (_raiding.find(bot->GetGUID()) != _raiding.end())
                 continue;
             eligible.push_back(bot->GetGUID());
-            if (eligible.size() >= inst.groupSize)
-                break;
         }
-        if (eligible.size() >= sPlayerbotAIConfig.raidSimMinRaiders)
-            LaunchRun(guildId, guildName, inst, eligible);
+
+        if (eligible.size() < sPlayerbotAIConfig.raidSimMinDungeon)
+            continue;  // not enough online to field even a 5-man
+
+        RaidSimInstance inst;
+        if (!ResolveGuildInstance(guildName, uint32(eligible.size()), inst))
+            continue;  // nothing unlocked, or headcount can't fill any instance at/under the tier
+
+        if (eligible.size() > inst.groupSize)
+            eligible.resize(inst.groupSize);  // bring min(avail, group_size)
+        LaunchRun(guildId, guildName, inst, eligible);
     }
 }
 
