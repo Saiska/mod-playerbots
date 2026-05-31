@@ -90,6 +90,38 @@ namespace
         ai->Reset();
     }
 
+    // Minimum online L80 bots needed to FIELD an instance of this group size (threshold sits below
+    // the nominal size — runs are present-only, so an under-filled group is fine cosmetically).
+    uint32 ThresholdFor(uint8 groupSize)
+    {
+        if (groupSize <= 5)
+            return sPlayerbotAIConfig.raidSimMinDungeon;
+        if (groupSize <= 10)
+            return sPlayerbotAIConfig.raidSimMinRaid10;
+        return sPlayerbotAIConfig.raidSimMinRaid25;
+    }
+
+    // Per-bot eligibility for a sim run, EXCLUDING the _raiding check (callers apply that with the
+    // correct locking). Shared by the GM Start path and the scheduler tick.
+    bool BotPassesBaseEligibility(Player* bot, uint32 guildId)
+    {
+        if (!bot || !bot->IsInWorld())
+            return false;
+        if (bot->GetGuildId() != guildId)
+            return false;
+        if (!GET_PLAYERBOT_AI(bot))
+            return false;
+        if (bot->GetLevel() < 80)
+            return false;
+        if (bot->isDead() || bot->IsInCombat())
+            return false;
+        if (bot->InBattleground() || bot->InBattlegroundQueue())
+            return false;
+        if (bot->GetMap() && bot->GetMap()->IsDungeon())
+            return false;  // already inside an instance; forming/disbanding would homebind it
+        return true;
+    }
+
     class RaidSimFormationOperation : public PlayerbotOperation
     {
     public:
@@ -354,30 +386,45 @@ bool RaidSimulationMgr::ResolveBaseBand(uint8& outBand) const
     return any;
 }
 
-bool RaidSimulationMgr::ResolveGuildInstance(std::string const& guildName, RaidSimInstance& out) const
+bool RaidSimulationMgr::ResolveGuildInstance(std::string const& guildName, uint32 avail, RaidSimInstance& out) const
 {
     GuildTheme const& theme = PlayerbotGuildMgr::instance().GetThemeByName(guildName);
-    if (theme.raidOffset < 0)
-        return false;  // not a sim guild
+
+    // raid_offset is now a pure TIER modifier (not an on/off flag). Unassigned (<0) -> DefaultOffset,
+    // so every guild participates; how high it reaches is offset/base_ilvl, capped by max_band.
+    int offset = theme.raidOffset < 0 ? int(sPlayerbotAIConfig.raidSimDefaultOffset) : int(theme.raidOffset);
 
     uint8 baseBand = 0;
     if (!ResolveBaseBand(baseBand))
-        return false;  // nothing unlocked yet (base_ilvl too low)
+        return false;  // nothing unlocked yet (no band's gate_ilvl met — band 0 gates at 0, so rare)
 
-    int band = int(baseBand) - int(theme.raidOffset);
-    if (band < 0)
-        band = 0;
-    if (band > int(theme.maxBand))
-        band = int(theme.maxBand);
+    int top = int(baseBand) - offset;
+    if (top < 0)
+        top = 0;
+    if (top > int(theme.maxBand))
+        top = int(theme.maxBand);
 
-    auto it = _bands.find(uint8(band));
-    if (it == _bands.end() || it->second.empty())
-        return false;
+    // "Field what you can": walk DOWN from the unlocked band; the first band holding an instance the
+    // roster can field (avail >= threshold(group_size)) wins; random-pick among that band's fillable
+    // instances for variety. Yields the highest-tier content this headcount supports.
+    for (int b = top; b >= 0; --b)
+    {
+        auto it = _bands.find(uint8(b));
+        if (it == _bands.end() || it->second.empty())
+            continue;
 
-    // Random instance within the band (variety).
-    std::vector<RaidSimInstance> const& choices = it->second;
-    out = choices[urand(0, choices.size() - 1)];
-    return true;
+        std::vector<RaidSimInstance> fillable;
+        for (RaidSimInstance const& inst : it->second)
+            if (avail >= ThresholdFor(inst.groupSize))
+                fillable.push_back(inst);
+
+        if (fillable.empty())
+            continue;
+
+        out = fillable[urand(0, fillable.size() - 1)];
+        return true;
+    }
+    return false;
 }
 
 void RaidSimulationMgr::LaunchRun(uint32 guildId, std::string const& guildName, RaidSimInstance const& inst,
