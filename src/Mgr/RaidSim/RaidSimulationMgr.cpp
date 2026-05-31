@@ -640,3 +640,68 @@ void RaidSimulationMgr::Update(uint32 diff)
             LaunchRun(guildId, guildName, inst, eligible);
     }
 }
+
+void RaidSimulationMgr::AwardLoot(RaidSimulationMgr::ActiveRun const& run)
+{
+    // Caller (Update) holds _mutex and runs on the world thread. Must NOT re-lock _mutex.
+    auto poolIt = _pools.find(run.instanceId);
+    if (poolIt == _pools.end() || poolIt->second.empty())
+        return;
+    std::vector<uint32> const& pool = poolIt->second;
+
+    // Members online AND on the instance map (parked).
+    std::vector<Player*> present;
+    for (ObjectGuid const& g : run.members)
+    {
+        Player* p = ObjectAccessor::FindPlayer(g);
+        if (p && p->IsInWorld() && p->GetMapId() == run.mapId)
+            present.push_back(p);
+    }
+    if (present.empty())
+        return;
+
+    uint32 rolls = std::min<uint32>(sPlayerbotAIConfig.raidSimRollsPerInterval, present.size());
+    for (uint32 r = 0; r < rolls; ++r)
+    {
+        Player* bot = present[(r + urand(0, present.size() - 1)) % present.size()];
+        uint32 itemId = pool[urand(0, pool.size() - 1)];
+
+        // swap=true so an OCCUPIED slot still resolves a valid dest (a geared L80 bot has every
+        // slot full; swap=false would reject every upgrade — the steady-state case we exist for).
+        uint16 dest = 0;
+        InventoryResult can = bot->CanEquipNewItem(NULL_SLOT, dest, itemId, true);
+        if (can != EQUIP_ERR_OK)
+            continue;  // bot's class/spec/proficiency can't use this item at all
+
+        uint8 slot = uint8(dest & 255);
+        StatsWeightCalculator calc(bot);
+        float newScore = calc.CalculateItem(itemId, 0, int32(slot));
+        float curScore = 0.0f;
+        if (Item* current = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            curScore = calc.CalculateItem(current->GetTemplate()->ItemId, current->GetItemRandomPropertyId(),
+                                          int32(slot));
+
+        if (sPlayerbotAIConfig.raidSimOnlyUpgrades && newScore <= curScore)
+            continue;  // not an upgrade for this slot; skip (present-only sim, never downgrades)
+
+        // Replace whatever is in the slot. Destroy the displaced item (no bag hoarding) BEFORE equipping
+        // into the now-free slot — CanEquipNewItem(swap=true) already validated usability.
+        if (Item* current = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            bot->DestroyItem(INVENTORY_SLOT_BAG_0, slot, true);
+
+        Item* equipped = bot->EquipNewItem(dest, itemId, true);
+        if (!equipped)
+            continue;
+        bot->AutoUnequipOffhandIfNeed();
+
+        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+        std::string itemName = proto ? proto->Name1 : std::to_string(itemId);
+        LOG_INFO("playerbots", "RaidSim: '{}' {} receives {} ({})",
+                 run.guildName, bot->GetName(), itemName, run.label);
+
+        if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastLoot)
+            if (Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId()))
+                guild->BroadcastToGuild(bot->GetSession(), false, bot->GetName() + " receives " + itemName + ".",
+                                        LANG_UNIVERSAL);
+    }
+}
