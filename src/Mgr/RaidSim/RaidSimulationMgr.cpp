@@ -7,6 +7,7 @@
 
 #include "Chat.h"
 #include "DatabaseEnv.h"
+#include "DBCStores.h"
 #include "Group.h"
 #include "GroupMgr.h"
 #include "Guild.h"
@@ -63,6 +64,167 @@ namespace
             "   AND it.Quality >= " + std::to_string(uint32(minQuality)) +
             "   AND it.ItemLevel <= " + std::to_string(uint32(ilvlCap)) + ";";
     }
+
+    void ParkBot(Player* p)
+    {
+        PlayerbotAI* ai = GET_PLAYERBOT_AI(p);
+        if (!ai)
+            return;
+        ai->ChangeStrategy("+passive", BOT_STATE_NON_COMBAT);
+        ai->ChangeStrategy("+passive", BOT_STATE_COMBAT);
+        ai->ChangeStrategy("+stay", BOT_STATE_NON_COMBAT);
+        ai->ChangeStrategy("+stay", BOT_STATE_COMBAT);
+    }
+
+    void UnparkBot(Player* p)
+    {
+        PlayerbotAI* ai = GET_PLAYERBOT_AI(p);
+        if (!ai)
+            return;
+        ai->ChangeStrategy("-stay", BOT_STATE_NON_COMBAT);
+        ai->ChangeStrategy("-stay", BOT_STATE_COMBAT);
+        ai->ChangeStrategy("-passive", BOT_STATE_NON_COMBAT);
+        ai->ChangeStrategy("-passive", BOT_STATE_COMBAT);
+        ai->Reset();
+    }
+
+    class RaidSimFormationOperation : public PlayerbotOperation
+    {
+    public:
+        RaidSimFormationOperation(ObjectGuid leaderGuid, std::vector<ObjectGuid> memberGuids,
+                                  uint32 mapId, uint8 difficulty, std::string label,
+                                  float x, float y, float z, float o)
+            : m_leaderGuid(leaderGuid), m_memberGuids(std::move(memberGuids)), m_mapId(mapId),
+              m_difficulty(difficulty), m_label(std::move(label)), m_x(x), m_y(y), m_z(z), m_o(o)
+        {
+        }
+
+        bool Execute() override
+        {
+            Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid);
+            if (!leader)
+            {
+                LOG_ERROR("playerbots", "RaidSim: leader not found at formation");
+                return false;
+            }
+
+            for (ObjectGuid const& guid : m_memberGuids)
+            {
+                if (guid == m_leaderGuid)
+                    continue;
+                if (Player* m = ObjectAccessor::FindPlayer(guid))
+                    if (Group* g = m->GetGroup())
+                        g->RemoveMember(guid);
+            }
+            if (Group* lg = leader->GetGroup())
+                lg->Disband(true);
+
+            Group* group = new Group();
+            if (!group->Create(leader))
+            {
+                delete group;
+                LOG_ERROR("playerbots", "RaidSim: failed to create group for leader {}", leader->GetName());
+                return false;
+            }
+            sGroupMgr->AddGroup(group);
+            MapEntry const* mapEntry = sMapStore.LookupEntry(m_mapId);
+            if (mapEntry && mapEntry->IsRaid())
+            {
+                group->ConvertToRaid();
+                group->SetRaidDifficulty(Difficulty(m_difficulty));
+            }
+            else
+            {
+                group->SetDungeonDifficulty(Difficulty(m_difficulty));
+            }
+
+            uint32 added = 0;
+            for (ObjectGuid const& guid : m_memberGuids)
+            {
+                if (guid == m_leaderGuid)
+                    continue;
+                Player* m = ObjectAccessor::FindPlayer(guid);
+                if (m && group->AddMember(m))
+                    ++added;
+            }
+
+            for (ObjectGuid const& guid : m_memberGuids)
+            {
+                Player* p = ObjectAccessor::FindPlayer(guid);
+                if (!p)
+                    continue;
+                p->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+                p->TeleportTo(m_mapId, m_x, m_y, m_z, m_o);
+                ParkBot(p);
+            }
+
+            LOG_INFO("playerbots", "RaidSim: formed raid leader={} members={} -> map {} diff {} ({})",
+                     leader->GetName(), added + 1, m_mapId, uint32(m_difficulty), m_label);
+
+            if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
+                if (Guild* guild = sGuildMgr->GetGuildById(leader->GetGuildId()))
+                    guild->BroadcastToGuild(leader->GetSession(), false, "We set out for " + m_label + ".", LANG_UNIVERSAL);
+            return true;
+        }
+
+        ObjectGuid GetBotGuid() const override { return m_leaderGuid; }
+        uint32 GetPriority() const override { return 60; }
+        std::string GetName() const override { return "RaidSimFormation"; }
+        bool IsValid() const override { return ObjectAccessor::FindPlayer(m_leaderGuid) != nullptr; }
+
+    private:
+        ObjectGuid m_leaderGuid;
+        std::vector<ObjectGuid> m_memberGuids;
+        uint32 m_mapId;
+        uint8 m_difficulty;
+        std::string m_label;
+        float m_x, m_y, m_z, m_o;
+    };
+
+    class RaidSimTeardownOperation : public PlayerbotOperation
+    {
+    public:
+        RaidSimTeardownOperation(ObjectGuid leaderGuid, std::vector<ObjectGuid> memberGuids, std::string label)
+            : m_leaderGuid(leaderGuid), m_memberGuids(std::move(memberGuids)), m_label(std::move(label))
+        {
+        }
+
+        bool Execute() override
+        {
+            if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
+                if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
+                    if (Guild* guild = sGuildMgr->GetGuildById(leader->GetGuildId()))
+                        guild->BroadcastToGuild(leader->GetSession(), false, "We return from " + m_label + ".", LANG_UNIVERSAL);
+
+            for (ObjectGuid const& guid : m_memberGuids)
+            {
+                Player* p = ObjectAccessor::FindPlayer(guid);
+                if (!p)
+                    continue;
+                UnparkBot(p);
+                p->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+                p->TeleportTo(HOME_MAP, HOME_X, HOME_Y, HOME_Z, HOME_O);
+            }
+
+            if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
+                if (Group* g = leader->GetGroup())
+                    g->Disband(true);
+
+            sRaidSimulationMgr.ClearRaidingFlags(m_memberGuids);
+            LOG_INFO("playerbots", "RaidSim: teardown complete leader={}", m_leaderGuid.ToString());
+            return true;
+        }
+
+        ObjectGuid GetBotGuid() const override { return m_leaderGuid; }
+        uint32 GetPriority() const override { return 60; }
+        std::string GetName() const override { return "RaidSimTeardown"; }
+        bool IsValid() const override { return true; }
+
+    private:
+        ObjectGuid m_leaderGuid;
+        std::vector<ObjectGuid> m_memberGuids;
+        std::string m_label;
+    };
 }  // namespace
 
 void RaidSimulationMgr::LoadFromDB()
