@@ -65,6 +65,13 @@ private:
     // (the controller leaves such guilds entirely alone). Generalizes the leader-only
     // hasRealPlayer flag to an any-member scan.
     bool IsBotManagedGuild(uint32 guildId) const;
+    // The level a member must reach for `th`'s purpose: raid guilds (raidOffset>=0) need
+    // max level; casual guilds need their min_level.
+    uint8 GoalLevel(GuildTheme const& th) const;
+    // Online random bots that are unguilded and eligible (faction ok + level >= GoalLevel)
+    // for `th`, best-fit first (PickRankForBot score desc). Class/race masks are soft (rank),
+    // not a hard gate — matching AssignToGuild's hard gates (faction + level).
+    std::vector<Player*> CollectEligibleUnguilded(GuildTheme const& th) const;
 
     std::unordered_map<std::string, bool> _guildNames;
 

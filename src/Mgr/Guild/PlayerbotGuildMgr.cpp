@@ -5,6 +5,8 @@
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "ScriptMgr.h"
+#include "World.h"
+#include "RandomPlayerbotMgr.h"
 #include <algorithm>
 #include <cmath>
 
@@ -440,6 +442,37 @@ bool PlayerbotGuildMgr::IsBotManagedGuild(uint32 guildId) const
     } while (r->NextRow());
 
     return true;
+}
+
+uint8 PlayerbotGuildMgr::GoalLevel(GuildTheme const& th) const
+{
+    if (th.raidOffset >= 0)
+        return uint8(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));  // raid guild: max level
+    return th.minLevel;                                              // casual: its floor
+}
+
+std::vector<Player*> PlayerbotGuildMgr::CollectEligibleUnguilded(GuildTheme const& th) const
+{
+    std::vector<Player*> out;
+    uint8 goal = GoalLevel(th);
+
+    for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
+    {
+        if (!bot || !bot->IsInWorld())
+            continue;
+        if (bot->GetGuildId() != 0)
+            continue;                                   // already guilded
+        if (th.faction != 2 && th.faction != bot->GetTeamId())
+            continue;                                   // faction hard gate
+        if (bot->GetLevel() < goal)
+            continue;                                   // goal-level hard gate
+        out.push_back(bot);
+    }
+
+    std::sort(out.begin(), out.end(), [&](Player* a, Player* b) {
+        return PickRankForBot(th, a) < PickRankForBot(th, b);  // GR_OFFICER(1) < ... best-fit first
+    });
+    return out;
 }
 
 class BotGuildCacheWorldScript : public WorldScript
