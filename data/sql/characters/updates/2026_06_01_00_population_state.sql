@@ -5,7 +5,7 @@
 
 CREATE TABLE IF NOT EXISTS playerbots_population_state (
   id               TINYINT NOT NULL PRIMARY KEY DEFAULT 1,
-  max_player_level TINYINT NOT NULL DEFAULT 0    -- monotonic: highest level ever reached by a real (non-bot) player
+  max_player_level TINYINT UNSIGNED NOT NULL DEFAULT 0    -- monotonic: highest level ever reached by a real (non-bot) player
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='Population-dynamics monotonic real-player level frontier';
 
 INSERT IGNORE INTO playerbots_population_state (id, max_player_level) VALUES (1, 0);

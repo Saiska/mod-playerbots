@@ -1,0 +1,55 @@
+/*
+ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license.
+ *
+ * PopulationDynamicsMgr — server population dynamics controller. A monotonic, persisted, cached
+ * real-player max-level frontier drives bot count + an up-only level conveyor. Mirrors
+ * RaidSimulationMgr's frontier pattern. See
+ * docs/superpowers/specs/2026-05-31-server-population-dynamics-design.md.
+ */
+
+#ifndef _PLAYERBOT_POPULATIONDYNAMICSMGR_H
+#define _PLAYERBOT_POPULATIONDYNAMICSMGR_H
+
+#include "Common.h"
+#include <array>
+#include <mutex>
+
+class Player;
+
+// Server population dynamics controller. Mirrors RaidSimulationMgr's frontier pattern:
+// a monotonic, persisted, cached real-player max-level value drives bot count + an up-only
+// level conveyor. See docs/superpowers/specs/2026-05-31-server-population-dynamics-design.md.
+class PopulationDynamicsMgr
+{
+public:
+    static PopulationDynamicsMgr& instance()
+    {
+        static PopulationDynamicsMgr instance;
+        return instance;
+    }
+
+    void LoadFromDB();                       // world startup: cache the frontier row
+    void Update(uint32 diff);                // ticked from PlayerbotsWorldScript::OnUpdate
+    void ConsiderPlayerLevel(Player* player);// monotonic frontier feed from a REAL player (caller bot-filters)
+
+    // --- pure math helpers (no DB, no locks); public for clarity/log-verification ---
+    static uint8  BracketLower(uint32 b) { return uint8(b == 0 ? 1 : b * 10); }
+    static uint8  BracketUpper(uint32 b) { return uint8(b < 8 ? b * 10 + 9 : 80); }
+    static uint32 BracketOf(uint8 level);                  // level -> bracket index 0..8
+    uint8  ComputeCap(uint8 frontier) const;               // C = min(80, max(MinCap, F+Headroom))
+    float  Openness(uint32 b, uint8 cap) const;            // fraction of bracket b's span <= cap
+    void   ComputeTargets(uint8 cap, std::array<uint32, 9>& targets, uint32& outP) const;
+
+private:
+    PopulationDynamicsMgr() = default;
+
+    void PersistFrontier();                  // UPDATE playerbots_population_state ... WHERE id=1 (caller holds _mutex)
+
+    std::mutex _mutex;
+    uint8  _frontier = 0;                    // cached monotonic real-player max level (1..80)
+    uint32 _tickTimerMs = 0;                 // accumulator for Period cadence
+};
+
+#define sPopulationDynamicsMgr PopulationDynamicsMgr::instance()
+
+#endif
