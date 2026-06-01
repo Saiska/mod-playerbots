@@ -451,6 +451,52 @@ bool PlayerbotAIConfig::Initialize()
     raidSimBroadcastLoot      = sConfigMgr->GetOption<bool>("RaidSim.BroadcastLoot", true);
     raidSimAnnounce         = sConfigMgr->GetOption<bool>("RaidSim.Announce", false);
 
+    //////////////////////////// Population Dynamics
+    populationDynamicsEnable       = sConfigMgr->GetOption<bool>("PopulationDynamics.Enable", true);
+    populationMaxPopulation        = sConfigMgr->GetOption<uint32>("PopulationDynamics.MaxPopulation", 2000);
+    populationHeadroom             = sConfigMgr->GetOption<uint32>("PopulationDynamics.Headroom", 10);
+    populationMinCap               = sConfigMgr->GetOption<uint32>("PopulationDynamics.MinCap", 20);
+    populationPeriod               = sConfigMgr->GetOption<uint32>("PopulationDynamics.Period", 300);
+    populationDriftRate            = sConfigMgr->GetOption<float>("PopulationDynamics.DriftRate", 0.02f);
+    populationMaxPromotionsPerCycle = sConfigMgr->GetOption<uint32>("PopulationDynamics.MaxPromotionsPerCycle", 10);
+
+    // Fat-endgame default profile; 8 leveling decades ~50% combined, level-80 ~50%.
+    static const uint32 kDefaultBracketPct[9] = { 6, 6, 6, 6, 6, 6, 6, 8, 50 };
+    populationBracketPct.assign(9, 0);
+    uint32 pctSum = 0;
+    for (uint32 b = 0; b < 9; ++b)
+    {
+        std::string key = "PopulationDynamics.Bracket" + std::to_string(b + 1) + ".Pct";
+        populationBracketPct[b] = sConfigMgr->GetOption<uint32>(key, kDefaultBracketPct[b]);
+        pctSum += populationBracketPct[b];
+    }
+    // Normalize to exactly 100 by round-robin +1 over non-zero brackets (carried over from the removed
+    // mod-player-bot-level-brackets ClampAndBalanceBrackets logic).
+    if (pctSum != 100 && pctSum > 0)
+    {
+        int missing = int(100) - int(pctSum);
+        int step = missing > 0 ? 1 : -1;
+        while (missing != 0)
+        {
+            for (uint32 b = 0; b < 9 && missing != 0; ++b)
+            {
+                if (populationBracketPct[b] == 0 && step > 0) continue;       // don't activate a zeroed bracket
+                if (populationBracketPct[b] == 0 && step < 0) continue;
+                if (step < 0 && populationBracketPct[b] == 0) continue;
+                populationBracketPct[b] = uint32(int(populationBracketPct[b]) + step);
+                missing -= step;
+            }
+        }
+    }
+    LOG_INFO("playerbots", "PopDyn: config loaded — enable={} Pmax={} headroom={} minCap={} period={}s drift={} maxPromo={} profile=[{},{},{},{},{},{},{},{},{}] sum={}",
+             populationDynamicsEnable, populationMaxPopulation, populationHeadroom, populationMinCap,
+             populationPeriod, populationDriftRate, populationMaxPromotionsPerCycle,
+             populationBracketPct[0], populationBracketPct[1], populationBracketPct[2],
+             populationBracketPct[3], populationBracketPct[4], populationBracketPct[5],
+             populationBracketPct[6], populationBracketPct[7], populationBracketPct[8],
+             populationBracketPct[0]+populationBracketPct[1]+populationBracketPct[2]+populationBracketPct[3]+
+             populationBracketPct[4]+populationBracketPct[5]+populationBracketPct[6]+populationBracketPct[7]+populationBracketPct[8]);
+
     LOG_INFO("server.loading", "Loading TalentSpecs...");
 
     for (uint32 cls = 1; cls < MAX_CLASSES; ++cls)

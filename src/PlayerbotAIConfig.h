@@ -459,6 +459,17 @@ public:
     bool   raidSimBroadcastLoot;       // "<bot> receives <item>" lines
     bool   raidSimAnnounce;            // server-wide SendWorldText announce (debug/flavor; orthogonal)
 
+    // Population dynamics (server-population-dynamics). Decade-bracket ladder is fixed in code (1-9..80);
+    // only the per-bracket share profile is config-driven (PopulationDynamics.Bracket1.Pct .. Bracket9.Pct).
+    bool   populationDynamicsEnable;
+    uint32 populationMaxPopulation;
+    uint32 populationHeadroom;
+    uint32 populationMinCap;
+    uint32 populationPeriod;             // seconds between controller ticks
+    float  populationDriftRate;          // fraction of below-target deficit promoted per cycle
+    uint32 populationMaxPromotionsPerCycle;
+    std::vector<uint32> populationBracketPct;   // size 9, normalized to sum 100 at load
+
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)
     {
