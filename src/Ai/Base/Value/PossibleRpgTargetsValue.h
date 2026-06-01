@@ -48,6 +48,9 @@ public:
         if (allowedGOFlags.empty())
         {
             allowedGOFlags.push_back(GAMEOBJECT_TYPE_QUESTGIVER);
+            // RPG_CITY_LIFE loiters at mailboxes; the quest-interact path filters
+            // GOs by CanInteractWithQuestGiver, so a mailbox here is harmless to it.
+            allowedGOFlags.push_back(GAMEOBJECT_TYPE_MAILBOX);
         }
     }
 

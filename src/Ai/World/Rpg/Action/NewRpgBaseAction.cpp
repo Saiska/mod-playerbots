@@ -740,6 +740,51 @@ ObjectGuid NewRpgBaseAction::ChooseNpcOrGameObjectToInteract(bool questgiverOnly
     return ObjectGuid();
 }
 
+ObjectGuid NewRpgBaseAction::ChooseCityPoiToLoiter(uint8& outPoiType)
+{
+    outPoiType = POI_NONE;
+    uint32 mask = sPlayerbotAIConfig.cityLifePoiTypeMask;
+
+    GuidVector targets = AI_VALUE(GuidVector, "possible new rpg targets");
+    WorldObject* best = nullptr;
+    uint8 bestType = POI_NONE;
+
+    auto consider = [&](WorldObject* object, uint8 type) {
+        if (!(mask & (1u << (type - 1))))
+            return;
+        if (!best || bot->GetExactDist(best) > bot->GetExactDist(object))
+        {
+            best = object;
+            bestType = type;
+        }
+    };
+
+    for (ObjectGuid& guid : targets)
+    {
+        Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+        if (!c || !c->IsInWorld())
+            continue;
+        if (c->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER))      consider(c, POI_AUCTIONEER);
+        else if (c->HasNpcFlag(UNIT_NPC_FLAG_BANKER))     consider(c, POI_BANKER);
+        else if (c->HasNpcFlag(UNIT_NPC_FLAG_INNKEEPER))  consider(c, POI_INNKEEPER);
+        else if (c->HasNpcFlag(UNIT_NPC_FLAG_TRAINER))    consider(c, POI_TRAINER);
+    }
+
+    GuidVector gos = AI_VALUE(GuidVector, "possible new rpg game objects");
+    for (ObjectGuid& guid : gos)
+    {
+        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+        if (!go || !go->IsInWorld())
+            continue;
+        if (go->GetGoType() == GAMEOBJECT_TYPE_MAILBOX)   consider(go, POI_MAILBOX);
+    }
+
+    if (!best)
+        return ObjectGuid();
+    outPoiType = bestType;
+    return best->GetGUID();
+}
+
 bool NewRpgBaseAction::HasQuestToAcceptOrReward(WorldObject* object)
 {
     ObjectGuid guid = object->GetGUID();
@@ -1092,6 +1137,15 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             botAI->rpgInfo.ChangeToWanderNpc();
             return true;
         }
+        case RPG_CITY_LIFE:
+        {
+            uint8 poiType = POI_NONE;
+            ObjectGuid poi = ChooseCityPoiToLoiter(poiType);
+            if (poi.IsEmpty())
+                return false;   // no POI nearby -> pick another status
+            botAI->rpgInfo.ChangeToCityLife(poi, poiType);
+            return true;
+        }
         case RPG_GO_GRIND:
         {
             WorldPosition pos = SelectRandomGrindPos(bot);
@@ -1199,6 +1253,7 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             WorldPosition pos = SelectRandomCampPos(bot);
             return pos != WorldPosition();
         }
+        case RPG_CITY_LIFE:
         case RPG_WANDER_NPC:
         {
             GuidVector possibleTargets = AI_VALUE(GuidVector, "possible new rpg targets");
