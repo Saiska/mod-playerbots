@@ -33,6 +33,19 @@ void NewRpgInfo::ChangeToCityLife(ObjectGuid poi, uint8 poiType)
     data = cl;
 }
 
+void NewRpgInfo::ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos)
+{
+    startT = getMSTime();
+    Pastime p;
+    p.activityType = activityType;
+    p.target = target;
+    p.targetPos = targetPos;
+    p.lastReach = 0;
+    p.lastEmote = 0;
+    p.untilTs = 0;
+    data = p;
+}
+
 void NewRpgInfo::ChangeToWanderRandom()
 {
     startT = getMSTime();
@@ -107,6 +120,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, GoCamp>) return RPG_GO_CAMP;
         if constexpr (std::is_same_v<T, WanderNpc>) return RPG_WANDER_NPC;
         if constexpr (std::is_same_v<T, CityLife>) return RPG_CITY_LIFE;
+        if constexpr (std::is_same_v<T, Pastime>) return RPG_PASTIME;
         if constexpr (std::is_same_v<T, WanderRandom>) return RPG_WANDER_RANDOM;
         if constexpr (std::is_same_v<T, Rest>) return RPG_REST;
         if constexpr (std::is_same_v<T, DoQuest>) return RPG_DO_QUEST;
@@ -151,6 +165,14 @@ std::string NewRpgInfo::ToString()
             out << "\npoiType: " << uint32(arg.poiType);
             out << "\nlastReach: " << arg.lastReach;
             out << "\ndwellMs: " << arg.dwellMs;
+        }
+        else if constexpr (std::is_same_v<T, Pastime>)
+        {
+            out << "PASTIME";
+            out << "\nactivity: " << uint32(arg.activityType);
+            out << "\ntarget: " << arg.target.GetCounter();
+            out << "\nlastReach: " << arg.lastReach;
+            out << "\nuntilTs: " << arg.untilTs;
         }
         else if constexpr (std::is_same_v<T, WanderRandom>)
         {

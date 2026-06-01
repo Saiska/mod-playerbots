@@ -40,6 +40,16 @@ struct NewRpgInfo
         uint32 lastReach{0};     // arrival timestamp (0 = en route)
         uint32 dwellMs{0};       // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
     };
+    // RPG_PASTIME
+    struct Pastime
+    {
+        uint8  activityType{0};   // BotActivity
+        ObjectGuid target{};      // companion / node / partner (guid-target activities)
+        WorldPosition targetPos{};// position-target activities (e.g. fishing spot); target union
+        uint32 lastReach{0};      // arrival timestamp (0 = en route)
+        uint32 lastEmote{0};      // last social-emote timestamp
+        uint32 untilTs{0};        // leave timestamp (set on arrival)
+    };
     // RPG_WANDER_RANDOM
     struct WanderRandom
     {
@@ -91,6 +101,7 @@ struct NewRpgInfo
         GoCamp,
         WanderNpc,
         CityLife,
+        Pastime,
         WanderRandom,
         DoQuest,
         Rest,
@@ -105,6 +116,7 @@ struct NewRpgInfo
     void ChangeToGoCamp(WorldPosition pos);
     void ChangeToWanderNpc();
     void ChangeToCityLife(ObjectGuid poi, uint8 poiType);
+    void ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos = {});
     void ChangeToWanderRandom();
     void ChangeToDoQuest(uint32 questId, const Quest* quest);
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
