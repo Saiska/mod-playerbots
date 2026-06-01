@@ -123,6 +123,75 @@ void PopulationDynamicsMgr::TakeCensus(Census& out) const
     }
 }
 
+void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 9> perBracket[2]) const
+{
+    for (uint32 f = 0; f < 2; ++f)
+        for (uint32 b = 0; b < 9; ++b)
+            perBracket[f][b].clear();
+
+    for (auto const& it : ObjectAccessor::GetPlayers())
+    {
+        Player* p = it.second;
+        if (!p || !p->IsInWorld() || !p->GetSession()->IsBot())
+            continue;
+        if (!IsSafeBot(p))
+            continue;
+        uint32 f = p->GetTeamId() == TEAM_ALLIANCE ? 0u : 1u;
+        perBracket[f][BracketOf(p->GetLevel())].push_back(p);
+    }
+    // Highest level first within each bracket — promote the bracket's top members.
+    for (uint32 f = 0; f < 2; ++f)
+        for (uint32 b = 0; b < 9; ++b)
+            std::sort(perBracket[f][b].begin(), perBracket[f][b].end(),
+                      [](Player* a, Player* c){ return a->GetLevel() > c->GetLevel(); });
+}
+
+uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 9> const& targets, Census const& census,
+                                      std::array<std::vector<Player*>, 9> perBracket[2])
+{
+    // belowTargetDeficit = total count of (per bracket, per faction) shortfall vs target.
+    uint32 deficit = 0;
+    for (uint32 f = 0; f < 2; ++f)
+        for (uint32 b = 0; b < 9; ++b)
+        {
+            uint32 want = targets[b] / 2;                 // split target per faction (symmetric profile)
+            if (census.count[f][b] < want)
+                deficit += want - census.count[f][b];
+        }
+
+    uint32 budget = uint32(std::lround(sPlayerbotAIConfig.populationDriftRate * float(deficit)));
+    budget = std::min(budget, sPlayerbotAIConfig.populationMaxPromotionsPerCycle);
+    if (budget == 0)
+        return 0;
+
+    uint32 issued = 0;
+    // Walk low->high; if bracket b+1..8 wants more, promote the highest member of bracket b by +1.
+    for (uint32 f = 0; f < 2 && issued < budget; ++f)
+    {
+        for (uint32 b = 0; b < 8 && issued < budget; ++b)   // bracket 8 is the top; nothing above to feed
+        {
+            // is any higher bracket in deficit?
+            bool higherWants = false;
+            for (uint32 hb = b + 1; hb < 9; ++hb)
+            {
+                uint32 want = targets[hb] / 2;
+                if (census.count[f][hb] < want) { higherWants = true; break; }
+            }
+            if (!higherWants)
+                continue;
+            // promote highest-level members of bracket b first (sorted desc); stop when budget is exhausted
+            for (Player* bot : perBracket[f][b])
+            {
+                if (issued >= budget)
+                    break;
+                sRandomPlayerbotMgr.IncreaseLevel(bot);     // +1, re-gears (PlayerbotFactory.Randomize(true))
+                ++issued;
+            }
+        }
+    }
+    return issued;
+}
+
 void PopulationDynamicsMgr::Update(uint32 diff)
 {
     if (!sPlayerbotAIConfig.populationDynamicsEnable)
@@ -154,6 +223,12 @@ void PopulationDynamicsMgr::Update(uint32 diff)
              census.count[1][5],census.count[1][6],census.count[1][7],census.count[1][8]);
 
     sRandomPlayerbotMgr.SetPopulationTarget(P);
+
+    std::array<std::vector<Player*>, 9> perBracket[2];
+    CollectSafeBots(perBracket);
+    uint32 promoted = DriftUp(targets, census, perBracket);
+    LOG_INFO("playerbots", "PopDyn drift: promoted={} (driftRate={} cycleCap={})",
+             promoted, sPlayerbotAIConfig.populationDriftRate, sPlayerbotAIConfig.populationMaxPromotionsPerCycle);
 
     // Reconcile flows (census, bottom inflow, drift, top-prune) land in Tasks 5-8.
 }

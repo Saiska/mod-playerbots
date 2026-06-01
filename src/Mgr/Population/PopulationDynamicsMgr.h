@@ -13,6 +13,7 @@
 #include "Common.h"
 #include <array>
 #include <mutex>
+#include <vector>
 
 class Player;
 
@@ -47,6 +48,11 @@ private:
     struct Census { std::array<uint32, 9> count[2] = {}; uint32 total = 0; };
     bool   IsSafeBot(Player* bot) const;       // alive, in world, idle, not raid-sim, no real-player adjacency
     void   TakeCensus(Census& out) const;      // iterate live bots, bin by (faction, bracket)
+
+    // Collect SAFE bots per bracket per faction (pointers), highest-level first within each bracket.
+    void CollectSafeBots(std::array<std::vector<Player*>, 9> perBracket[2]) const;
+    uint32 DriftUp(std::array<uint32, 9> const& targets, Census const& census,
+                   std::array<std::vector<Player*>, 9> perBracket[2]);   // returns promotions issued
 
     void PersistFrontier();                  // UPDATE playerbots_population_state ... WHERE id=1 (caller holds _mutex)
 
