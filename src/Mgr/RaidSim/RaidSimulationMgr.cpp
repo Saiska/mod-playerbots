@@ -73,6 +73,48 @@ namespace
             "   AND it.ItemLevel <= " + std::to_string(uint32(ilvlCap)) + ";";
     }
 
+    // All boss-drop item entries on a map (no class/quality/ilvl filter) — used to detect tokens
+    // and emblems for currency expansion. Same boss UNION as BuildPoolQuery, minus the item join.
+    std::string BuildRawLootQuery(uint32 mapId, uint8 d)
+    {
+        std::string entryExpr = (d == 0)
+            ? "b.entry"
+            : "IF(b.difficulty_entry_" + std::to_string(d) + " = 0, b.entry, b.difficulty_entry_" +
+                  std::to_string(d) + ")";
+        return
+            "SELECT DISTINCT pool.item FROM ("
+            "  SELECT clt.Item AS item FROM creature c"
+            "  JOIN creature_template b ON b.entry = c.id1"
+            "  JOIN creature_template e ON e.entry = " + entryExpr +
+            "  JOIN creature_loot_template clt ON clt.Entry = e.lootid"
+            "  WHERE c.map = " + std::to_string(mapId) + " AND clt.Reference = 0 AND clt.Item <> 0"
+            "  UNION"
+            "  SELECT rlt.Item FROM creature c"
+            "  JOIN creature_template b ON b.entry = c.id1"
+            "  JOIN creature_template e ON e.entry = " + entryExpr +
+            "  JOIN creature_loot_template clt ON clt.Entry = e.lootid"
+            "  JOIN reference_loot_template rlt ON rlt.Entry = clt.Reference"
+            "  WHERE c.map = " + std::to_string(mapId) + " AND clt.Reference <> 0 AND rlt.Item <> 0"
+            ") pool;";
+    }
+
+    // All item entries inside a chest GameObject's loot (gameobject_template.Data1 = lootid for
+    // CHEST-type GOs). No filter — caller gates + currency-expands.
+    std::string BuildChestRawQuery(uint32 goEntry)
+    {
+        return
+            "SELECT DISTINCT pool.item FROM ("
+            "  SELECT glt.Item AS item FROM gameobject_template gt"
+            "  JOIN gameobject_loot_template glt ON glt.Entry = gt.Data1"
+            "  WHERE gt.entry = " + std::to_string(goEntry) + " AND glt.Reference = 0 AND glt.Item <> 0"
+            "  UNION"
+            "  SELECT rlt.Item FROM gameobject_template gt"
+            "  JOIN gameobject_loot_template glt ON glt.Entry = gt.Data1"
+            "  JOIN reference_loot_template rlt ON rlt.Entry = glt.Reference"
+            "  WHERE gt.entry = " + std::to_string(goEntry) + " AND glt.Reference <> 0 AND rlt.Item <> 0"
+            ") pool;";
+    }
+
     void ParkBot(Player* p)
     {
         PlayerbotAI* ai = GET_PLAYERBOT_AI(p);
@@ -275,6 +317,44 @@ void RaidSimulationMgr::LoadFromDB()
     _bands.clear();
     _pools.clear();
 
+    // --- Currency/token expansion graph: reqItem -> vendor items (built once, read-only after). ---
+    _currencyExpansion.clear();
+    if (QueryResult vr = WorldDatabase.Query(
+            "SELECT item, ExtendedCost FROM npc_vendor WHERE ExtendedCost > 0"))
+    {
+        do
+        {
+            Field* vf = vr->Fetch();
+            uint32 item = vf[0].Get<uint32>();
+            uint32 ecId = vf[1].Get<uint32>();
+            if (ItemExtendedCostEntry const* ec = sItemExtendedCostStore.LookupEntry(ecId))
+                for (uint8 i = 0; i < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++i)
+                    if (ec->reqitem[i])
+                        _currencyExpansion[ec->reqitem[i]].push_back(item);
+        } while (vr->NextRow());
+    }
+    for (auto& kv : _currencyExpansion)  // dedup vendor lists per currency
+    {
+        std::sort(kv.second.begin(), kv.second.end());
+        kv.second.erase(std::unique(kv.second.begin(), kv.second.end()), kv.second.end());
+    }
+    LOG_INFO("playerbots", "RaidSim: currency-expansion graph has {} token/currency entries.",
+             uint32(_currencyExpansion.size()));
+
+    // --- Chest-loot mapping (summoned caches; not static-joinable). ---
+    _chestLoot.clear();
+    if (QueryResult cr = CharacterDatabase.Query(
+            "SELECT map_id, difficulty, gameobject_entry FROM playerbots_raid_chest_loot"))
+    {
+        do
+        {
+            Field* cf = cr->Fetch();
+            _chestLoot[{cf[0].Get<uint32>(), cf[1].Get<uint8>()}].push_back(cf[2].Get<uint32>());
+        } while (cr->NextRow());
+    }
+    LOG_INFO("playerbots", "RaidSim: chest-loot mapping has {} (map,difficulty) keys.",
+             uint32(_chestLoot.size()));
+
     if (QueryResult s = CharacterDatabase.Query("SELECT base_ilvl FROM playerbots_raid_server_state WHERE id = 1"))
         _baseIlvl = s->Fetch()[0].Get<uint16>();
     else
@@ -309,16 +389,7 @@ void RaidSimulationMgr::LoadFromDB()
         inst.parkX  = f[13].Get<float>(); inst.parkY  = f[14].Get<float>();
         inst.parkZ  = f[15].Get<float>(); inst.parkO  = f[16].Get<float>();
 
-        std::vector<uint32> pool;
-        if (QueryResult pr = WorldDatabase.Query(
-                BuildPoolQuery(inst.mapId, inst.difficulty, inst.minQuality, inst.ilvlCap).c_str()))
-        {
-            do { pool.push_back(pr->Fetch()[0].Get<uint32>()); } while (pr->NextRow());
-        }
-        if (pool.empty())
-            LOG_WARN("playerbots", "RaidSim: instance {} '{}' (map {} diff {}) has EMPTY loot pool.",
-                     inst.id, inst.label, inst.mapId, uint32(inst.difficulty));
-        _pools[inst.id] = std::move(pool);
+        _pools[inst.id] = BuildPool(inst);
 
         _bands[inst.band].push_back(inst);
         ++instanceCount;
@@ -354,16 +425,7 @@ void RaidSimulationMgr::LoadFromDB()
             inst.parkX  = f[12].Get<float>(); inst.parkY  = f[13].Get<float>();
             inst.parkZ  = f[14].Get<float>(); inst.parkO  = f[15].Get<float>();
 
-            std::vector<uint32> pool;
-            if (QueryResult pr = WorldDatabase.Query(
-                    BuildPoolQuery(inst.mapId, inst.difficulty, inst.minQuality, inst.ilvlCap).c_str()))
-            {
-                do { pool.push_back(pr->Fetch()[0].Get<uint32>()); } while (pr->NextRow());
-            }
-            if (pool.empty())
-                LOG_WARN("playerbots", "RaidSim: leveling '{}' (map {}) has EMPTY loot pool.",
-                         inst.label, inst.mapId);
-            _pools[inst.id] = std::move(pool);
+            _pools[inst.id] = BuildPool(inst);
 
             _leveling.push_back(inst);
             ++levelingCount;
@@ -824,6 +886,60 @@ void RaidSimulationMgr::Update(uint32 diff)
             LaunchRun(guildId, guildName, linst, cohort);
         }
     }
+}
+
+std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
+{
+    std::vector<uint32> pool;
+    uint32 baseCount = 0, currencyCount = 0, chestCount = 0;
+
+    auto passesGate = [&](uint32 itemId) -> bool
+    {
+        ItemTemplate const* p = sObjectMgr->GetItemTemplate(itemId);
+        return p && (p->Class == ITEM_CLASS_WEAPON || p->Class == ITEM_CLASS_ARMOR)
+            && p->Quality >= inst.minQuality && p->ItemLevel <= inst.ilvlCap;
+    };
+    auto expandCurrency = [&](uint32 rawEntry)
+    {
+        auto it = _currencyExpansion.find(rawEntry);
+        if (it == _currencyExpansion.end())
+            return;
+        for (uint32 v : it->second)
+            if (passesGate(v)) { pool.push_back(v); ++currencyCount; }
+    };
+
+    // 1. Creature base — existing proven query (already class 2/4 + quality + ilvl filtered).
+    if (QueryResult pr = WorldDatabase.Query(
+            BuildPoolQuery(inst.mapId, inst.difficulty, inst.minQuality, inst.ilvlCap).c_str()))
+        do { pool.push_back(pr->Fetch()[0].Get<uint32>()); ++baseCount; } while (pr->NextRow());
+
+    // 2. Currency/token expansion over every boss-drop entry on the map.
+    if (QueryResult rr = WorldDatabase.Query(BuildRawLootQuery(inst.mapId, inst.difficulty).c_str()))
+        do { expandCurrency(rr->Fetch()[0].Get<uint32>()); } while (rr->NextRow());
+
+    // 3. Chest mining (chest instances only) + currency expansion of chest contents.
+    auto chestIt = _chestLoot.find({inst.mapId, inst.difficulty});
+    if (chestIt != _chestLoot.end())
+        for (uint32 go : chestIt->second)
+            if (QueryResult cr = WorldDatabase.Query(BuildChestRawQuery(go).c_str()))
+                do
+                {
+                    uint32 itemId = cr->Fetch()[0].Get<uint32>();
+                    if (passesGate(itemId)) { pool.push_back(itemId); ++chestCount; }
+                    expandCurrency(itemId);
+                } while (cr->NextRow());
+
+    // 4. Dedup.
+    std::sort(pool.begin(), pool.end());
+    pool.erase(std::unique(pool.begin(), pool.end()), pool.end());
+
+    if (pool.empty())
+        LOG_WARN("playerbots", "RaidSim: instance {} '{}' (map {} diff {}) has EMPTY loot pool.",
+                 inst.id, inst.label, inst.mapId, uint32(inst.difficulty));
+    // base/currency/chest are pre-dedup push counts; their sum may exceed pool.size() (step 4 dedup).
+    LOG_INFO("playerbots", "RaidSim: instance {} '{}' pool={} (base {}, currency {}, chest {}).",
+             inst.id, inst.label, uint32(pool.size()), baseCount, currencyCount, chestCount);
+    return pool;
 }
 
 void RaidSimulationMgr::AwardLoot(RaidSimulationMgr::ActiveRun const& run)
