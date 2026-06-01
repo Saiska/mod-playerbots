@@ -40,6 +40,7 @@ public:
     uint8  ComputeCap(uint8 frontier) const;               // C = min(80, max(MinCap, F+Headroom))
     float  Openness(uint32 b, uint8 cap) const;            // fraction of bracket b's span <= cap
     void   ComputeTargets(uint8 cap, std::array<uint32, 9>& targets, uint32& outP) const;
+    uint8  CurrentCap() const { return _cap; }             // cached cap for DK-login gating (world-thread read)
 
 private:
     PopulationDynamicsMgr() = default;
@@ -60,6 +61,7 @@ private:
 
     std::mutex _mutex;
     uint8  _frontier = 0;                    // cached monotonic real-player max level (1..80)
+    uint8  _cap = 0;                          // cached level cap = ComputeCap(_frontier); read by the DK-spawn gate
     uint32 _tickTimerMs = 0;                 // accumulator for Period cadence
 };
 

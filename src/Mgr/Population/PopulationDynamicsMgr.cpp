@@ -64,14 +64,15 @@ void PopulationDynamicsMgr::LoadFromDB()
     // before the first controller tick can clamp it (there is no log-out-surplus path; the
     // population only grows, so it never needs one). Gated on enable so a disabled controller
     // never touches the native count.
+    _cap = ComputeCap(_frontier);             // cache cap for the DK-login gate (set even when disabled is harmless)
+
     if (sPlayerbotAIConfig.populationDynamicsEnable)
     {
-        uint8 cap = ComputeCap(_frontier);
         std::array<uint32, 9> targets{};
         uint32 P = 0;
-        ComputeTargets(cap, targets, P);
+        ComputeTargets(_cap, targets, P);
         sRandomPlayerbotMgr.SetPopulationTarget(P);
-        LOG_INFO("playerbots", "PopDyn: initial population target P={} set at world-init (cap={}).", P, uint32(cap));
+        LOG_INFO("playerbots", "PopDyn: initial population target P={} set at world-init (cap={}).", P, uint32(_cap));
     }
 }
 
@@ -242,6 +243,7 @@ void PopulationDynamicsMgr::Update(uint32 diff)
     _tickTimerMs = 0;
 
     uint8 cap = ComputeCap(_frontier);
+    _cap = cap;                               // keep the cached cap fresh for the DK-login gate
     std::array<uint32, 9> targets{};
     uint32 P = 0;
     ComputeTargets(cap, targets, P);
