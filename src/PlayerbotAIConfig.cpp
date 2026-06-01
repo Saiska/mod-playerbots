@@ -5,6 +5,7 @@
 
 #include "PlayerbotAIConfig.h"
 #include <iostream>
+#include <sstream>
 #include "Config.h"
 #include "NewRpgInfo.h"
 #include "PlayerbotDungeonRepository.h"
@@ -732,6 +733,7 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 5);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_CITY_LIFE] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.CityLife", 15);
+    RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 12);
 
     cityLifeDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMin", 30);
     cityLifeDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMax", 120);
@@ -739,6 +741,27 @@ bool PlayerbotAIConfig::Initialize()
     if (cityLifeDwellMax < cityLifeDwellMin)
         std::swap(cityLifeDwellMin, cityLifeDwellMax);
     cityLifePoiTypeMask = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.PoiTypeMask", 31);
+
+    pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
+    pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
+    pastimeSocialClusterDist = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.ClusterDist", 5.0f);
+    pastimeSocialDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DwellMin", 30);
+    pastimeSocialDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DwellMax", 120);
+    // urand asserts max >= min; guard against an inverted operator config.
+    if (pastimeSocialDwellMax < pastimeSocialDwellMin)
+        std::swap(pastimeSocialDwellMin, pastimeSocialDwellMax);
+    pastimeSocialEmoteInterval = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.EmoteInterval", 6);
+    pastimeSocialIncludePlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Social.IncludePlayers", false);
+    pastimeSocialEmotes.clear();
+    {
+        std::string raw = sConfigMgr->GetOption<std::string>("AiPlayerbot.Pastime.Social.Emotes",
+            "dance|sit|cheer|laugh|applaud|point|talk");
+        std::stringstream ss(raw);
+        std::string tok;
+        while (std::getline(ss, tok, '|'))
+            if (!tok.empty())
+                pastimeSocialEmotes.push_back(tok);
+    }
 
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);
