@@ -32,6 +32,14 @@ struct NewRpgInfo
         ObjectGuid npcOrGo{};
         uint32 lastReach{0};
     };
+    // RPG_CITY_LIFE
+    struct CityLife
+    {
+        ObjectGuid poi{};        // chosen service NPC or mailbox GO
+        uint8  poiType{0};       // BotCityPoi
+        uint32 lastReach{0};     // arrival timestamp (0 = en route)
+        uint32 dwellUntil{0};    // ms timestamp to leave (set on arrival)
+    };
     // RPG_WANDER_RANDOM
     struct WanderRandom
     {
@@ -82,6 +90,7 @@ struct NewRpgInfo
         GoGrind,
         GoCamp,
         WanderNpc,
+        CityLife,
         WanderRandom,
         DoQuest,
         Rest,
@@ -95,6 +104,7 @@ struct NewRpgInfo
     void ChangeToGoGrind(WorldPosition pos);
     void ChangeToGoCamp(WorldPosition pos);
     void ChangeToWanderNpc();
+    void ChangeToCityLife(ObjectGuid poi, uint8 poiType);
     void ChangeToWanderRandom();
     void ChangeToDoQuest(uint32 questId, const Quest* quest);
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
