@@ -735,6 +735,9 @@ bool PlayerbotAIConfig::Initialize()
 
     cityLifeDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMin", 30);
     cityLifeDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMax", 120);
+    // urand asserts max >= min; guard against an inverted operator config.
+    if (cityLifeDwellMax < cityLifeDwellMin)
+        std::swap(cityLifeDwellMin, cityLifeDwellMax);
     cityLifePoiTypeMask = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.PoiTypeMask", 31);
 
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);

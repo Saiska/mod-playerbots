@@ -38,7 +38,7 @@ struct NewRpgInfo
         ObjectGuid poi{};        // chosen service NPC or mailbox GO
         uint8  poiType{0};       // BotCityPoi
         uint32 lastReach{0};     // arrival timestamp (0 = en route)
-        uint32 dwellUntil{0};    // ms timestamp to leave (set on arrival)
+        uint32 dwellMs{0};       // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
     };
     // RPG_WANDER_RANDOM
     struct WanderRandom

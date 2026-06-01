@@ -29,7 +29,7 @@ void NewRpgInfo::ChangeToCityLife(ObjectGuid poi, uint8 poiType)
     cl.poi = poi;
     cl.poiType = poiType;
     cl.lastReach = 0;
-    cl.dwellUntil = 0;
+    cl.dwellMs = 0;
     data = cl;
 }
 
@@ -150,7 +150,7 @@ std::string NewRpgInfo::ToString()
             out << "\npoi: " << arg.poi.GetCounter();
             out << "\npoiType: " << uint32(arg.poiType);
             out << "\nlastReach: " << arg.lastReach;
-            out << "\ndwellUntil: " << arg.dwellUntil;
+            out << "\ndwellMs: " << arg.dwellMs;
         }
         else if constexpr (std::is_same_v<T, WanderRandom>)
         {
