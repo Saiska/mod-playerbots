@@ -419,6 +419,29 @@ bool PlayerbotGuildMgr::IsRealGuild(uint32 guildId)
     return it->second.hasRealPlayer;
 }
 
+bool PlayerbotGuildMgr::IsBotManagedGuild(uint32 guildId) const
+{
+    if (!guildId)
+        return false;
+
+    QueryResult r = CharacterDatabase.Query(
+        "SELECT guid FROM guild_member WHERE guildid = {}", guildId);
+    if (!r)
+        return false;  // no members => not a guild we manage
+
+    do
+    {
+        ObjectGuid guid = ObjectGuid::Create<HighGuid::Player>(r->Fetch()[0].Get<uint32>());
+        CharacterCacheEntry const* e = sCharacterCache->GetCharacterCacheByGuid(guid);
+        if (!e)
+            return false;  // unknown member => be safe, don't manage
+        if (!sPlayerbotAIConfig.IsInRandomAccountList(e->AccountId))
+            return false;  // a real player is a member => hands off
+    } while (r->NextRow());
+
+    return true;
+}
+
 class BotGuildCacheWorldScript : public WorldScript
 {
     public:

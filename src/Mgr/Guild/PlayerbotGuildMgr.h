@@ -61,6 +61,11 @@ private:
     PlayerbotGuildMgr(PlayerbotGuildMgr&&) = delete;
     PlayerbotGuildMgr& operator=(PlayerbotGuildMgr&&) = delete;
 
+    // True only if EVERY current member is a random bot. Any real-player member => false
+    // (the controller leaves such guilds entirely alone). Generalizes the leader-only
+    // hasRealPlayer flag to an any-member scan.
+    bool IsBotManagedGuild(uint32 guildId) const;
+
     std::unordered_map<std::string, bool> _guildNames;
 
     struct GuildCache
