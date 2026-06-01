@@ -6798,6 +6798,16 @@ SpellFamilyNames PlayerbotAI::Class2SpellFamilyName(uint8 cls)
     return SPELLFAMILY_GENERIC;
 }
 
+BotCityPoi PlayerbotAI::GetCurrentCityPoi()
+{
+    if (rpgInfo.GetStatus() != RPG_CITY_LIFE)
+        return POI_NONE;
+    auto const* cl = std::get_if<NewRpgInfo::CityLife>(&rpgInfo.data);
+    if (!cl || cl->lastReach == 0)   // only while actually dwelling at the POI
+        return POI_NONE;
+    return static_cast<BotCityPoi>(cl->poiType);
+}
+
 void PlayerbotAI::AddTimedEvent(std::function<void()> callback, uint32 delayMs)
 {
     class LambdaEvent final : public BasicEvent

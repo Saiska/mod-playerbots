@@ -731,6 +731,14 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 5);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
+    RpgStatusProbWeight[RPG_CITY_LIFE] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.CityLife", 15);
+
+    cityLifeDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMin", 30);
+    cityLifeDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMax", 120);
+    // urand asserts max >= min; guard against an inverted operator config.
+    if (cityLifeDwellMax < cityLifeDwellMin)
+        std::swap(cityLifeDwellMin, cityLifeDwellMax);
+    cityLifePoiTypeMask = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.PoiTypeMask", 31);
 
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);

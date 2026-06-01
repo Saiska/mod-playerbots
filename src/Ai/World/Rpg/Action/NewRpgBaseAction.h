@@ -36,6 +36,9 @@ protected:
 
     /* QUEST RELATED CHECK */
     ObjectGuid ChooseNpcOrGameObjectToInteract(bool questgiverOnly = false, float distanceLimit = 0.0f);
+    // Pick a nearby service POI to loiter at (npcflag / mailbox GO type), honoring CityLife.PoiTypeMask.
+    // Returns the guid; sets outPoiType (BotCityPoi). Empty guid if none in range.
+    ObjectGuid ChooseCityPoiToLoiter(uint8& outPoiType);
     bool HasQuestToAcceptOrReward(WorldObject* object);
     bool InteractWithNpcOrGameObjectForQuest(ObjectGuid guid);
     bool CanInteractWithQuestGiver(Object* questGiver);

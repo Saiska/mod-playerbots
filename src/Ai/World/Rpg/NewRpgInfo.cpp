@@ -22,6 +22,17 @@ void NewRpgInfo::ChangeToWanderNpc()
     data = WanderNpc{};
 }
 
+void NewRpgInfo::ChangeToCityLife(ObjectGuid poi, uint8 poiType)
+{
+    startT = getMSTime();
+    CityLife cl;
+    cl.poi = poi;
+    cl.poiType = poiType;
+    cl.lastReach = 0;
+    cl.dwellMs = 0;
+    data = cl;
+}
+
 void NewRpgInfo::ChangeToWanderRandom()
 {
     startT = getMSTime();
@@ -95,6 +106,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, GoGrind>) return RPG_GO_GRIND;
         if constexpr (std::is_same_v<T, GoCamp>) return RPG_GO_CAMP;
         if constexpr (std::is_same_v<T, WanderNpc>) return RPG_WANDER_NPC;
+        if constexpr (std::is_same_v<T, CityLife>) return RPG_CITY_LIFE;
         if constexpr (std::is_same_v<T, WanderRandom>) return RPG_WANDER_RANDOM;
         if constexpr (std::is_same_v<T, Rest>) return RPG_REST;
         if constexpr (std::is_same_v<T, DoQuest>) return RPG_DO_QUEST;
@@ -131,6 +143,14 @@ std::string NewRpgInfo::ToString()
             out << "\nnpcOrGoEntry: " << arg.npcOrGo.GetCounter();
             out << "\nlastWanderNpc: " << startT;
             out << "\nlastReachNpcOrGo: " << arg.lastReach;
+        }
+        else if constexpr (std::is_same_v<T, CityLife>)
+        {
+            out << "CITY_LIFE";
+            out << "\npoi: " << arg.poi.GetCounter();
+            out << "\npoiType: " << uint32(arg.poiType);
+            out << "\nlastReach: " << arg.lastReach;
+            out << "\ndwellMs: " << arg.dwellMs;
         }
         else if constexpr (std::is_same_v<T, WanderRandom>)
         {
