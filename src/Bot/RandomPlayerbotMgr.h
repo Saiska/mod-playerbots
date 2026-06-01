@@ -142,6 +142,10 @@ public:
     void SetValue(Player* bot, std::string const& type, uint32 value, std::string const& data = "");
     bool IsSpecPvp(uint32 bot, uint8 cls);
     void Remove(Player* bot);
+    // Population-dynamics controller seam: pin the live random-bot target to a controller-computed value.
+    // Wraps the internal "bot_count" event so the native UpdateAIInternal drives the pool toward it,
+    // provided the value is within [minRandomBots, maxRandomBots].
+    void SetPopulationTarget(uint32 target);
     ObjectGuid GetBattleMasterGUID(Player* bot, BattlegroundTypeId bgTypeId);
     CreatureData const* GetCreatureDataByEntry(uint32 entry);
     void LoadBattleMastersCache();

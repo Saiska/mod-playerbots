@@ -29,6 +29,7 @@
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
 #include "RaidSimulationMgr.h"
+#include "PopulationDynamicsMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "PlayerbotCommandScript.h"
@@ -90,7 +91,8 @@ public:
         PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
         PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
         PLAYERHOOK_ON_GIVE_EXP,
-        PLAYERHOOK_ON_BEFORE_TELEPORT
+        PLAYERHOOK_ON_BEFORE_TELEPORT,
+        PLAYERHOOK_ON_LEVEL_CHANGED
     }) {}
 
     void OnPlayerLogin(Player* player) override
@@ -103,6 +105,7 @@ public:
             // yet attached at OnPlayerLogin, so it would wrongly count autologin bots as real
             // players (observed live: 2000 bots, 0 real players ratcheted base_ilvl to 200).
             sRaidSimulationMgr.ConsiderPlayerIlvl(player);
+            sPopulationDynamicsMgr.ConsiderPlayerLevel(player);
 
             PlayerbotsMgr::instance().AddPlayerbotData(player, false);
             sRandomPlayerbotMgr.OnPlayerLogin(player);
@@ -126,6 +129,12 @@ public:
                     "|cff00ff00Playerbots:|r The server is configured with " + maxAllowedBotCount + " bots.");
             }
         }
+    }
+
+    void OnPlayerLevelChanged(Player* player, uint8 /*oldLevel*/) override
+    {
+        if (!player->GetSession()->IsBot())
+            sPopulationDynamicsMgr.ConsiderPlayerLevel(player);
     }
 
     bool OnPlayerBeforeTeleport(Player* /*player*/, uint32 /*mapid*/, float /*x*/, float /*y*/, float /*z*/,
@@ -386,6 +395,7 @@ public:
         // RaidSim: load the monotonic base_ilvl, banded ladder, and per-instance pools.
         // Runs at world init (post-DB-connect, pre-tick); queries CharacterDatabase + WorldDatabase.
         sRaidSimulationMgr.LoadFromDB();
+        sPopulationDynamicsMgr.LoadFromDB();
     }
 
     void OnUpdate(uint32 diff) override
@@ -393,6 +403,7 @@ public:
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
         sRaidSimulationMgr.Update(diff);
+        sPopulationDynamicsMgr.Update(diff);
     }
 };
 
