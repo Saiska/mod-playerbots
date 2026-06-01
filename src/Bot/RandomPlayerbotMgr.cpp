@@ -37,6 +37,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "RaceMgr.h"
+#include "PopulationDynamicsMgr.h"
 #include "RaidSimulationMgr.h"
 #include "Random.h"
 #include "RandomPlayerbotFactory.h"
@@ -1896,6 +1897,15 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
         pmo->finish();
 }
 
+void RandomPlayerbotMgr::SetPopulationTarget(uint32 target)
+{
+    uint32 lo = sPlayerbotAIConfig.minRandomBots;
+    uint32 hi = sPlayerbotAIConfig.maxRandomBots;
+    uint32 clamped = std::max(lo, std::min(hi, target));
+    uint32 validIn = sPlayerbotAIConfig.populationPeriod + 60;   // outlive one controller cycle
+    SetEventValue(0, "bot_count", clamped, validIn);
+}
+
 void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
 {
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
@@ -1922,40 +1932,54 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
 
     uint32 level;
 
-    if (sPlayerbotAIConfig.downgradeMaxLevelBot && bot->GetLevel() >= sPlayerbotAIConfig.randomBotMaxLevel)
+    if (sPlayerbotAIConfig.populationDynamicsEnable)
     {
-        if (bot->getClass() == CLASS_DEATH_KNIGHT)
+        // Controller-managed spawn: enter at the bottom decade so the conveyor carries the bot up.
+        uint32 lo = PopulationDynamicsMgr::BracketLower(0);   // 1
+        uint32 hi = PopulationDynamicsMgr::BracketUpper(0);   // 9
+        if (bot->getClass() == CLASS_DEATH_KNIGHT)            // DKs cannot exist below 55
         {
-            level = sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL);
+            lo = hi = sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL);  // 55
         }
-        else
-        {
-            level = sPlayerbotAIConfig.randomBotMinLevel;
-        }
+        level = urand(lo, hi);
     }
     else
     {
-        uint32 roll = urand(1, 100);
-        if (roll <= 100 * sPlayerbotAIConfig.randomBotMaxLevelChance)
+        if (sPlayerbotAIConfig.downgradeMaxLevelBot && bot->GetLevel() >= sPlayerbotAIConfig.randomBotMaxLevel)
         {
-            level = maxLevel;
-        }
-        else if (roll <=
-                 (100 * (sPlayerbotAIConfig.randomBotMaxLevelChance + sPlayerbotAIConfig.randomBotMinLevelChance)))
-        {
-            level = minLevel;
+            if (bot->getClass() == CLASS_DEATH_KNIGHT)
+            {
+                level = sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL);
+            }
+            else
+            {
+                level = sPlayerbotAIConfig.randomBotMinLevel;
+            }
         }
         else
         {
-            level = urand(minLevel, maxLevel);
+            uint32 roll = urand(1, 100);
+            if (roll <= 100 * sPlayerbotAIConfig.randomBotMaxLevelChance)
+            {
+                level = maxLevel;
+            }
+            else if (roll <=
+                     (100 * (sPlayerbotAIConfig.randomBotMaxLevelChance + sPlayerbotAIConfig.randomBotMinLevelChance)))
+            {
+                level = minLevel;
+            }
+            else
+            {
+                level = urand(minLevel, maxLevel);
+            }
         }
-    }
 
-    if (sPlayerbotAIConfig.disableRandomLevels)
-    {
-        level = bot->getClass() == CLASS_DEATH_KNIGHT ? std::max(sPlayerbotAIConfig.randombotStartingLevel,
-                                                                 sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL))
-                                                      : sPlayerbotAIConfig.randombotStartingLevel;
+        if (sPlayerbotAIConfig.disableRandomLevels)
+        {
+            level = bot->getClass() == CLASS_DEATH_KNIGHT ? std::max(sPlayerbotAIConfig.randombotStartingLevel,
+                                                                     sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL))
+                                                          : sPlayerbotAIConfig.randombotStartingLevel;
+        }
     }
 
     SetValue(bot, "level", level);

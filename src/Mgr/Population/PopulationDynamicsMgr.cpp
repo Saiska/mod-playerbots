@@ -13,6 +13,7 @@
 #include "RaidSimulationMgr.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotMgr.h"
+#include "RandomPlayerbotMgr.h"
 
 uint32 PopulationDynamicsMgr::BracketOf(uint8 level)
 {
@@ -151,6 +152,8 @@ void PopulationDynamicsMgr::Update(uint32 diff)
              census.count[0][5],census.count[0][6],census.count[0][7],census.count[0][8],
              census.count[1][0],census.count[1][1],census.count[1][2],census.count[1][3],census.count[1][4],
              census.count[1][5],census.count[1][6],census.count[1][7],census.count[1][8]);
+
+    sRandomPlayerbotMgr.SetPopulationTarget(P);
 
     // Reconcile flows (census, bottom inflow, drift, top-prune) land in Tasks 5-8.
 }
