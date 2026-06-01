@@ -1077,6 +1077,7 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 # TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
 # Rest          (Default: 5   Take a break for a while and do nothing)
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
+# CityLife      (Default: 15  Loiter at a nearby city service POI: auctioneer/banker/innkeeper/trainer/mailbox)
 AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
 AiPlayerbot.RpgStatusProbWeight.WanderNpc = 20
 AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
@@ -1085,6 +1086,14 @@ AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
+AiPlayerbot.RpgStatusProbWeight.CityLife = 15
+
+# City-life loitering tuning (used by the CityLife RPG status above).
+# DwellMin/DwellMax: seconds a bot lingers at the chosen POI (random in range; auto-swapped if inverted).
+# PoiTypeMask: bitmask of allowed POI types - bit0 Auctioneer, bit1 Banker, bit2 Innkeeper, bit3 Trainer, bit4 Mailbox (31 = all).
+AiPlayerbot.CityLife.DwellMin = 30
+AiPlayerbot.CityLife.DwellMax = 120
+AiPlayerbot.CityLife.PoiTypeMask = 31
 
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel
