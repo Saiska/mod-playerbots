@@ -936,6 +936,7 @@ std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
     if (pool.empty())
         LOG_WARN("playerbots", "RaidSim: instance {} '{}' (map {} diff {}) has EMPTY loot pool.",
                  inst.id, inst.label, inst.mapId, uint32(inst.difficulty));
+    // base/currency/chest are pre-dedup push counts; their sum may exceed pool.size() (step 4 dedup).
     LOG_INFO("playerbots", "RaidSim: instance {} '{}' pool={} (base {}, currency {}, chest {}).",
              inst.id, inst.label, uint32(pool.size()), baseCount, currencyCount, chestCount);
     return pool;
