@@ -57,7 +57,18 @@ enum NewRpgStatus : int
     // Taking a break
     RPG_REST = 7,
     RPG_OUTDOOR_PVP = 8,
-    RPG_STATUS_END = 9
+    RPG_CITY_LIFE,    // loiter at a city service POI (auctioneer/banker/innkeeper/trainer/mailbox)
+    RPG_STATUS_END
+};
+
+enum BotCityPoi : uint8
+{
+    POI_NONE = 0,
+    POI_AUCTIONEER,
+    POI_BANKER,
+    POI_INNKEEPER,
+    POI_TRAINER,
+    POI_MAILBOX
 };
 
 #define MAX_SPECNO 20
@@ -379,6 +390,9 @@ public:
     bool autoDoQuests;
     bool enableNewRpgStrategy;
     std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
+    uint32 cityLifeDwellMin;
+    uint32 cityLifeDwellMax;
+    uint32 cityLifePoiTypeMask;
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;
