@@ -53,6 +53,8 @@ private:
     void CollectSafeBots(std::array<std::vector<Player*>, 9> perBracket[2]) const;
     uint32 DriftUp(std::array<uint32, 9> const& targets, Census const& census,
                    std::array<std::vector<Player*>, 9> perBracket[2]);   // returns promotions issued
+    uint32 PruneTop(std::array<uint32, 9> const& targets, Census const& census,
+                    std::array<std::vector<Player*>, 9> perBracket[2]);   // returns bots removed
 
     void PersistFrontier();                  // UPDATE playerbots_population_state ... WHERE id=1 (caller holds _mutex)
 
