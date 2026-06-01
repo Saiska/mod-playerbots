@@ -58,6 +58,21 @@ void PopulationDynamicsMgr::LoadFromDB()
         LOG_INFO("playerbots", "PopDyn: playerbots_population_state row absent; frontier defaulting to 0.");
 
     LOG_INFO("playerbots", "PopDyn: loaded frontier={}.", uint32(_frontier));
+
+    // Bound the native autologin to our target P from world-init, BEFORE the update-loop
+    // RandomPlayerbotMgr autologin runs — otherwise it picks urand(min,max) and overshoots P
+    // before the first controller tick can clamp it (there is no log-out-surplus path; the
+    // population only grows, so it never needs one). Gated on enable so a disabled controller
+    // never touches the native count.
+    if (sPlayerbotAIConfig.populationDynamicsEnable)
+    {
+        uint8 cap = ComputeCap(_frontier);
+        std::array<uint32, 9> targets{};
+        uint32 P = 0;
+        ComputeTargets(cap, targets, P);
+        sRandomPlayerbotMgr.SetPopulationTarget(P);
+        LOG_INFO("playerbots", "PopDyn: initial population target P={} set at world-init (cap={}).", P, uint32(cap));
+    }
 }
 
 void PopulationDynamicsMgr::PersistFrontier()
