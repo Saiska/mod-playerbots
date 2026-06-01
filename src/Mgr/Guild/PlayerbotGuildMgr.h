@@ -41,6 +41,7 @@ public:
     std::string AssignToGuild(Player* player);
     void LoadGuildNames();
     void ValidateGuildCache();
+    void ReconcileGuilds();  // GuildLifecycle controller tick (config GuildLifecycle.*)
     GuildTheme const& GetThemeByName(std::string const& guildName) const;
     uint8 PickRankForBot(GuildTheme const& theme, Player* bot) const;
     void ResetGuildCache();
