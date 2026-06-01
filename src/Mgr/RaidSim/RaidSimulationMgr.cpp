@@ -275,6 +275,44 @@ void RaidSimulationMgr::LoadFromDB()
     _bands.clear();
     _pools.clear();
 
+    // --- Currency/token expansion graph: reqItem -> vendor items (built once, read-only after). ---
+    _currencyExpansion.clear();
+    if (QueryResult vr = WorldDatabase.Query(
+            "SELECT item, ExtendedCost FROM npc_vendor WHERE ExtendedCost > 0"))
+    {
+        do
+        {
+            Field* vf = vr->Fetch();
+            uint32 item = vf[0].Get<uint32>();
+            uint32 ecId = vf[1].Get<uint32>();
+            if (ItemExtendedCostEntry const* ec = sItemExtendedCostStore.LookupEntry(ecId))
+                for (uint8 i = 0; i < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++i)
+                    if (ec->reqitem[i])
+                        _currencyExpansion[ec->reqitem[i]].push_back(item);
+        } while (vr->NextRow());
+    }
+    for (auto& kv : _currencyExpansion)  // dedup vendor lists per currency
+    {
+        std::sort(kv.second.begin(), kv.second.end());
+        kv.second.erase(std::unique(kv.second.begin(), kv.second.end()), kv.second.end());
+    }
+    LOG_INFO("playerbots", "RaidSim: currency-expansion graph has {} token/currency entries.",
+             uint32(_currencyExpansion.size()));
+
+    // --- Chest-loot mapping (summoned caches; not static-joinable). ---
+    _chestLoot.clear();
+    if (QueryResult cr = CharacterDatabase.Query(
+            "SELECT map_id, difficulty, gameobject_entry FROM playerbots_raid_chest_loot"))
+    {
+        do
+        {
+            Field* cf = cr->Fetch();
+            _chestLoot[{cf[0].Get<uint32>(), cf[1].Get<uint8>()}].push_back(cf[2].Get<uint32>());
+        } while (cr->NextRow());
+    }
+    LOG_INFO("playerbots", "RaidSim: chest-loot mapping has {} (map,difficulty) keys.",
+             uint32(_chestLoot.size()));
+
     if (QueryResult s = CharacterDatabase.Query("SELECT base_ilvl FROM playerbots_raid_server_state WHERE id = 1"))
         _baseIlvl = s->Fetch()[0].Get<uint16>();
     else

@@ -19,6 +19,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 class ChatHandler;
@@ -98,6 +99,11 @@ private:
     std::map<uint8, std::vector<RaidSimInstance>> _bands;   // band -> instances (ordered by band)
     std::vector<RaidSimInstance> _leveling;                 // sub-80 dungeons, sorted by levelHi desc
     std::unordered_map<uint32, std::vector<uint32>> _pools; // instanceId -> equippable item entries
+    // reqItem entry (tier token / emblem / badge) -> vendor item entries obtainable for it.
+    // Built once at load from npc_vendor x ItemExtendedCost (DBC). Read-only after load.
+    std::unordered_map<uint32, std::vector<uint32>> _currencyExpansion;
+    // (mapId, difficulty) -> summoned cache GO entries for chest-loot instances (616/649/650).
+    std::map<std::pair<uint32, uint8>, std::vector<uint32>> _chestLoot;
     std::unordered_map<uint32, ActiveRun> _runs;            // by guildId
     std::unordered_map<uint32, uint32> _cooldownMs;         // guildId -> remaining cooldown ms
     std::unordered_set<ObjectGuid> _raiding;
