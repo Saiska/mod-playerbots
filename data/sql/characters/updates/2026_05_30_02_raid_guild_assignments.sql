@@ -1,6 +1,11 @@
--- Autonomous Instance Simulation — per-guild TIER offsets/ceilings (operator-tuned).
+-- Autonomous Instance Simulation — per-guild TIER offsets/ceilings.
 -- Module: mod-playerbots (Saiska fork). Database: acore_characters.
--- Re-applicable (fixed-value UPDATEs). Edit per install; matches themed_guilds_retrofit.sql.
+-- Auto-applied by the dbupdater at boot (updates/ stream). Ordered AFTER
+-- 2026_05_30_00_raid_sim_schema.sql (which creates raid_offset/max_band) and
+-- 2026_05_29_01_themed_guilds_data.sql (which seeds the guild rows), so the columns
+-- and target rows both exist. Re-applicable (fixed-value UPDATEs). Edit per install.
+-- (Moved here from data/sql/characters/custom/ on 2026-06-01: custom/ applies BEFORE
+--  updates/, so this ran before its schema existed and aborted boot on a fresh install.)
 --
 -- Emergent model: EVERY guild participates based on how many of its level-80 bots are online
 -- (headcount picks dungeon/10/25). raid_offset is a pure TIER modifier:
