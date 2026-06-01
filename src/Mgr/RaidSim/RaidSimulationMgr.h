@@ -92,6 +92,9 @@ private:
                     std::vector<ObjectGuid> const& members);
     void  EndRun(ActiveRun const& run);
     void  AwardLoot(ActiveRun const& run);
+    // Build instanceId's loot pool: creature base (class 2/4) + currency/token expansion
+    // (all npc_vendor edges) + chest mining (chest instances only), deduped. Logs composition.
+    std::vector<uint32> BuildPool(RaidSimInstance const& inst);
     void  PersistBaseIlvl();
 
     std::mutex _mutex;
