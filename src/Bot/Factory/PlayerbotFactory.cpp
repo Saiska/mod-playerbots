@@ -4557,8 +4557,13 @@ void PlayerbotFactory::InitGuild()
     Guild* guild = sGuildMgr->GetGuildByName(guildName);
     if (!guild)
     {
-        if (!PlayerbotGuildMgr::instance().CreateGuild(bot, guildName))
-            LOG_ERROR("playerbots","Failed to create guild {} for bot {}", guildName, bot->GetName());
+        // Founding is owned by the GuildLifecycle controller (quorum-gated). Only fall back to the
+        // legacy solo-found when that controller is disabled.
+        if (!sPlayerbotAIConfig.guildLifecycleEnable)
+        {
+            if (!PlayerbotGuildMgr::instance().CreateGuild(bot, guildName))
+                LOG_ERROR("playerbots","Failed to create guild {} for bot {}", guildName, bot->GetName());
+        }
         return;
     }
     else

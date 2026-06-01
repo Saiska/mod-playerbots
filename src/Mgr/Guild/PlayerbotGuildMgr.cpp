@@ -5,6 +5,8 @@
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "ScriptMgr.h"
+#include "World.h"
+#include "RandomPlayerbotMgr.h"
 #include <algorithm>
 #include <cmath>
 
@@ -323,6 +325,7 @@ void PlayerbotGuildMgr::ValidateGuildCache()
         dbGuilds[guildId] = guildName;
     } while (result->NextRow());
 
+    _guildCache.clear();
     for (auto it = dbGuilds.begin(); it != dbGuilds.end(); it++)
     {
         uint32 guildId = it->first;
@@ -419,6 +422,159 @@ bool PlayerbotGuildMgr::IsRealGuild(uint32 guildId)
     return it->second.hasRealPlayer;
 }
 
+bool PlayerbotGuildMgr::IsBotManagedGuild(uint32 guildId) const
+{
+    if (!guildId)
+        return false;
+
+    QueryResult r = CharacterDatabase.Query(
+        "SELECT guid FROM guild_member WHERE guildid = {}", guildId);
+    if (!r)
+        return false;  // no members => not a guild we manage
+
+    do
+    {
+        ObjectGuid guid = ObjectGuid::Create<HighGuid::Player>(r->Fetch()[0].Get<uint32>());
+        CharacterCacheEntry const* e = sCharacterCache->GetCharacterCacheByGuid(guid);
+        if (!e)
+            return false;  // unknown member => be safe, don't manage
+        if (!sPlayerbotAIConfig.IsInRandomAccountList(e->AccountId))
+            return false;  // a real player is a member => hands off
+    } while (r->NextRow());
+
+    return true;
+}
+
+uint8 PlayerbotGuildMgr::GoalLevel(GuildTheme const& th) const
+{
+    if (th.raidOffset >= 0)
+        return uint8(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));  // raid guild: max level
+    return th.minLevel;                                              // casual: its floor
+}
+
+std::vector<Player*> PlayerbotGuildMgr::CollectEligibleUnguilded(GuildTheme const& th) const
+{
+    std::vector<Player*> out;
+    uint8 goal = GoalLevel(th);
+
+    for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
+    {
+        if (!bot || !bot->IsInWorld())
+            continue;
+        if (bot->GetGuildId() != 0)
+            continue;                                   // already guilded
+        if (th.faction != 2 && th.faction != bot->GetTeamId())
+            continue;                                   // faction hard gate
+        if (bot->GetLevel() < goal)
+            continue;                                   // goal-level hard gate
+        out.push_back(bot);
+    }
+
+    std::sort(out.begin(), out.end(), [&](Player* a, Player* b) {
+        return PickRankForBot(th, a) < PickRankForBot(th, b);  // GR_OFFICER(1) < ... best-fit first
+    });
+    return out;
+}
+
+void PlayerbotGuildMgr::ReconcileGuilds()
+{
+    if (!sPlayerbotAIConfig.guildLifecycleEnable)
+        return;
+
+    uint32 actions = 0;
+    uint32 const maxActions = sPlayerbotAIConfig.guildLifecycleMaxActionsPerCycle;
+    auto budget = [&]() { return actions < maxActions; };
+
+    for (auto const& kv : _guildThemes)
+    {
+        if (!budget())
+            break;
+
+        std::string const& name = kv.first;
+        GuildTheme const&  th   = kv.second;
+        if (!th.valid)
+            continue;
+
+        Guild* guild = sGuildMgr->GetGuildByName(name);
+
+        // --- Ghost theme: gated founding. ---
+        if (!guild)
+        {
+            std::vector<Player*> pool = CollectEligibleUnguilded(th);
+            if (pool.size() < sPlayerbotAIConfig.guildLifecycleFoundQuorum)
+                continue;  // self-gates raid guilds until the frontier yields enough max-level bots
+
+            Player* leader = pool.front();
+            if (!CreateGuild(leader, name))
+                continue;
+            ++actions;
+            Guild* born = sGuildMgr->GetGuildByName(name);
+            if (!born)
+                continue;
+            for (size_t i = 1; i < pool.size() && born->GetMemberCount() < th.targetSize && budget(); ++i)
+            {
+                if (born->AddMember(pool[i]->GetGUID(), PickRankForBot(th, pool[i])))
+                    ++actions;
+            }
+            OnGuildUpdate(born);
+            LOG_INFO("playerbots", "GuildLifecycle: founded '{}' ({} members)",
+                     name, born->GetMemberCount());
+            continue;
+        }
+
+        // --- Live guild. Skip if a real player is a member, or it isn't bot-led. ---
+        if (IsRealGuild(guild->GetId()) || !IsBotManagedGuild(guild->GetId()))
+            continue;
+
+        uint32 count = guild->GetMemberCount();
+
+        // Disband withered guilds that cannot refill.
+        std::vector<Player*> candidates = CollectEligibleUnguilded(th);
+        if (count < sPlayerbotAIConfig.guildLifecycleDisbandFloor && candidates.empty())
+        {
+            LOG_INFO("playerbots", "GuildLifecycle: disbanded '{}' (<{} members, no refill)",
+                     name, sPlayerbotAIConfig.guildLifecycleDisbandFloor);
+            guild->Disband();
+            ++actions;
+            continue;
+        }
+
+        // Backfill toward target_size.
+        size_t ci = 0;
+        while (count < th.targetSize && ci < candidates.size() && budget())
+        {
+            Player* recruit = candidates[ci++];
+            if (guild->AddMember(recruit->GetGUID(), PickRankForBot(th, recruit)))
+            {
+                ++count;
+                ++actions;
+            }
+        }
+        OnGuildUpdate(guild);
+        if (ci > 0)
+            LOG_INFO("playerbots", "GuildLifecycle: recruited {} into '{}'", ci, name);
+
+        // Re-rank online members (idempotent), never touching the GM seat.
+        ObjectGuid leaderGuid = guild->GetLeaderGUID();
+        for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
+        {
+            if (!bot || !bot->IsInWorld() || bot->GetGuildId() != guild->GetId())
+                continue;
+            if (bot->GetGUID() == leaderGuid)
+                continue;
+            uint8 want = PickRankForBot(th, bot);
+            Guild::Member const* m = guild->GetMember(bot->GetGUID());
+            if (m && m->GetRankId() != want && want != GR_GUILDMASTER)
+                guild->ChangeMemberRank(bot->GetGUID(), want);
+        }
+
+        // Leader safety net: if the leader GUID no longer resolves to a member, remove it so the
+        // core (Guild::DeleteMember) promotes a successor or disbands.
+        if (leaderGuid && !guild->GetMember(leaderGuid))
+            guild->DeleteMember(leaderGuid, false, false, true);
+    }
+}
+
 class BotGuildCacheWorldScript : public WorldScript
 {
     public:
@@ -428,17 +584,19 @@ class BotGuildCacheWorldScript : public WorldScript
         void OnUpdate(uint32 diff) override
         {
             _validateTimer += diff;
-
-            if (_validateTimer >= _validateInterval) // Validate every hour
+            uint32 periodMs = sPlayerbotAIConfig.guildLifecyclePeriod * IN_MILLISECONDS;
+            if (periodMs == 0)
+                periodMs = 300 * IN_MILLISECONDS;
+            if (_validateTimer >= periodMs)
             {
                 _validateTimer = 0;
                 PlayerbotGuildMgr::instance().ValidateGuildCache();
-                LOG_INFO("playerbots", "Scheduled guild cache validation");
+                PlayerbotGuildMgr::instance().ReconcileGuilds();
+                LOG_DEBUG("playerbots", "GuildLifecycle: reconcile pass complete");
             }
         }
 
     private:
-        uint32 _validateInterval = HOUR*IN_MILLISECONDS;
         uint32 _validateTimer;
 };
 

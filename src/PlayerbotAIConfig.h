@@ -280,6 +280,11 @@ public:
     bool randomBotRandomPassword;
     bool deleteRandomBotAccounts;
     uint32 randomBotGuildCount, randomBotGuildSizeMax;
+    bool guildLifecycleEnable;
+    uint32 guildLifecyclePeriod;        // seconds
+    uint32 guildLifecycleFoundQuorum;
+    uint32 guildLifecycleDisbandFloor;
+    uint32 guildLifecycleMaxActionsPerCycle;
     float themedGuildTemperature;
     bool deleteRandomBotGuilds;
     std::vector<uint32> pvpProhibitedZoneIds;

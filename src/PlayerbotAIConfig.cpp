@@ -598,6 +598,11 @@ bool PlayerbotAIConfig::Initialize()
     themedGuildTemperature = sConfigMgr->GetOption<float>("AiPlayerbot.ThemedGuildTemperature", 1.0f);
     randomBotGuildSizeMax = sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotGuildSizeMax", 15);
     deleteRandomBotGuilds = sConfigMgr->GetOption<bool>("AiPlayerbot.DeleteRandomBotGuilds", false);
+    guildLifecycleEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildLifecycle.Enable", true);
+    guildLifecyclePeriod = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildLifecycle.Period", 300);
+    guildLifecycleFoundQuorum = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildLifecycle.FoundQuorum", 10);
+    guildLifecycleDisbandFloor = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildLifecycle.DisbandFloor", 5);
+    guildLifecycleMaxActionsPerCycle = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildLifecycle.MaxActionsPerCycle", 10);
 
     guildTaskEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableGuildTasks", false);
     minGuildTaskChangeTime = sConfigMgr->GetOption<int32>("AiPlayerbot.MinGuildTaskChangeTime", 3 * 24 * 3600);
