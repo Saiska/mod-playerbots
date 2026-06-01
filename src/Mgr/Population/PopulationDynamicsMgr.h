@@ -43,6 +43,11 @@ public:
 private:
     PopulationDynamicsMgr() = default;
 
+    // faction index: 0 = Alliance, 1 = Horde
+    struct Census { std::array<uint32, 9> count[2] = {}; uint32 total = 0; };
+    bool   IsSafeBot(Player* bot) const;       // alive, in world, idle, not raid-sim, no real-player adjacency
+    void   TakeCensus(Census& out) const;      // iterate live bots, bin by (faction, bracket)
+
     void PersistFrontier();                  // UPDATE playerbots_population_state ... WHERE id=1 (caller holds _mutex)
 
     std::mutex _mutex;

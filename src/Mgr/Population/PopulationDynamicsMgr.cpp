@@ -8,6 +8,11 @@
 #include "DatabaseEnv.h"
 #include "Log.h"
 #include <algorithm>
+#include "Group.h"
+#include "ObjectAccessor.h"
+#include "RaidSimulationMgr.h"
+#include "PlayerbotAI.h"
+#include "PlayerbotMgr.h"
 
 uint32 PopulationDynamicsMgr::BracketOf(uint8 level)
 {
@@ -75,6 +80,48 @@ void PopulationDynamicsMgr::ConsiderPlayerLevel(Player* player)
     }
 }
 
+bool PopulationDynamicsMgr::IsSafeBot(Player* bot) const
+{
+    if (!bot || !bot->GetSession() || bot->GetSession()->isLogingOut() || bot->IsDuringRemoveFromWorld())
+        return false;
+    if (!bot->IsInWorld() || !bot->IsAlive())
+        return false;
+    if (bot->IsInCombat())
+        return false;
+    if (bot->InBattleground() || bot->InArena() || bot->inRandomLfgDungeon() || bot->InBattlegroundQueue())
+        return false;
+    if (bot->IsInFlight())
+        return false;
+    if (bot->GetMap() && bot->GetMap()->IsDungeon())     // in an instance map (raid-sim parks bots here)
+        return false;
+    if (sRaidSimulationMgr.IsRaiding(bot->GetGUID()))    // never touch a bot being geared by raid-sim
+        return false;
+    if (Group* group = bot->GetGroup())                  // skip bots grouped with a real player
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* m = ref->GetSource();
+            if (m && m->IsInWorld() && !m->GetSession()->IsBot())
+                return false;
+        }
+    }
+    return true;
+}
+
+void PopulationDynamicsMgr::TakeCensus(Census& out) const
+{
+    out = Census{};
+    for (auto const& it : ObjectAccessor::GetPlayers())
+    {
+        Player* p = it.second;
+        if (!p || !p->IsInWorld() || !p->GetSession()->IsBot())
+            continue;
+        uint32 faction = p->GetTeamId() == TEAM_ALLIANCE ? 0u : 1u;
+        out.count[faction][BracketOf(p->GetLevel())]++;
+        out.total++;
+    }
+}
+
 void PopulationDynamicsMgr::Update(uint32 diff)
 {
     if (!sPlayerbotAIConfig.populationDynamicsEnable)
@@ -95,6 +142,15 @@ void PopulationDynamicsMgr::Update(uint32 diff)
              uint32(_frontier), uint32(cap), P,
              targets[0], targets[1], targets[2], targets[3], targets[4],
              targets[5], targets[6], targets[7], targets[8]);
+
+    Census census;
+    TakeCensus(census);
+    LOG_INFO("playerbots", "PopDyn census: total={} A=[{},{},{},{},{},{},{},{},{}] H=[{},{},{},{},{},{},{},{},{}]",
+             census.total,
+             census.count[0][0],census.count[0][1],census.count[0][2],census.count[0][3],census.count[0][4],
+             census.count[0][5],census.count[0][6],census.count[0][7],census.count[0][8],
+             census.count[1][0],census.count[1][1],census.count[1][2],census.count[1][3],census.count[1][4],
+             census.count[1][5],census.count[1][6],census.count[1][7],census.count[1][8]);
 
     // Reconcile flows (census, bottom inflow, drift, top-prune) land in Tasks 5-8.
 }
