@@ -432,6 +432,26 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return false;
     }
 
+    if (data.activityType == ACTIVITY_DUEL)
+    {
+        Player* partner = ObjectAccessor::FindPlayer(data.target);
+        if (!partner || !partner->IsInWorld() ||
+            bot->GetExactDist(partner) > sPlayerbotAIConfig.pastimeDuelRadius)
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        if (bot->GetExactDist(partner) > INTERACTION_DISTANCE)
+            return MoveWorldObjectTo(data.target);
+        // Initiate the friendly duel by casting spell 7266 (mirrors RpgDuelAction::Execute). The partner
+        // auto-accepts (its default DuelStrategy) and both fight; NewRpg's CanChangeTo excludes combat, so
+        // the pastime yields to the duel here and the engine resumes when it ends. Fire-and-forget initiate.
+        botAI->DoSpecificAction("cast custom spell",
+            Event("rpg action", chat->FormatWorldobject(partner) + " 7266"), true);
+        info.ChangeToIdle();
+        return true;
+    }
+
     // ACTIVITY_SOCIAL (default): converge on a friendly player and emote.
     Player* target = ObjectAccessor::FindPlayer(data.target);
     bool targetOk = target && target->IsInWorld() &&

@@ -896,6 +896,64 @@ static bool BotHasCraftingProfession(Player* bot)
            bot->HasSkill(SKILL_COOKING);
 }
 
+static bool BotInDuelAllowedArea(Player* bot)
+{
+    if (sPlayerbotAIConfig.IsInPvpProhibitedZone(bot->GetZoneId()))
+        return false;
+    AreaTableEntry const* casterAreaEntry = sAreaTableStore.LookupEntry(bot->GetAreaId());
+    if (casterAreaEntry && !(casterAreaEntry->flags & AREA_FLAG_ALLOW_DUELS))
+        return false;
+    return true;
+}
+
+static ObjectGuid SelectDuelPartner(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    GuidVector friends = AI_VALUE(GuidVector, "nearest friendly players");
+    Player* best = nullptr;
+    float bestDist = sPlayerbotAIConfig.pastimeDuelRadius;
+    for (ObjectGuid& guid : friends)
+    {
+        Player* other = ObjectAccessor::FindPlayer(guid);
+        if (!other || other == bot || !other->IsInWorld())
+            continue;
+        if (other->isDead() || other->IsInCombat())
+            continue;
+        if (bot->GetExactDist(other) > sPlayerbotAIConfig.pastimeDuelRadius)
+            continue;
+
+        bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
+        if (!isBot)
+        {
+            if (!sPlayerbotAIConfig.pastimeDuelIncludePlayers)
+                continue;   // real players only if opted in
+        }
+        else
+        {
+            // bot must be idle-ish OR already socializing (don't pester busy bots)
+            PlayerbotAI* oai = GET_PLAYERBOT_AI(other);
+            if (oai)
+            {
+                NewRpgStatus st = oai->rpgInfo.GetStatus();
+                bool socializing = false;
+                if (st == RPG_PASTIME)
+                {
+                    auto const* p = std::get_if<NewRpgInfo::Pastime>(&oai->rpgInfo.data);
+                    socializing = p && p->activityType == ACTIVITY_SOCIAL;
+                }
+                bool idleish = (st == RPG_IDLE || st == RPG_REST || st == RPG_WANDER_RANDOM);
+                if (!socializing && !idleish)
+                    continue;
+            }
+        }
+
+        float d = bot->GetExactDist(other);
+        if (d < bestDist) { bestDist = d; best = other; }
+    }
+    return best ? best->GetGUID() : ObjectGuid();
+}
+
 bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos)
 {
     // Activity registry: social (player), loiter (POI), fish (water), gather (node), craft (in-place).
@@ -931,6 +989,12 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
 
     if (sPlayerbotAIConfig.pastimeCraftWeight > 0 && BotHasCraftingProfession(bot))
         cands.push_back({ uint8(ACTIVITY_CRAFT), ObjectGuid(), sPlayerbotAIConfig.pastimeCraftWeight });
+
+    if (sPlayerbotAIConfig.pastimeDuelWeight > 0 && BotInDuelAllowedArea(bot))
+    {
+        if (ObjectGuid partner = SelectDuelPartner(botAI))
+            cands.push_back({ uint8(ACTIVITY_DUEL), partner, sPlayerbotAIConfig.pastimeDuelWeight });
+    }
 
     if (cands.empty())
         return false;
