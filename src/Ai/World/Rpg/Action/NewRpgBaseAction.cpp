@@ -30,6 +30,9 @@
 #include "Timer.h"
 #include "TravelMgr.h"
 
+// Defined in FishingAction.cpp (only FindWaterRadial is header-declared).
+WorldPosition FindFishingHole(PlayerbotAI* botAI);
+
 bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
 {
     if (dest == WorldPosition())
@@ -831,10 +834,10 @@ ObjectGuid NewRpgBaseAction::SelectSocialPartner()
     return best ? best->GetGUID() : ObjectGuid();
 }
 
-bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget)
+bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos)
 {
-    // Activity registry (v1: social only; add ACTIVITY_DUEL/GATHER/... as weighted branches here).
-    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; };
+    // Activity registry: social (player), loiter (POI), fish (water). Add more weighted branches here.
+    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; WorldPosition pos; };
     std::vector<Cand> cands;
 
     if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
@@ -848,6 +851,15 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget)
             cands.push_back({ uint8(ACTIVITY_LOITER), poi, sPlayerbotAIConfig.pastimeLoiterWeight });
     }
 
+    // Fishing: skilled bots only. The position hint (nearest fishing-hole GO, if any) exercises the
+    // target-union; the perform branch delegates all water-finding to the existing "move near water" action,
+    // so open water works even when this hint is empty.
+    if (sPlayerbotAIConfig.pastimeFishWeight > 0 && AI_VALUE(bool, "can fish"))
+    {
+        WorldPosition hole = FindFishingHole(botAI);   // empty if no fishing-hole GO nearby; that's fine
+        cands.push_back({ uint8(ACTIVITY_FISH), ObjectGuid(), sPlayerbotAIConfig.pastimeFishWeight, hole });
+    }
+
     if (cands.empty())
         return false;
 
@@ -857,9 +869,9 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget)
     for (auto const& c : cands)
     {
         acc += c.weight;
-        if (acc >= r) { outActivity = c.activity; outTarget = c.target; return true; }
+        if (acc >= r) { outActivity = c.activity; outTarget = c.target; outTargetPos = c.pos; return true; }
     }
-    outActivity = cands.back().activity; outTarget = cands.back().target;
+    outActivity = cands.back().activity; outTarget = cands.back().target; outTargetPos = cands.back().pos;
     return true;
 }
 
@@ -1219,9 +1231,10 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         {
             uint8 activity = 0;
             ObjectGuid target;
-            if (!SelectPastime(activity, target))
+            WorldPosition targetPos;
+            if (!SelectPastime(activity, target, targetPos))
                 return false;   // nothing eligible -> pick another status
-            botAI->rpgInfo.ChangeToPastime(activity, target);
+            botAI->rpgInfo.ChangeToPastime(activity, target, targetPos);
             return true;
         }
         case RPG_GO_GRIND:

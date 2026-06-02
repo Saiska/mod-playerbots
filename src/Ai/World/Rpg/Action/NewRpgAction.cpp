@@ -336,6 +336,42 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return MoveRandomNear(15.0f);
     }
 
+    if (data.activityType == ACTIVITY_FISH)
+    {
+        // Dwell window elapsed (timer starts on the first successful cast) -> stop fishing.
+        if (data.lastReach && GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+
+        // Delegate the existing, self-gating fishing chain. DoSpecificAction returns true only when the
+        // action was useful + possible + ran this tick; the active +loot strategy auto-uses the bobber + loots.
+        if (botAI->DoSpecificAction("equip fishing pole", Event(), true))
+            return true;                                   // acquiring/equipping a pole
+        if (botAI->DoSpecificAction("move near water", Event(), true))
+            return true;                                   // walking to the resolved fishing spot
+        if (botAI->DoSpecificAction("go fishing", Event(), true))
+        {
+            if (!data.lastReach)                           // first successful cast = arrived & fishing
+            {
+                data.lastReach = getMSTime();
+                data.dwellMs = urand(sPlayerbotAIConfig.pastimeFishDwellMin,
+                                     sPlayerbotAIConfig.pastimeFishDwellMax) * IN_MILLISECONDS;
+            }
+            return true;
+        }
+
+        // Nothing in the chain could act. If we never started fishing (no pole / no water reachable),
+        // give up; otherwise we're channeling the cast -> wait.
+        if (!data.lastReach)
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        return false;
+    }
+
     // ACTIVITY_SOCIAL (default): converge on a friendly player and emote.
     Player* target = ObjectAccessor::FindPlayer(data.target);
     bool targetOk = target && target->IsInWorld() &&
