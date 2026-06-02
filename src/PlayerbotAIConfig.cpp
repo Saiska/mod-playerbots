@@ -785,6 +785,10 @@ bool PlayerbotAIConfig::Initialize()
     if (pastimeCraftDwellMax < pastimeCraftDwellMin)
         std::swap(pastimeCraftDwellMin, pastimeCraftDwellMax);
 
+    pastimeDuelWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Duel.Weight", 80);
+    pastimeDuelRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Duel.Radius", 30.0f);
+    pastimeDuelIncludePlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Duel.IncludePlayers", false);
+
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);
 

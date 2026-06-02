@@ -1088,7 +1088,7 @@ AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.Pastime = 12
 
-# Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, gather, craft).
+# Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, gather, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
 # Social.Radius: yards to search for a companion bot (also the leash - partner beyond this is dropped).
 # Social.ClusterDist: yards within which the bot stops approaching and starts socializing.
@@ -1138,6 +1138,15 @@ AiPlayerbot.Pastime.Gather.DwellMax = 60
 AiPlayerbot.Pastime.Craft.Weight = 100
 AiPlayerbot.Pastime.Craft.DwellMin = 20
 AiPlayerbot.Pastime.Craft.DwellMax = 60
+
+# Duel activity tuning (the duel activity within the pastime registry; idle bots in a duel-allowed area only).
+# Duel.Weight: relative weight of the duel activity within the pastime registry.
+# Duel.Radius: yards to search for a nearby idle bot to challenge to a friendly duel.
+# Duel.IncludePlayers: 1 = bots may also challenge nearby real players, 0 = bots only.
+# A friendly duel (spell 7266) is initiated; the partner auto-accepts and both fight - no real death. City areas (no ALLOW_DUELS flag) never duel.
+AiPlayerbot.Pastime.Duel.Weight = 80
+AiPlayerbot.Pastime.Duel.Radius = 30.0
+AiPlayerbot.Pastime.Duel.IncludePlayers = 0
 
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel
