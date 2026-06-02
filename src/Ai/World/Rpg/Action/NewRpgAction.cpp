@@ -399,9 +399,18 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         // Arrived: set the node as the loot target and delegate to the existing harvest action.
         // Construct a LootObject for the GO guid and set "loot target", mirroring LootAction.cpp.
         LootObject lootObj(bot, data.target);
+        // Skip nodes this bot can't actually harvest (e.g. a miner with no pickaxe). The normal loot
+        // pipeline filters these via IsLootPossible before reaching "open loot"; this delegating path
+        // bypasses that filter, so apply it here to avoid a wasted cast -> re-roll next cycle instead.
+        if (!lootObj.IsLootPossible(bot))
+        {
+            info.ChangeToIdle();
+            return true;
+        }
         context->GetValue<LootObject>("loot target")->Set(lootObj);
+        // Fire-and-forget: the mining/herb gather cast completes independently of the RPG state, so
+        // transitioning to Idle this tick does not abort it. One node per activation; re-roll next cycle.
         botAI->DoSpecificAction("open loot", Event(), true);
-        // One node per activation; re-roll next cycle.
         info.ChangeToIdle();
         return true;
     }
