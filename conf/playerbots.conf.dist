@@ -1078,6 +1078,7 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 # Rest          (Default: 5   Take a break for a while and do nothing)
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
 # CityLife      (Default: 15  Loiter at a nearby city service POI: auctioneer/banker/innkeeper/trainer/mailbox)
+# Pastime       (Default: 12  Leisure/social activities: converge on a nearby idle bot and dance/sit/cheer together)
 AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
 AiPlayerbot.RpgStatusProbWeight.WanderNpc = 20
 AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
@@ -1087,6 +1088,7 @@ AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.CityLife = 15
+AiPlayerbot.RpgStatusProbWeight.Pastime = 12
 
 # City-life loitering tuning (used by the CityLife RPG status above).
 # DwellMin/DwellMax: seconds a bot lingers at the chosen POI (random in range; auto-swapped if inverted).
@@ -1094,6 +1096,23 @@ AiPlayerbot.RpgStatusProbWeight.CityLife = 15
 AiPlayerbot.CityLife.DwellMin = 30
 AiPlayerbot.CityLife.DwellMax = 120
 AiPlayerbot.CityLife.PoiTypeMask = 31
+
+# Pastime / social-activity tuning (used by the Pastime RPG status above; v1 activity = social).
+# Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
+# Social.Radius: yards to search for a companion bot (also the leash - partner beyond this is dropped).
+# Social.ClusterDist: yards within which the bot stops approaching and starts socializing.
+# Social.DwellMin/DwellMax: seconds spent socializing at the knot (random in range; auto-swapped if inverted).
+# Social.EmoteInterval: seconds between social emotes while dwelling.
+# Social.IncludePlayers: 1 = bots may also gather toward real players, 0 = bots only.
+# Social.Emotes: pipe-separated emote names to pick from (sit = sit on the ground; others are one-shot gestures).
+AiPlayerbot.Pastime.Social.Weight = 100
+AiPlayerbot.Pastime.Social.Radius = 40.0
+AiPlayerbot.Pastime.Social.ClusterDist = 5.0
+AiPlayerbot.Pastime.Social.DwellMin = 30
+AiPlayerbot.Pastime.Social.DwellMax = 120
+AiPlayerbot.Pastime.Social.EmoteInterval = 6
+AiPlayerbot.Pastime.Social.IncludePlayers = 0
+AiPlayerbot.Pastime.Social.Emotes = "dance|sit|cheer|laugh|applaud|point|talk"
 
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel

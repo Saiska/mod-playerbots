@@ -785,6 +785,77 @@ ObjectGuid NewRpgBaseAction::ChooseCityPoiToLoiter(uint8& outPoiType)
     return best->GetGUID();
 }
 
+ObjectGuid NewRpgBaseAction::SelectSocialPartner()
+{
+    GuidVector friends = AI_VALUE(GuidVector, "nearest friendly players");
+    Player* best = nullptr;
+    float bestDist = sPlayerbotAIConfig.pastimeSocialRadius;
+    for (ObjectGuid& guid : friends)
+    {
+        Player* other = ObjectAccessor::FindPlayer(guid);
+        if (!other || other == bot || !other->IsInWorld())
+            continue;
+        if (other->isDead() || other->IsInCombat())
+            continue;
+        if (bot->GetExactDist(other) > sPlayerbotAIConfig.pastimeSocialRadius)
+            continue;
+
+        bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
+        if (!isBot)
+        {
+            if (!sPlayerbotAIConfig.pastimeSocialIncludePlayers)
+                continue;   // real players only if opted in
+        }
+        else
+        {
+            // bot must be idle-ish OR already socializing (don't pester busy bots)
+            PlayerbotAI* oai = GET_PLAYERBOT_AI(other);
+            if (oai)
+            {
+                NewRpgStatus st = oai->rpgInfo.GetStatus();
+                bool socializing = false;
+                if (st == RPG_PASTIME)
+                {
+                    auto const* p = std::get_if<NewRpgInfo::Pastime>(&oai->rpgInfo.data);
+                    socializing = p && p->activityType == ACTIVITY_SOCIAL;
+                }
+                bool idleish = (st == RPG_IDLE || st == RPG_REST || st == RPG_WANDER_RANDOM);
+                if (!socializing && !idleish)
+                    continue;
+            }
+        }
+
+        float d = bot->GetExactDist(other);
+        if (d < bestDist) { bestDist = d; best = other; }
+    }
+    return best ? best->GetGUID() : ObjectGuid();
+}
+
+bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget)
+{
+    // Activity registry (v1: social only; add ACTIVITY_DUEL/GATHER/... as weighted branches here).
+    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; };
+    std::vector<Cand> cands;
+
+    if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
+        if (ObjectGuid t = SelectSocialPartner())
+            cands.push_back({ uint8(ACTIVITY_SOCIAL), t, sPlayerbotAIConfig.pastimeSocialWeight });
+
+    if (cands.empty())
+        return false;
+
+    uint32 total = 0;
+    for (auto const& c : cands) total += c.weight;
+    uint32 r = urand(1, total), acc = 0;
+    for (auto const& c : cands)
+    {
+        acc += c.weight;
+        if (acc >= r) { outActivity = c.activity; outTarget = c.target; return true; }
+    }
+    outActivity = cands.back().activity; outTarget = cands.back().target;
+    return true;
+}
+
 bool NewRpgBaseAction::HasQuestToAcceptOrReward(WorldObject* object)
 {
     ObjectGuid guid = object->GetGUID();
@@ -1146,6 +1217,15 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             botAI->rpgInfo.ChangeToCityLife(poi, poiType);
             return true;
         }
+        case RPG_PASTIME:
+        {
+            uint8 activity = 0;
+            ObjectGuid target;
+            if (!SelectPastime(activity, target))
+                return false;   // nothing eligible -> pick another status
+            botAI->rpgInfo.ChangeToPastime(activity, target);
+            return true;
+        }
         case RPG_GO_GRIND:
         {
             WorldPosition pos = SelectRandomGrindPos(bot);
@@ -1253,6 +1333,7 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             WorldPosition pos = SelectRandomCampPos(bot);
             return pos != WorldPosition();
         }
+        case RPG_PASTIME:
         case RPG_CITY_LIFE:
         case RPG_WANDER_NPC:
         {
