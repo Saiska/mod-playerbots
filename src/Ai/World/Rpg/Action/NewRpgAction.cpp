@@ -62,7 +62,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
-            return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_CITY_LIFE,
+            return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_CITY_LIFE, RPG_PASTIME,
                                        RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP});
 
         case RPG_GO_GRIND:

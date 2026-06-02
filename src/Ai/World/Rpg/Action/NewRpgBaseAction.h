@@ -39,6 +39,11 @@ protected:
     // Pick a nearby service POI to loiter at (npcflag / mailbox GO type), honoring CityLife.PoiTypeMask.
     // Returns the guid; sets outPoiType (BotCityPoi). Empty guid if none in range.
     ObjectGuid ChooseCityPoiToLoiter(uint8& outPoiType);
+    // Nearest random bot within Pastime.Social.Radius that is idle-ish OR already socializing
+    // (or a player if Pastime.Social.IncludePlayers). Empty if none.
+    ObjectGuid SelectSocialPartner();
+    // Activity registry: choose an eligible activity (weighted) + its target. False if none eligible.
+    bool SelectPastime(uint8& outActivity, ObjectGuid& outTarget);
     bool HasQuestToAcceptOrReward(WorldObject* object);
     bool InteractWithNpcOrGameObjectForQuest(ObjectGuid guid);
     bool CanInteractWithQuestGiver(Object* questGiver);
