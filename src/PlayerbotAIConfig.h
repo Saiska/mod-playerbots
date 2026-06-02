@@ -71,7 +71,7 @@ enum BotCityPoi : uint8
     POI_MAILBOX
 };
 
-enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER /* future: ACTIVITY_DUEL, ACTIVITY_GATHER, ... */ };
+enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER, ACTIVITY_FISH /* future: ACTIVITY_DUEL, ACTIVITY_GATHER, ... */ };
 
 #define MAX_SPECNO 20
 
@@ -404,6 +404,9 @@ public:
     uint32 pastimeLoiterDwellMin;
     uint32 pastimeLoiterDwellMax;
     uint32 pastimeLoiterPoiTypeMask;
+    uint32 pastimeFishWeight;
+    uint32 pastimeFishDwellMin;
+    uint32 pastimeFishDwellMax;
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;
