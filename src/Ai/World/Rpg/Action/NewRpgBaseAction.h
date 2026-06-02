@@ -41,7 +41,7 @@ protected:
     // (or a player if Pastime.Social.IncludePlayers). Empty if none.
     ObjectGuid SelectSocialPartner();
     // Activity registry: choose an eligible activity (weighted) + its target. False if none eligible.
-    bool SelectPastime(uint8& outActivity, ObjectGuid& outTarget);
+    bool SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos);
     bool HasQuestToAcceptOrReward(WorldObject* object);
     bool InteractWithNpcOrGameObjectForQuest(ObjectGuid guid);
     bool CanInteractWithQuestGiver(Object* questGiver);

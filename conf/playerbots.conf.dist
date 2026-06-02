@@ -1088,7 +1088,7 @@ AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.Pastime = 12
 
-# Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter).
+# Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
 # Social.Radius: yards to search for a companion bot (also the leash - partner beyond this is dropped).
 # Social.ClusterDist: yards within which the bot stops approaching and starts socializing.
@@ -1113,6 +1113,14 @@ AiPlayerbot.Pastime.Loiter.Weight = 100
 AiPlayerbot.Pastime.Loiter.DwellMin = 30
 AiPlayerbot.Pastime.Loiter.DwellMax = 120
 AiPlayerbot.Pastime.Loiter.PoiTypeMask = 31
+
+# Fishing activity tuning (the fish activity within the pastime registry; fishing-skilled idle bots only).
+# Fish.Weight: relative weight of the fishing activity within the pastime registry.
+# Fish.DwellMin/DwellMax: seconds a bot fishes at the water's edge before leaving (random in range; auto-swapped if inverted).
+# Spot-finding (water/fishing-hole/LOS) and the cast/loot chain are fully delegated to the existing fishing actions.
+AiPlayerbot.Pastime.Fish.Weight = 100
+AiPlayerbot.Pastime.Fish.DwellMin = 60
+AiPlayerbot.Pastime.Fish.DwellMax = 180
 
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel

@@ -763,6 +763,13 @@ bool PlayerbotAIConfig::Initialize()
     if (pastimeLoiterDwellMax < pastimeLoiterDwellMin)
         std::swap(pastimeLoiterDwellMin, pastimeLoiterDwellMax);
 
+    pastimeFishWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Fish.Weight", 100);
+    pastimeFishDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Fish.DwellMin", 60);
+    pastimeFishDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Fish.DwellMax", 180);
+    // urand asserts max >= min; guard against an inverted operator config.
+    if (pastimeFishDwellMax < pastimeFishDwellMin)
+        std::swap(pastimeFishDwellMin, pastimeFishDwellMax);
+
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);
 
