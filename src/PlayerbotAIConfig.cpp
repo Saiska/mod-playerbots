@@ -732,15 +732,7 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 5);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
-    RpgStatusProbWeight[RPG_CITY_LIFE] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.CityLife", 15);
     RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 12);
-
-    cityLifeDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMin", 30);
-    cityLifeDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.DwellMax", 120);
-    // urand asserts max >= min; guard against an inverted operator config.
-    if (cityLifeDwellMax < cityLifeDwellMin)
-        std::swap(cityLifeDwellMin, cityLifeDwellMax);
-    cityLifePoiTypeMask = sConfigMgr->GetOption<uint32>("AiPlayerbot.CityLife.PoiTypeMask", 31);
 
     pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);

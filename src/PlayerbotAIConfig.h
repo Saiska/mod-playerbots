@@ -57,7 +57,6 @@ enum NewRpgStatus : int
     // Taking a break
     RPG_REST = 7,
     RPG_OUTDOOR_PVP = 8,
-    RPG_CITY_LIFE,    // loiter at a city service POI (auctioneer/banker/innkeeper/trainer/mailbox)
     RPG_PASTIME,      // leisure/social activities (framework + social starter)
     RPG_STATUS_END
 };
@@ -393,9 +392,6 @@ public:
     bool autoDoQuests;
     bool enableNewRpgStrategy;
     std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
-    uint32 cityLifeDwellMin;
-    uint32 cityLifeDwellMax;
-    uint32 cityLifePoiTypeMask;
     uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
