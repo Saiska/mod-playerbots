@@ -1,8 +1,10 @@
 #include "NewRpgBaseAction.h"
 
+#include "AiObjectContext.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "Creature.h"
+#include "DBCStores.h"
 #include "G3D/Vector2.h"
 #include "GameObject.h"
 #include "GossipDef.h"
@@ -834,6 +836,66 @@ ObjectGuid NewRpgBaseAction::SelectSocialPartner()
     return best ? best->GetGUID() : ObjectGuid();
 }
 
+static ObjectGuid SelectGatherNode(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
+    ObjectGuid best;
+    float bestDist = sPlayerbotAIConfig.pastimeGatherRadius;
+
+    for (ObjectGuid const& guid : gos)
+    {
+        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+        if (!go || !go->isSpawned())
+            continue;
+
+        if (go->GetGoType() != GAMEOBJECT_TYPE_CHEST)
+            continue;
+
+        LockEntry const* lockInfo = sLockStore.LookupEntry(go->GetGOInfo()->GetLockId());
+        if (!lockInfo)
+            continue;
+
+        bool eligible = false;
+        for (uint8 i = 0; i < 8; ++i)
+        {
+            if (lockInfo->Type[i] != LOCK_KEY_SKILL)
+                continue;
+
+            uint32 skillId = SkillByLockType(LockType(lockInfo->Index[i]));
+            uint32 reqSkillValue = std::max(2u, lockInfo->Skill[i]);
+            if ((skillId == SKILL_MINING || skillId == SKILL_HERBALISM) &&
+                bot->HasSkill(skillId) && bot->GetSkillValue(skillId) >= reqSkillValue)
+            {
+                eligible = true;
+                break;
+            }
+        }
+        if (!eligible)
+            continue;
+
+        float dist = bot->GetExactDist(go);
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = guid;
+        }
+    }
+    return best;
+}
+
+static bool BotHasCraftingProfession(Player* bot)
+{
+    return bot->HasSkill(SKILL_BLACKSMITHING) ||
+           bot->HasSkill(SKILL_TAILORING)     ||
+           bot->HasSkill(SKILL_ENCHANTING)    ||
+           bot->HasSkill(SKILL_ALCHEMY)       ||
+           bot->HasSkill(SKILL_ENGINEERING)   ||
+           bot->HasSkill(SKILL_LEATHERWORKING)||
+           bot->HasSkill(SKILL_COOKING);
+}
+
 bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos)
 {
     // Activity registry: social (player), loiter (POI), fish (water). Add more weighted branches here.
@@ -859,6 +921,15 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
         WorldPosition hole = FindFishingHole(botAI);   // empty if no fishing-hole GO nearby; that's fine
         cands.push_back({ uint8(ACTIVITY_FISH), ObjectGuid(), sPlayerbotAIConfig.pastimeFishWeight, hole });
     }
+
+    if (sPlayerbotAIConfig.pastimeGatherWeight > 0)
+    {
+        if (ObjectGuid node = SelectGatherNode(botAI))
+            cands.push_back({ uint8(ACTIVITY_GATHER), node, sPlayerbotAIConfig.pastimeGatherWeight });
+    }
+
+    if (sPlayerbotAIConfig.pastimeCraftWeight > 0 && BotHasCraftingProfession(bot))
+        cands.push_back({ uint8(ACTIVITY_CRAFT), ObjectGuid(), sPlayerbotAIConfig.pastimeCraftWeight });
 
     if (cands.empty())
         return false;

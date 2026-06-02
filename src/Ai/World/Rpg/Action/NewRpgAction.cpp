@@ -4,12 +4,14 @@
 #include <cstdlib>
 #include <unordered_map>
 
+#include "AiObjectContext.h"
 #include "AreaDefines.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "G3D/Vector2.h"
 #include "GossipDef.h"
 #include "IVMapMgr.h"
+#include "LootObjectStack.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "Object.h"
@@ -369,6 +371,55 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             info.ChangeToIdle();
             return true;
         }
+        return false;
+    }
+
+    if (data.activityType == ACTIVITY_GATHER)
+    {
+        if (data.target.IsEmpty())
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        WorldObject* node = ObjectAccessor::GetWorldObject(*bot, data.target);
+        if (!node)
+        {
+            // harvested by someone else / despawned
+            info.ChangeToIdle();
+            return true;
+        }
+        if (!IsWithinInteractionDist(node))
+        {
+            if (MoveWorldObjectTo(data.target))
+                return true;
+            // can't reach -> give up
+            info.ChangeToIdle();
+            return true;
+        }
+        // Arrived: set the node as the loot target and delegate to the existing harvest action.
+        // Construct a LootObject for the GO guid and set "loot target", mirroring LootAction.cpp.
+        LootObject lootObj(bot, data.target);
+        context->GetValue<LootObject>("loot target")->Set(lootObj);
+        botAI->DoSpecificAction("open loot", Event(), true);
+        // One node per activation; re-roll next cycle.
+        info.ChangeToIdle();
+        return true;
+    }
+
+    if (data.activityType == ACTIVITY_CRAFT)
+    {
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeCraftDwellMin,
+                                 sPlayerbotAIConfig.pastimeCraftDwellMax) * IN_MILLISECONDS;
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
         return false;
     }
 
