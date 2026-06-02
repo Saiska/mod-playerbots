@@ -785,6 +785,51 @@ ObjectGuid NewRpgBaseAction::ChooseCityPoiToLoiter(uint8& outPoiType)
     return best->GetGUID();
 }
 
+ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
+{
+    outPoiType = POI_NONE;
+    uint32 mask = sPlayerbotAIConfig.pastimeLoiterPoiTypeMask;
+
+    GuidVector targets = AI_VALUE(GuidVector, "possible new rpg targets");
+    WorldObject* best = nullptr;
+    uint8 bestType = POI_NONE;
+
+    auto consider = [&](WorldObject* object, uint8 type) {
+        if (!(mask & (1u << (type - 1))))
+            return;
+        if (!best || bot->GetExactDist(best) > bot->GetExactDist(object))
+        {
+            best = object;
+            bestType = type;
+        }
+    };
+
+    for (ObjectGuid& guid : targets)
+    {
+        Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+        if (!c || !c->IsInWorld())
+            continue;
+        if (c->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER))      consider(c, POI_AUCTIONEER);
+        else if (c->HasNpcFlag(UNIT_NPC_FLAG_BANKER))     consider(c, POI_BANKER);
+        else if (c->HasNpcFlag(UNIT_NPC_FLAG_INNKEEPER))  consider(c, POI_INNKEEPER);
+        else if (c->HasNpcFlag(UNIT_NPC_FLAG_TRAINER))    consider(c, POI_TRAINER);
+    }
+
+    GuidVector gos = AI_VALUE(GuidVector, "possible new rpg game objects");
+    for (ObjectGuid& guid : gos)
+    {
+        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+        if (!go || !go->IsInWorld())
+            continue;
+        if (go->GetGoType() == GAMEOBJECT_TYPE_MAILBOX)   consider(go, POI_MAILBOX);
+    }
+
+    if (!best)
+        return ObjectGuid();
+    outPoiType = bestType;
+    return best->GetGUID();
+}
+
 ObjectGuid NewRpgBaseAction::SelectSocialPartner()
 {
     GuidVector friends = AI_VALUE(GuidVector, "nearest friendly players");
@@ -840,6 +885,13 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget)
     if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
         if (ObjectGuid t = SelectSocialPartner())
             cands.push_back({ uint8(ACTIVITY_SOCIAL), t, sPlayerbotAIConfig.pastimeSocialWeight });
+
+    if (sPlayerbotAIConfig.pastimeLoiterWeight > 0)
+    {
+        uint8 poiType = POI_NONE;
+        if (ObjectGuid poi = SelectLoiterPoi(poiType))
+            cands.push_back({ uint8(ACTIVITY_LOITER), poi, sPlayerbotAIConfig.pastimeLoiterWeight });
+    }
 
     if (cands.empty())
         return false;

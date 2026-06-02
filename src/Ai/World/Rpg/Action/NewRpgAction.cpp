@@ -353,7 +353,41 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return false;
     auto& data = *dataPtr;
 
-    // v1: only ACTIVITY_SOCIAL.
+    if (data.activityType == ACTIVITY_LOITER)
+    {
+        if (data.target.IsEmpty())
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        WorldObject* object = ObjectAccessor::GetWorldObject(*bot, data.target);
+        if (object && IsWithinInteractionDist(object))
+        {
+            if (!data.lastReach)
+            {
+                data.lastReach = getMSTime();
+                uint32 dwellSec = urand(sPlayerbotAIConfig.pastimeLoiterDwellMin,
+                                        sPlayerbotAIConfig.pastimeLoiterDwellMax);
+                data.dwellMs = dwellSec * IN_MILLISECONDS;
+                bot->SetFacingToObject(object);
+                return true;
+            }
+            if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
+            {
+                // dwelling: occasional idle emote keeps it lively
+                if (urand(0, 100) < 5)
+                    bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
+                return false;
+            }
+            info.ChangeToIdle();
+            return true;
+        }
+        if (MoveWorldObjectTo(data.target))
+            return true;
+        return MoveRandomNear(15.0f);
+    }
+
+    // ACTIVITY_SOCIAL (default): converge on a friendly player and emote.
     Player* target = ObjectAccessor::FindPlayer(data.target);
     bool targetOk = target && target->IsInWorld() &&
                     bot->GetExactDist(target) <= sPlayerbotAIConfig.pastimeSocialRadius;
