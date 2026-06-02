@@ -898,7 +898,8 @@ static bool BotHasCraftingProfession(Player* bot)
 
 bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos)
 {
-    // Activity registry: social (player), loiter (POI), fish (water). Add more weighted branches here.
+    // Activity registry: social (player), loiter (POI), fish (water), gather (node), craft (in-place).
+    // Add more weighted branches here.
     struct Cand { uint8 activity; ObjectGuid target; uint32 weight; WorldPosition pos; };
     std::vector<Cand> cands;
 
