@@ -1088,7 +1088,7 @@ AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.Pastime = 12
 
-# Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish).
+# Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, gather, craft).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
 # Social.Radius: yards to search for a companion bot (also the leash - partner beyond this is dropped).
 # Social.ClusterDist: yards within which the bot stops approaching and starts socializing.
@@ -1121,6 +1121,23 @@ AiPlayerbot.Pastime.Loiter.PoiTypeMask = 31
 AiPlayerbot.Pastime.Fish.Weight = 100
 AiPlayerbot.Pastime.Fish.DwellMin = 60
 AiPlayerbot.Pastime.Fish.DwellMax = 180
+
+# Gather activity tuning (the gather activity within the pastime registry; bots with mining/herbalism only).
+# Gather.Weight: relative weight of the gather activity within the pastime registry.
+# Gather.Radius: yards to search for a harvestable node the bot's gathering skill (and tool) allows.
+# Gather.DwellMin/DwellMax: seconds budget for the activation (random in range; auto-swapped if inverted).
+# Node-finding and the harvest cast/loot are delegated to the existing loot actions; one node per activation.
+AiPlayerbot.Pastime.Gather.Weight = 100
+AiPlayerbot.Pastime.Gather.Radius = 60.0
+AiPlayerbot.Pastime.Gather.DwellMin = 20
+AiPlayerbot.Pastime.Gather.DwellMax = 60
+
+# Craft activity tuning (the craft activity within the pastime registry; bots with a crafting profession only).
+# Craft.Weight: relative weight of the craft activity within the pastime registry.
+# Craft.DwellMin/DwellMax: seconds the bot plays a cosmetic crafting animation in place (random; auto-swapped if inverted).
+AiPlayerbot.Pastime.Craft.Weight = 100
+AiPlayerbot.Pastime.Craft.DwellMin = 20
+AiPlayerbot.Pastime.Craft.DwellMax = 60
 
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel
