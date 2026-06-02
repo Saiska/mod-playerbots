@@ -763,6 +763,14 @@ bool PlayerbotAIConfig::Initialize()
                 pastimeSocialEmotes.push_back(tok);
     }
 
+    pastimeLoiterWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.Weight", 100);
+    pastimeLoiterDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.DwellMin", 30);
+    pastimeLoiterDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.DwellMax", 120);
+    pastimeLoiterPoiTypeMask = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.PoiTypeMask", 31);
+    // urand asserts max >= min; guard against an inverted operator config.
+    if (pastimeLoiterDwellMax < pastimeLoiterDwellMin)
+        std::swap(pastimeLoiterDwellMin, pastimeLoiterDwellMax);
+
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);
 

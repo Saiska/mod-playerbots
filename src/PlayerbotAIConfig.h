@@ -72,7 +72,7 @@ enum BotCityPoi : uint8
     POI_MAILBOX
 };
 
-enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0 /* future: ACTIVITY_DUEL, ACTIVITY_GATHER, ... */ };
+enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER /* future: ACTIVITY_DUEL, ACTIVITY_GATHER, ... */ };
 
 #define MAX_SPECNO 20
 
@@ -404,6 +404,10 @@ public:
     uint32 pastimeSocialEmoteInterval;
     bool   pastimeSocialIncludePlayers;
     std::vector<std::string> pastimeSocialEmotes;
+    uint32 pastimeLoiterWeight;
+    uint32 pastimeLoiterDwellMin;
+    uint32 pastimeLoiterDwellMax;
+    uint32 pastimeLoiterPoiTypeMask;
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;
