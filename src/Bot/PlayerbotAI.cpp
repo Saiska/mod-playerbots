@@ -6800,12 +6800,22 @@ SpellFamilyNames PlayerbotAI::Class2SpellFamilyName(uint8 cls)
 
 BotCityPoi PlayerbotAI::GetCurrentCityPoi()
 {
-    if (rpgInfo.GetStatus() != RPG_CITY_LIFE)
+    if (rpgInfo.GetStatus() != RPG_PASTIME)
         return POI_NONE;
-    auto const* cl = std::get_if<NewRpgInfo::CityLife>(&rpgInfo.data);
-    if (!cl || cl->lastReach == 0)   // only while actually dwelling at the POI
-        return POI_NONE;
-    return static_cast<BotCityPoi>(cl->poiType);
+    auto const* p = std::get_if<NewRpgInfo::Pastime>(&rpgInfo.data);
+    if (!p || p->activityType != ACTIVITY_LOITER || p->lastReach == 0)
+        return POI_NONE;   // only while actually dwelling at the POI
+    WorldObject* o = ObjectAccessor::GetWorldObject(*bot, p->target);
+    if (Creature* c = o ? o->ToCreature() : nullptr)
+    {
+        if (c->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER)) return POI_AUCTIONEER;
+        if (c->HasNpcFlag(UNIT_NPC_FLAG_BANKER))     return POI_BANKER;
+        if (c->HasNpcFlag(UNIT_NPC_FLAG_INNKEEPER))  return POI_INNKEEPER;
+        if (c->HasNpcFlag(UNIT_NPC_FLAG_TRAINER))    return POI_TRAINER;
+    }
+    if (GameObject* g = o ? o->ToGameObject() : nullptr)
+        if (g->GetGoType() == GAMEOBJECT_TYPE_MAILBOX) return POI_MAILBOX;
+    return POI_NONE;
 }
 
 void PlayerbotAI::AddTimedEvent(std::function<void()> callback, uint32 delayMs)

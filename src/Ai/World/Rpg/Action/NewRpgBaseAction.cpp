@@ -740,10 +740,10 @@ ObjectGuid NewRpgBaseAction::ChooseNpcOrGameObjectToInteract(bool questgiverOnly
     return ObjectGuid();
 }
 
-ObjectGuid NewRpgBaseAction::ChooseCityPoiToLoiter(uint8& outPoiType)
+ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
 {
     outPoiType = POI_NONE;
-    uint32 mask = sPlayerbotAIConfig.cityLifePoiTypeMask;
+    uint32 mask = sPlayerbotAIConfig.pastimeLoiterPoiTypeMask;
 
     GuidVector targets = AI_VALUE(GuidVector, "possible new rpg targets");
     WorldObject* best = nullptr;
@@ -840,6 +840,13 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget)
     if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
         if (ObjectGuid t = SelectSocialPartner())
             cands.push_back({ uint8(ACTIVITY_SOCIAL), t, sPlayerbotAIConfig.pastimeSocialWeight });
+
+    if (sPlayerbotAIConfig.pastimeLoiterWeight > 0)
+    {
+        uint8 poiType = POI_NONE;
+        if (ObjectGuid poi = SelectLoiterPoi(poiType))
+            cands.push_back({ uint8(ACTIVITY_LOITER), poi, sPlayerbotAIConfig.pastimeLoiterWeight });
+    }
 
     if (cands.empty())
         return false;
@@ -1208,15 +1215,6 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             botAI->rpgInfo.ChangeToWanderNpc();
             return true;
         }
-        case RPG_CITY_LIFE:
-        {
-            uint8 poiType = POI_NONE;
-            ObjectGuid poi = ChooseCityPoiToLoiter(poiType);
-            if (poi.IsEmpty())
-                return false;   // no POI nearby -> pick another status
-            botAI->rpgInfo.ChangeToCityLife(poi, poiType);
-            return true;
-        }
         case RPG_PASTIME:
         {
             uint8 activity = 0;
@@ -1334,7 +1332,6 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             return pos != WorldPosition();
         }
         case RPG_PASTIME:
-        case RPG_CITY_LIFE:
         case RPG_WANDER_NPC:
         {
             GuidVector possibleTargets = AI_VALUE(GuidVector, "possible new rpg targets");

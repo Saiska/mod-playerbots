@@ -57,7 +57,6 @@ enum NewRpgStatus : int
     // Taking a break
     RPG_REST = 7,
     RPG_OUTDOOR_PVP = 8,
-    RPG_CITY_LIFE,    // loiter at a city service POI (auctioneer/banker/innkeeper/trainer/mailbox)
     RPG_PASTIME,      // leisure/social activities (framework + social starter)
     RPG_STATUS_END
 };
@@ -72,7 +71,7 @@ enum BotCityPoi : uint8
     POI_MAILBOX
 };
 
-enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0 /* future: ACTIVITY_DUEL, ACTIVITY_GATHER, ... */ };
+enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER /* future: ACTIVITY_DUEL, ACTIVITY_GATHER, ... */ };
 
 #define MAX_SPECNO 20
 
@@ -393,9 +392,6 @@ public:
     bool autoDoQuests;
     bool enableNewRpgStrategy;
     std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
-    uint32 cityLifeDwellMin;
-    uint32 cityLifeDwellMax;
-    uint32 cityLifePoiTypeMask;
     uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
@@ -404,6 +400,10 @@ public:
     uint32 pastimeSocialEmoteInterval;
     bool   pastimeSocialIncludePlayers;
     std::vector<std::string> pastimeSocialEmotes;
+    uint32 pastimeLoiterWeight;
+    uint32 pastimeLoiterDwellMin;
+    uint32 pastimeLoiterDwellMax;
+    uint32 pastimeLoiterPoiTypeMask;
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;

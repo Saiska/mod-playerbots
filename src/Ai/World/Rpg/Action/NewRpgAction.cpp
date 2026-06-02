@@ -73,7 +73,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
-            return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_CITY_LIFE, RPG_PASTIME,
+            return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
                                        RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP});
 
         case RPG_GO_GRIND:
@@ -115,15 +115,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_WANDER_NPC:
         {
             if (info.HasStatusPersisted(statusWanderNpcDuration))
-            {
-                info.ChangeToIdle();
-                return true;
-            }
-            break;
-        }
-        case RPG_CITY_LIFE:
-        {
-            if (info.HasStatusPersisted(statusCityLifeDuration))
             {
                 info.ChangeToIdle();
                 return true;
@@ -278,48 +269,6 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
     return true;
 }
 
-bool NewRpgCityLifeAction::Execute(Event /*event*/)
-{
-    NewRpgInfo& info = botAI->rpgInfo;
-    auto* dataPtr = std::get_if<NewRpgInfo::CityLife>(&info.data);
-    if (!dataPtr)
-        return false;
-    auto& data = *dataPtr;
-
-    if (data.poi.IsEmpty())
-    {
-        info.ChangeToIdle();
-        return true;
-    }
-
-    WorldObject* object = ObjectAccessor::GetWorldObject(*bot, data.poi);
-    if (object && IsWithinInteractionDist(object))
-    {
-        if (!data.lastReach)
-        {
-            data.lastReach = getMSTime();
-            uint32 dwellSec = urand(sPlayerbotAIConfig.cityLifeDwellMin, sPlayerbotAIConfig.cityLifeDwellMax);
-            data.dwellMs = dwellSec * IN_MILLISECONDS;
-            bot->SetFacingToObject(object);
-            return true;
-        }
-        if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
-        {
-            // dwelling: occasional idle emote keeps it lively
-            if (urand(0, 100) < 5)
-                bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
-            return false;
-        }
-        // dwell done
-        info.ChangeToIdle();
-        return true;
-    }
-
-    if (MoveWorldObjectTo(data.poi))
-        return true;
-    return MoveRandomNear(15.0f);
-}
-
 static void PerformSocialEmote(Player* bot)
 {
     auto const& names = sPlayerbotAIConfig.pastimeSocialEmotes;
@@ -353,7 +302,41 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return false;
     auto& data = *dataPtr;
 
-    // v1: only ACTIVITY_SOCIAL.
+    if (data.activityType == ACTIVITY_LOITER)
+    {
+        if (data.target.IsEmpty())
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        WorldObject* object = ObjectAccessor::GetWorldObject(*bot, data.target);
+        if (object && IsWithinInteractionDist(object))
+        {
+            if (!data.lastReach)
+            {
+                data.lastReach = getMSTime();
+                uint32 dwellSec = urand(sPlayerbotAIConfig.pastimeLoiterDwellMin,
+                                        sPlayerbotAIConfig.pastimeLoiterDwellMax);
+                data.dwellMs = dwellSec * IN_MILLISECONDS;
+                bot->SetFacingToObject(object);
+                return true;
+            }
+            if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
+            {
+                // dwelling: occasional idle emote keeps it lively
+                if (urand(0, 100) < 5)
+                    bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
+                return false;
+            }
+            info.ChangeToIdle();
+            return true;
+        }
+        if (MoveWorldObjectTo(data.target))
+            return true;
+        return MoveRandomNear(15.0f);
+    }
+
+    // ACTIVITY_SOCIAL (default): converge on a friendly player and emote.
     Player* target = ObjectAccessor::FindPlayer(data.target);
     bool targetOk = target && target->IsInWorld() &&
                     bot->GetExactDist(target) <= sPlayerbotAIConfig.pastimeSocialRadius;

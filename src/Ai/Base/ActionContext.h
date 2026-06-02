@@ -272,7 +272,6 @@ public:
         creators["new rpg go camp"] = &ActionContext::new_rpg_go_camp;
         creators["new rpg wander random"] = &ActionContext::new_rpg_wander_random;
         creators["new rpg wander npc"] = &ActionContext::new_rpg_wander_npc;
-        creators["new rpg city life"] = &ActionContext::new_rpg_city_life;
         creators["new rpg pastime"] = &ActionContext::new_rpg_pastime;
         creators["new rpg do quest"] = &ActionContext::new_rpg_do_quest;
         creators["new rpg travel flight"] = &ActionContext::new_rpg_travel_flight;
@@ -479,7 +478,6 @@ private:
     static Action* new_rpg_go_camp(PlayerbotAI* ai) { return new NewRpgGoCampAction(ai); }
     static Action* new_rpg_wander_random(PlayerbotAI* ai) { return new NewRpgWanderRandomAction(ai); }
     static Action* new_rpg_wander_npc(PlayerbotAI* ai) { return new NewRpgWanderNpcAction(ai); }
-    static Action* new_rpg_city_life(PlayerbotAI* ai) { return new NewRpgCityLifeAction(ai); }
     static Action* new_rpg_pastime(PlayerbotAI* ai) { return new NewRpgPastimeAction(ai); }
     static Action* new_rpg_do_quest(PlayerbotAI* ai) { return new NewRpgDoQuestAction(ai); }
     static Action* new_rpg_travel_flight(PlayerbotAI* ai) { return new NewRpgTravelFlightAction(ai); }

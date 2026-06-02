@@ -32,14 +32,6 @@ struct NewRpgInfo
         ObjectGuid npcOrGo{};
         uint32 lastReach{0};
     };
-    // RPG_CITY_LIFE
-    struct CityLife
-    {
-        ObjectGuid poi{};        // chosen service NPC or mailbox GO
-        uint8  poiType{0};       // BotCityPoi
-        uint32 lastReach{0};     // arrival timestamp (0 = en route)
-        uint32 dwellMs{0};       // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
-    };
     // RPG_PASTIME
     struct Pastime
     {
@@ -100,7 +92,6 @@ struct NewRpgInfo
         GoGrind,
         GoCamp,
         WanderNpc,
-        CityLife,
         Pastime,
         WanderRandom,
         DoQuest,
@@ -115,7 +106,6 @@ struct NewRpgInfo
     void ChangeToGoGrind(WorldPosition pos);
     void ChangeToGoCamp(WorldPosition pos);
     void ChangeToWanderNpc();
-    void ChangeToCityLife(ObjectGuid poi, uint8 poiType);
     void ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos = {});
     void ChangeToWanderRandom();
     void ChangeToDoQuest(uint32 questId, const Quest* quest);
