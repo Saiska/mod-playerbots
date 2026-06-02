@@ -42,7 +42,7 @@ void NewRpgInfo::ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPos
     p.targetPos = targetPos;
     p.lastReach = 0;
     p.lastEmote = 0;
-    p.untilTs = 0;
+    p.dwellMs = 0;
     data = p;
 }
 
@@ -172,7 +172,7 @@ std::string NewRpgInfo::ToString()
             out << "\nactivity: " << uint32(arg.activityType);
             out << "\ntarget: " << arg.target.GetCounter();
             out << "\nlastReach: " << arg.lastReach;
-            out << "\nuntilTs: " << arg.untilTs;
+            out << "\ndwellMs: " << arg.dwellMs;
         }
         else if constexpr (std::is_same_v<T, WanderRandom>)
         {

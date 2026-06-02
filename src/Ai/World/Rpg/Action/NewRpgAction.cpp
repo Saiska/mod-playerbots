@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <unordered_map>
 
 #include "AreaDefines.h"
 #include "BroadcastHelper.h"
@@ -24,6 +25,16 @@
 #include "SharedDefines.h"
 #include "Timer.h"
 #include "TravelMgr.h"
+
+// Restore a socializing bot to a neutral pose when it leaves the knot: stand up and
+// clear any held looping emote state. Used on every RPG_PASTIME exit path (including the
+// status-timeout path, which would otherwise leave a sitting/dancing bot frozen mid-pose).
+static void EndSocialPastime(Player* bot)
+{
+    if (bot->getStandState() != UNIT_STAND_STATE_STAND)
+        bot->SetStandState(UNIT_STAND_STATE_STAND);
+    bot->ClearEmoteState();
+}
 
 bool TellRpgStatusAction::Execute(Event event)
 {
@@ -114,6 +125,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             if (info.HasStatusPersisted(statusCityLifeDuration))
             {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
+        case RPG_PASTIME:
+        {
+            if (info.HasStatusPersisted(statusPastimeDuration))
+            {
+                EndSocialPastime(bot);
                 info.ChangeToIdle();
                 return true;
             }
@@ -297,6 +318,86 @@ bool NewRpgCityLifeAction::Execute(Event /*event*/)
     if (MoveWorldObjectTo(data.poi))
         return true;
     return MoveRandomNear(15.0f);
+}
+
+static void PerformSocialEmote(Player* bot)
+{
+    auto const& names = sPlayerbotAIConfig.pastimeSocialEmotes;
+    if (names.empty())
+        return;
+    std::string const& name = names[urand(0, names.size() - 1)];
+    if (name == "sit")
+    {
+        bot->SetStandState(UNIT_STAND_STATE_SIT);
+        return;
+    }
+    static const std::unordered_map<std::string, uint32> m = {
+        {"dance", EMOTE_STATE_DANCE}, {"cheer", EMOTE_ONESHOT_CHEER}, {"laugh", EMOTE_ONESHOT_LAUGH},
+        {"applaud", EMOTE_ONESHOT_APPLAUD}, {"point", EMOTE_ONESHOT_POINT}, {"talk", EMOTE_ONESHOT_TALK},
+        {"wave", EMOTE_ONESHOT_WAVE}, {"bow", EMOTE_ONESHOT_BOW}, {"roar", EMOTE_ONESHOT_ROAR}
+    };
+    auto it = m.find(name);
+    if (it != m.end())
+    {
+        if (bot->getStandState() != UNIT_STAND_STATE_STAND)
+            bot->SetStandState(UNIT_STAND_STATE_STAND);
+        bot->HandleEmoteCommand(it->second);
+    }
+}
+
+bool NewRpgPastimeAction::Execute(Event /*event*/)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    auto* dataPtr = std::get_if<NewRpgInfo::Pastime>(&info.data);
+    if (!dataPtr)
+        return false;
+    auto& data = *dataPtr;
+
+    // v1: only ACTIVITY_SOCIAL.
+    Player* target = ObjectAccessor::FindPlayer(data.target);
+    bool targetOk = target && target->IsInWorld() &&
+                    bot->GetExactDist(target) <= sPlayerbotAIConfig.pastimeSocialRadius;
+    if (!targetOk)
+    {
+        ObjectGuid t = SelectSocialPartner();
+        if (t.IsEmpty())
+        {
+            EndSocialPastime(bot);
+            info.ChangeToIdle();
+            return true;
+        }
+        data.target = t; data.lastReach = 0; data.lastEmote = 0; data.dwellMs = 0;
+        return true;
+    }
+
+    if (bot->GetExactDist(target) > sPlayerbotAIConfig.pastimeSocialClusterDist)
+    {
+        if (MoveWorldObjectTo(data.target))
+            return true;
+        return MoveRandomNear(10.0f);
+    }
+
+    // within cluster range
+    if (!data.lastReach)
+    {
+        data.lastReach = getMSTime();
+        data.dwellMs = urand(sPlayerbotAIConfig.pastimeSocialDwellMin,
+                             sPlayerbotAIConfig.pastimeSocialDwellMax) * IN_MILLISECONDS;
+    }
+    if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+    {
+        EndSocialPastime(bot);
+        info.ChangeToIdle();
+        return true;
+    }
+    bot->SetFacingToObject(target);
+    if (!data.lastEmote ||
+        GetMSTimeDiffToNow(data.lastEmote) >= sPlayerbotAIConfig.pastimeSocialEmoteInterval * IN_MILLISECONDS)
+    {
+        PerformSocialEmote(bot);
+        data.lastEmote = getMSTime();
+    }
+    return false;
 }
 
 bool NewRpgDoQuestAction::Execute(Event /*event*/)

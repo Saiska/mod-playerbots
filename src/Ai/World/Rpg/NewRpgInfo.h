@@ -48,7 +48,7 @@ struct NewRpgInfo
         WorldPosition targetPos{};// position-target activities (e.g. fishing spot); target union
         uint32 lastReach{0};      // arrival timestamp (0 = en route)
         uint32 lastEmote{0};      // last social-emote timestamp
-        uint32 untilTs{0};        // leave timestamp (set on arrival)
+        uint32 dwellMs{0};        // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
     };
     // RPG_WANDER_RANDOM
     struct WanderRandom
