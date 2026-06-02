@@ -920,6 +920,10 @@ static ObjectGuid SelectDuelPartner(PlayerbotAI* botAI)
             continue;
         if (other->isDead() || other->IsInCombat())
             continue;
+        // AcceptDuelAction auto-declines when a non-master bot is below 90% HP, so a low-HP partner would
+        // fizzle the request (sent, then cancelled). Skip them up front to match that accept gate.
+        if (other->GetHealthPct() < 90.0f)
+            continue;
         if (bot->GetExactDist(other) > sPlayerbotAIConfig.pastimeDuelRadius)
             continue;
 

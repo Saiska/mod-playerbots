@@ -444,8 +444,8 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         if (bot->GetExactDist(partner) > INTERACTION_DISTANCE)
             return MoveWorldObjectTo(data.target);
         // Initiate the friendly duel by casting spell 7266 (mirrors RpgDuelAction::Execute). The partner
-        // auto-accepts (its default DuelStrategy) and both fight; NewRpg's CanChangeTo excludes combat, so
-        // the pastime yields to the duel here and the engine resumes when it ends. Fire-and-forget initiate.
+        // auto-accepts (its default DuelStrategy) and both fight; entering combat switches the bot to the
+        // combat engine, which suspends NewRpg until the duel resolves, then it resumes. Fire-and-forget.
         botAI->DoSpecificAction("cast custom spell",
             Event("rpg action", chat->FormatWorldobject(partner) + " 7266"), true);
         info.ChangeToIdle();
