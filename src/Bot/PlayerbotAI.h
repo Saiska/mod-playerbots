@@ -601,6 +601,7 @@ public:
     static bool IsHealingSpell(uint32 spellFamilyName, flag96 spelFalimyFlags);
     static SpellFamilyNames Class2SpellFamilyName(uint8 cls);
     BotCityPoi GetCurrentCityPoi();
+    BotActivity GetCurrentActivity();
     NewRpgInfo rpgInfo;
     NewRpgStatistic rpgStatistic;
     std::unordered_set<uint32> lowPriorityQuest;

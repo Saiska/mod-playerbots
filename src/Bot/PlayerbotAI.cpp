@@ -6818,6 +6818,16 @@ BotCityPoi PlayerbotAI::GetCurrentCityPoi()
     return POI_NONE;
 }
 
+BotActivity PlayerbotAI::GetCurrentActivity()
+{
+    if (rpgInfo.GetStatus() != RPG_PASTIME)
+        return ACTIVITY_NONE;
+    auto const* p = std::get_if<NewRpgInfo::Pastime>(&rpgInfo.data);
+    if (!p || p->lastReach == 0)
+        return ACTIVITY_NONE;   // only while actually performing, not while still converging
+    return (BotActivity)p->activityType;
+}
+
 void PlayerbotAI::AddTimedEvent(std::function<void()> callback, uint32 delayMs)
 {
     class LambdaEvent final : public BasicEvent
