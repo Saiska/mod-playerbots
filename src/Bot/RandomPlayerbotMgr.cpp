@@ -1317,6 +1317,7 @@ void RandomPlayerbotMgr::CheckPlayers()
 }
 
 void RandomPlayerbotMgr::ScheduleRandomize(uint32 bot, uint32 time) { SetEventValue(bot, "randomize", 1, time); }
+void RandomPlayerbotMgr::ScheduleMaintenance(uint32 bot, uint32 time) { SetEventValue(bot, "maintenance", 1, time); }
 
 void RandomPlayerbotMgr::ScheduleTeleport(uint32 bot, uint32 time)
 {
@@ -1384,6 +1385,14 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
             randomTime = urand(std::max(7, static_cast<int>(randomBotUpdateInterval * 0.7)),
                                std::max(14, static_cast<int>(randomBotUpdateInterval * 1.4)));
             ScheduleTeleport(bot, randomTime);
+        }
+
+        if (sPlayerbotAIConfig.autoMaintenance && !GetEventValue(bot, "maintenance"))
+        {
+            // Stagger the first pass across the full interval window so the whole
+            // population does not maintain at once after a restart.
+            ScheduleMaintenance(bot, urand(sPlayerbotAIConfig.minAutoMaintenanceInterval,
+                                           sPlayerbotAIConfig.maxAutoMaintenanceInterval));
         }
 
         return true;
