@@ -240,7 +240,7 @@ private:
     bool ProcessBot(uint32 bot);
     void ScheduleRandomize(uint32 bot, uint32 time);
     void ScheduleMaintenance(uint32 bot, uint32 time);
-    bool RunMaintenance(Player* bot);   // defined in Task 3
+    bool RunMaintenance(Player* bot);   // timer-driven maintenance pass; true if it ran
     void RandomTeleport(Player* bot);
     void RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth = false);
     uint32 GetZoneLevel(uint16 mapId, float teleX, float teleY, float teleZ);
