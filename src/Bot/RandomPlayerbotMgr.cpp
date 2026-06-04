@@ -1646,6 +1646,22 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
             ScheduleTeleport(botId, time);
             return true;
         }
+
+        // autonomous maintenance (timer-driven, idle-only)
+        if (sPlayerbotAIConfig.autoMaintenance && IsRandomBot(bot))
+        {
+            uint32 maintenance = GetEventValue(botId, "maintenance");
+            if (!maintenance)
+            {
+                if (RunMaintenance(bot))
+                    ScheduleMaintenance(botId, urand(sPlayerbotAIConfig.minAutoMaintenanceInterval,
+                                                     sPlayerbotAIConfig.maxAutoMaintenanceInterval));
+                else
+                    // a guard skipped it — retry soon rather than waiting a full window
+                    ScheduleMaintenance(botId, urand(300, 900));
+                return true;   // consumes one RandomBotsPerInterval unit → throttled like randomize
+            }
+        }
     }
 
     return false;
