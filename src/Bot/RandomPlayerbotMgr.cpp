@@ -1317,6 +1317,7 @@ void RandomPlayerbotMgr::CheckPlayers()
 }
 
 void RandomPlayerbotMgr::ScheduleRandomize(uint32 bot, uint32 time) { SetEventValue(bot, "randomize", 1, time); }
+void RandomPlayerbotMgr::ScheduleMaintenance(uint32 bot, uint32 time) { SetEventValue(bot, "maintenance", 1, time); }
 
 void RandomPlayerbotMgr::ScheduleTeleport(uint32 bot, uint32 time)
 {
@@ -1333,6 +1334,78 @@ void RandomPlayerbotMgr::ScheduleChangeStrategy(uint32 bot, uint32 time)
                      sPlayerbotAIConfig.maxRandomBotChangeStrategyTime);
 
     SetEventValue(bot, "change_strategy", 1, time);
+}
+
+namespace
+{
+    struct MaintenanceCounts
+    {
+        uint32 gems = 0;      // filled gem sockets across equipped items
+        uint32 enchants = 0;  // equipped items carrying a permanent enchant
+        uint32 glyphs = 0;    // filled glyph slots
+        uint32 spells = 0;    // total known spells (coarse "everything learned" gauge)
+    };
+
+    MaintenanceCounts CaptureMaintenanceCounts(Player* bot)
+    {
+        MaintenanceCounts c;
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+        {
+            Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+            if (!item)
+                continue;
+            if (item->GetEnchantmentId(PERM_ENCHANTMENT_SLOT))
+                ++c.enchants;
+            for (uint8 s = 0; s < MAX_GEM_SOCKETS; ++s)
+                if (item->GetEnchantmentId(EnchantmentSlot(SOCK_ENCHANTMENT_SLOT + s)))
+                    ++c.gems;
+        }
+        for (uint8 i = 0; i < MAX_GLYPH_SLOT_INDEX; ++i)
+            if (bot->GetGlyph(i))
+                ++c.glyphs;
+        c.spells = bot->GetSpellMap().size();
+        return c;
+    }
+}
+
+bool RandomPlayerbotMgr::RunMaintenance(Player* bot)
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI)
+        return false;
+
+    // Guards: never maintain mid-fight, during a RaidSim run, or while serving a real player.
+    if (bot->IsInCombat())
+    {
+        LOG_DEBUG("playerbots", "[AutoMaintenance] Bot #{} <{}>: skip (combat)",
+                  bot->GetGUID().GetCounter(), bot->GetName());
+        return false;
+    }
+    if (sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
+    {
+        LOG_DEBUG("playerbots", "[AutoMaintenance] Bot #{} <{}>: skip (raiding)",
+                  bot->GetGUID().GetCounter(), bot->GetName());
+        return false;
+    }
+    if (botAI->HasRealPlayerMaster())
+    {
+        LOG_DEBUG("playerbots", "[AutoMaintenance] Bot #{} <{}>: skip (hasMaster)",
+                  bot->GetGUID().GetCounter(), bot->GetName());
+        return false;
+    }
+
+    MaintenanceCounts before = CaptureMaintenanceCounts(bot);
+    botAI->DoSpecificAction("maintenance");   // existing spec-stable MaintenanceAction
+    MaintenanceCounts after = CaptureMaintenanceCounts(bot);
+
+    LOG_INFO("playerbots",
+             "[AutoMaintenance] Bot #{} {}:{} <{}> spec={}: refreshed "
+             "(gems {}->{} enchants {}->{} glyphs {}->{} spells={})",
+             bot->GetGUID().GetCounter(), bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H",
+             bot->GetLevel(), bot->GetName(), AiFactory::GetPlayerSpecTab(bot),
+             before.gems, after.gems, before.enchants, after.enchants,
+             before.glyphs, after.glyphs, after.spells);
+    return true;
 }
 
 bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
@@ -1384,6 +1457,14 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
             randomTime = urand(std::max(7, static_cast<int>(randomBotUpdateInterval * 0.7)),
                                std::max(14, static_cast<int>(randomBotUpdateInterval * 1.4)));
             ScheduleTeleport(bot, randomTime);
+        }
+
+        if (sPlayerbotAIConfig.autoMaintenance && !GetEventValue(bot, "maintenance"))
+        {
+            // Stagger the first pass across the full interval window so the whole
+            // population does not maintain at once after a restart.
+            ScheduleMaintenance(bot, urand(sPlayerbotAIConfig.minAutoMaintenanceInterval,
+                                           sPlayerbotAIConfig.maxAutoMaintenanceInterval));
         }
 
         return true;
@@ -1564,6 +1645,22 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
                                 sPlayerbotAIConfig.maxRandomBotTeleportInterval);
             ScheduleTeleport(botId, time);
             return true;
+        }
+
+        // autonomous maintenance (timer-driven, idle-only)
+        if (sPlayerbotAIConfig.autoMaintenance && IsRandomBot(bot))
+        {
+            uint32 maintenance = GetEventValue(botId, "maintenance");
+            if (!maintenance)
+            {
+                if (RunMaintenance(bot))
+                    ScheduleMaintenance(botId, urand(sPlayerbotAIConfig.minAutoMaintenanceInterval,
+                                                     sPlayerbotAIConfig.maxAutoMaintenanceInterval));
+                else
+                    // a guard skipped it — retry soon rather than waiting a full window
+                    ScheduleMaintenance(botId, urand(300, 900));
+                return true;   // consumes one RandomBotsPerInterval unit → throttled like randomize
+            }
         }
     }
 
