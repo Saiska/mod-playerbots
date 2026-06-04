@@ -555,6 +555,20 @@ AiPlayerbot.AltMaintenanceReputation = 1
 AiPlayerbot.AltMaintenanceAttunementQuests = 1
 AiPlayerbot.AltMaintenanceKeyring = 1
 
+# Periodically run the full maintenance set (gems/enchants/glyphs/professions/talents/consumables)
+# on each random bot, staggered per bot, independent of MaintenanceCommand.
+# Spec-stable (re-applies the bot's current spec; never re-rolls).
+# Default: 1 (enabled)
+AiPlayerbot.AutoMaintenance = 1
+
+# Minimum per-bot interval between autonomous maintenance passes, in seconds.
+# Default: 7200
+AiPlayerbot.MinAutoMaintenanceInterval = 7200
+
+# Maximum per-bot interval between autonomous maintenance passes, in seconds.
+# Default: 14400
+AiPlayerbot.MaxAutoMaintenanceInterval = 14400
+
 # Enable/Disable autogear command, which automatically upgrades bots' gear
 # The quality is limited by AutoGearQualityLimit and AutoGearScoreLimit
 # Default: 1 (enabled)

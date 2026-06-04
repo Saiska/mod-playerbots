@@ -470,6 +470,11 @@ public:
             altMaintenanceGlyphs,
             altMaintenanceKeyring,
             altMaintenanceGemsEnchants;
+    // Autonomous (timer-driven) maintenance — runs the maintenance set on a
+    // staggered per-bot cadence, independent of the manual MaintenanceCommand.
+    bool autoMaintenance;
+    uint32 minAutoMaintenanceInterval;
+    uint32 maxAutoMaintenanceInterval;
     int32 autoGearCommand, autoGearCommandAltBots, autoGearQualityLimit, autoGearScoreLimit;
 
     uint32 useGroundMountAtMinLevel;

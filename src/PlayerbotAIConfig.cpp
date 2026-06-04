@@ -664,6 +664,14 @@ bool PlayerbotAIConfig::Initialize()
     altMaintenanceKeyring = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceKeyring", true);
     altMaintenanceGemsEnchants = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceGemsEnchants", true);
 
+    autoMaintenance = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoMaintenance", true);
+    minAutoMaintenanceInterval = sConfigMgr->GetOption<uint32>("AiPlayerbot.MinAutoMaintenanceInterval", 7200);
+    maxAutoMaintenanceInterval = sConfigMgr->GetOption<uint32>("AiPlayerbot.MaxAutoMaintenanceInterval", 14400);
+    if (minAutoMaintenanceInterval > maxAutoMaintenanceInterval)
+        std::swap(minAutoMaintenanceInterval, maxAutoMaintenanceInterval);
+    LOG_INFO("playerbots", "AutoMaintenance: config loaded — enabled={} interval={}-{}s",
+             autoMaintenance, minAutoMaintenanceInterval, maxAutoMaintenanceInterval);
+
     autoGearCommand = sConfigMgr->GetOption<int32>("AiPlayerbot.AutoGearCommand", 1);
     autoGearCommandAltBots = sConfigMgr->GetOption<int32>("AiPlayerbot.AutoGearCommandAltBots", 1);
     autoGearQualityLimit = sConfigMgr->GetOption<int32>("AiPlayerbot.AutoGearQualityLimit", 3);
