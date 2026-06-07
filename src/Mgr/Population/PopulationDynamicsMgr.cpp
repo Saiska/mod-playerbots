@@ -15,10 +15,10 @@
 #include "PlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
 
-uint32 PopulationDynamicsMgr::BracketOf(uint8 level)
+uint32 PopulationDynamicsMgr::BandOf(uint8 level)
 {
-    if (level >= 80) return 8;
-    if (level < 10)  return 0;
+    // Maps a LEVELING level (1..79) to its 10-level band 0..7. Level 80 is the sink, handled separately.
+    if (level < 10) return 0;             // 1-9 -> band 0
     return uint32(level / 10);            // 10-19 -> 1, ..., 70-79 -> 7
 }
 
@@ -29,24 +29,40 @@ uint8 PopulationDynamicsMgr::ComputeCap(uint8 frontier) const
     return uint8(std::min<uint32>(80, c));
 }
 
-float PopulationDynamicsMgr::Openness(uint32 b, uint8 cap) const
-{
-    uint8 lo = BracketLower(b), hi = BracketUpper(b);
-    if (cap >= hi) return 1.0f;
-    if (cap <  lo) return 0.0f;
-    return float(int(cap) - int(lo) + 1) / float(int(hi) - int(lo) + 1);
-}
 
-void PopulationDynamicsMgr::ComputeTargets(uint8 cap, std::array<uint32, 9>& targets, uint32& outP) const
+void PopulationDynamicsMgr::ComputeTargets(uint8 cap, Census const& census,
+                                           std::array<uint32, 81>& targets, uint32& outP) const
 {
+    targets = {};                                          // index 0 unused; all levels default 0
     outP = 0;
-    for (uint32 b = 0; b < 9; ++b)
+
+    // Leveling levels 1..79: each gets its band's bots-per-level knob, but only if authorized (<= cap).
+    for (uint8 lvl = 1; lvl <= 79; ++lvl)
     {
-        float share = float(sPlayerbotAIConfig.populationBracketPct[b]) / 100.0f;
-        uint32 t = uint32(std::lround(float(sPlayerbotAIConfig.populationMaxPopulation) * share * Openness(b, cap)));
-        targets[b] = t;
-        outP += t;
+        if (lvl > cap)                                     // level not yet authorized by the frontier
+            continue;
+        targets[lvl] = sPlayerbotAIConfig.populationBracket[BandOf(lvl)];
+        outP += targets[lvl];                              // spawn target counts leveling targets only...
     }
+
+    // Level 80 = the sink / remainder: MaxPopulation minus every band's full contribution.
+    // span(band 0) = 9 levels (1..9); span(bands 1..7) = 10 levels each.
+    uint32 bandsSum = sPlayerbotAIConfig.populationBracket[0] * 9u;
+    for (uint32 b = 1; b < 8; ++b)
+        bandsSum += sPlayerbotAIConfig.populationBracket[b] * 10u;
+
+    uint32 maxPop = sPlayerbotAIConfig.populationMaxPopulation;
+    if (bandsSum > maxPop)
+    {
+        LOG_WARN("playerbots", "PopDyn: band sum {} exceeds MaxPopulation {}; clamping target[80]=0.", bandsSum, maxPop);
+        targets[80] = 0;
+    }
+    else
+        targets[80] = maxPop - bandsSum;
+
+    // ...plus the ACTUAL current level-80 population (count[80]), so P tracks the slowly-filling sink
+    // (spec §3): the spawner injects fresh base bots only as the sink moves bots 79->80, never all at once.
+    outP += census.count[0][80] + census.count[1][80];
 }
 
 void PopulationDynamicsMgr::LoadFromDB()
@@ -68,9 +84,11 @@ void PopulationDynamicsMgr::LoadFromDB()
 
     if (sPlayerbotAIConfig.populationDynamicsEnable)
     {
-        std::array<uint32, 9> targets{};
+        Census census;
+        TakeCensus(census);
+        std::array<uint32, 81> targets{};
         uint32 P = 0;
-        ComputeTargets(_cap, targets, P);
+        ComputeTargets(_cap, census, targets, P);
         sRandomPlayerbotMgr.SetPopulationTarget(P);
         LOG_INFO("playerbots", "PopDyn: initial population target P={} set at world-init (cap={}).", P, uint32(_cap));
     }
@@ -133,17 +151,20 @@ void PopulationDynamicsMgr::TakeCensus(Census& out) const
         Player* p = it.second;
         if (!p || !p->IsInWorld() || !p->GetSession()->IsBot())
             continue;
+        uint8 lvl = p->GetLevel();
+        if (lvl < 1 || lvl > 80)                           // defensive: ignore out-of-range levels
+            continue;
         uint32 faction = p->GetTeamId() == TEAM_ALLIANCE ? 0u : 1u;
-        out.count[faction][BracketOf(p->GetLevel())]++;
+        out.count[faction][lvl]++;
         out.total++;
     }
 }
 
-void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 9> perBracket[2]) const
+void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 81> perLevel[2]) const
 {
     for (uint32 f = 0; f < 2; ++f)
-        for (uint32 b = 0; b < 9; ++b)
-            perBracket[f][b].clear();
+        for (uint32 lvl = 0; lvl < 81; ++lvl)
+            perLevel[f][lvl].clear();
 
     for (auto const& it : ObjectAccessor::GetPlayers())
     {
@@ -152,92 +173,135 @@ void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 9> 
             continue;
         if (!IsSafeBot(p))
             continue;
+        uint8 lvl = p->GetLevel();
+        if (lvl < 1 || lvl > 80)
+            continue;
         uint32 f = p->GetTeamId() == TEAM_ALLIANCE ? 0u : 1u;
-        perBracket[f][BracketOf(p->GetLevel())].push_back(p);
+        perLevel[f][lvl].push_back(p);
     }
-    // Highest level first within each bracket — promote the bracket's top members.
-    for (uint32 f = 0; f < 2; ++f)
-        for (uint32 b = 0; b < 9; ++b)
-            std::sort(perBracket[f][b].begin(), perBracket[f][b].end(),
-                      [](Player* a, Player* c){ return a->GetLevel() > c->GetLevel(); });
+    // No sort: the conveyor picks a RANDOM safe bot at each source level (fairer than highest-first,
+    // lets the column equilibrate instead of escalating one cohort — spec §4).
 }
 
-uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 9> const& targets, Census const& census,
-                                      std::array<std::vector<Player*>, 9> perBracket[2])
+uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 81> const& targets, Census const& census,
+                                      std::array<std::vector<Player*>, 81> perLevel[2])
 {
     uint32 issuedPerFaction[2] = { 0, 0 };
 
+    uint8 cap = CurrentCap();
     for (uint32 f = 0; f < 2; ++f)
     {
-        // Per-faction deficit: shortfall summed across THIS faction's brackets only, so one
-        // faction can no longer consume the other's promotion budget.
-        uint32 deficit = 0;
-        for (uint32 b = 0; b < 9; ++b)
-        {
-            uint32 want = targets[b] / 2;                 // per-faction target (symmetric profile)
-            if (census.count[f][b] < want)
-                deficit += want - census.count[f][b];
-        }
-
-        uint32 budget = uint32(std::lround(sPlayerbotAIConfig.populationDriftRate * float(deficit)));
-        budget = std::min(budget, sPlayerbotAIConfig.populationMaxPromotionsPerCycle);  // PER-FACTION ceiling
+        // Per-faction budget: the MaxPromotionsPerCycle ceiling, consumed top-down so the highest
+        // deficits fill first. No DriftRate (retired) — the cap alone bounds the per-cycle movement.
+        uint32 budget = sPlayerbotAIConfig.populationMaxPromotionsPerCycle;
         if (budget == 0)
             continue;
 
-        // Source surplus high->low: a bracket donates only its over-target excess, and only when
-        // some higher bracket is still under target. High->low so an over-full bracket (e.g. lvl
-        // 10-19 piled 2x over target) advances UP before a lower bracket refills it -- this drains
-        // the level-10 jam. Never drain a bracket below its own target.
         uint32 issued = 0;
-        for (int b = 7; b >= 0 && issued < budget; --b)   // bracket 8 (lvl 80) cannot drift up
+        // Top-down conveyor: fill each authorized level L from a RANDOM safe bot at L-1.
+        // NEVER touch L=80 (that is the sink gate, §5). L=1 has no L-1 (base is spawner-fed).
+        for (int L = 79; L >= 2 && issued < budget; --L)
         {
-            uint32 want = targets[uint32(b)] / 2;
-            if (census.count[f][uint32(b)] <= want)
-                continue;                                 // no surplus here
-            uint32 surplus = census.count[f][uint32(b)] - want;
+            if (uint32(L) > cap)                           // level not authorized yet
+                continue;
 
-            bool higherWants = false;
-            for (uint32 hb = uint32(b) + 1; hb < 9; ++hb)
-            {
-                if (census.count[f][hb] < targets[hb] / 2) { higherWants = true; break; }
-            }
-            if (!higherWants)
-                continue;                                 // nothing above this bracket needs more
+            uint32 want = targets[uint32(L)] / 2;          // per-faction target for level L
+            if (census.count[f][uint32(L)] >= want)
+                continue;                                  // level L already at/over target
 
-            uint32 canPromote = std::min(surplus, budget - issued);
-            for (Player* bot : perBracket[f][uint32(b)])  // highest-level members first (pre-sorted)
+            uint32 need = std::min(want - census.count[f][uint32(L)], budget - issued);
+            std::vector<Player*>& src = perLevel[f][uint32(L) - 1];   // source: level L-1
+
+            while (need > 0 && !src.empty())
             {
-                if (canPromote == 0)
-                    break;
-                sRandomPlayerbotMgr.IncreaseLevel(bot);   // +1, re-gears (PlayerbotFactory.Randomize(true))
+                // Random source pick (AzerothCore idiom): swap a random element to the back, pop it.
+                uint32 idx = urand(0, uint32(src.size()) - 1);
+                std::swap(src[idx], src.back());
+                Player* bot = src.back();
+                src.pop_back();
+
+                sRandomPlayerbotMgr.IncreaseLevel(bot);    // +1 (L-1 -> L), re-gears
                 ++issued;
-                --canPromote;
+                --need;
+                if (issued >= budget)
+                    break;
             }
         }
         issuedPerFaction[f] = issued;
     }
 
     uint32 total = issuedPerFaction[0] + issuedPerFaction[1];
-    LOG_INFO("playerbots", "PopDyn drift: promoted={} (A={} H={}) (driftRate={} cycleCap={})",
+    LOG_INFO("playerbots", "PopDyn conveyor: promoted={} (A={} H={}) (cycleCap={})",
              total, issuedPerFaction[0], issuedPerFaction[1],
-             sPlayerbotAIConfig.populationDriftRate, sPlayerbotAIConfig.populationMaxPromotionsPerCycle);
+             sPlayerbotAIConfig.populationMaxPromotionsPerCycle);
     return total;
 }
 
-uint32 PopulationDynamicsMgr::PruneTop(std::array<uint32, 9> const& targets, Census const& census,
-                                       std::array<std::vector<Player*>, 9> perBracket[2])
+uint32 PopulationDynamicsMgr::SinkGate(std::array<uint32, 81> const& targets, Census const& census,
+                                       std::array<std::vector<Player*>, 81> perLevel[2])
 {
+    // The ONLY path into level 80, on its own slow timer. Decoupled from the conveyor so the
+    // endgame fills gradually (spec §5). Returns early per faction when not applicable.
+    uint32 issuedPerFaction[2] = { 0, 0 };
+
+    if (CurrentCap() < 80)                                  // endgame not open (needs frontier >= 70)
+    {
+        // Still emit the line for greppability/symmetry once we are near the cap; cheap.
+        LOG_INFO("playerbots", "PopDyn sink: promoted=0 (A=0 H=0) count80={} (closed: cap<80)",
+                 census.count[0][80] + census.count[1][80]);
+        return 0;
+    }
+
+    uint32 batch = sPlayerbotAIConfig.populationSinkBatch;
+    for (uint32 f = 0; f < 2; ++f)
+    {
+        uint32 want = targets[80] / 2;                      // per-faction level-80 target
+        if (census.count[f][80] >= want)
+            continue;                                       // sink full for this faction
+
+        uint32 room   = want - census.count[f][80];
+        uint32 toMove = std::min(batch, room);
+        std::vector<Player*>& src = perLevel[f][79];        // source: level 79
+
+        while (toMove > 0 && !src.empty())
+        {
+            uint32 idx = urand(0, uint32(src.size()) - 1);  // random level-79 bot
+            std::swap(src[idx], src.back());
+            Player* bot = src.back();
+            src.pop_back();
+
+            sRandomPlayerbotMgr.IncreaseLevel(bot);         // +1 (79 -> 80), re-gears
+            ++issuedPerFaction[f];
+            --toMove;
+        }
+    }
+
+    uint32 total = issuedPerFaction[0] + issuedPerFaction[1];
+    LOG_INFO("playerbots", "PopDyn sink: promoted={} (A={} H={}) count80={}",
+             total, issuedPerFaction[0], issuedPerFaction[1],
+             census.count[0][80] + census.count[1][80]);
+    return total;
+}
+
+uint32 PopulationDynamicsMgr::PruneTop(std::array<uint32, 81> const& targets, Census const& census,
+                                       std::array<std::vector<Player*>, 81> perLevel[2])
+{
+    // Dormant insurance (spec §6): the conveyor never pushes past target and the sink stops at
+    // target[80], so count[80] <= target[80] in normal operation. This fires only if target[80] later
+    // DROPS below the current level-80 population (MaxPopulation lowered / band counts raised) — then it
+    // sheds the excess endgame bots, per-faction budget, never below target. Level 80 is the ONLY level
+    // that can exceed its target (all leveling movement is conveyor-driven + RandomBotFixedLevel).
     uint32 removed = 0;
     for (uint32 f = 0; f < 2; ++f)
     {
         uint32 budget = sPlayerbotAIConfig.populationMaxPromotionsPerCycle;  // PER-FACTION ceiling
-        uint32 want   = targets[8] / 2;                  // per-faction target for the level-80 bracket
-        if (census.count[f][8] <= want)
+        uint32 want   = targets[80] / 2;                 // per-faction target for level 80
+        if (census.count[f][80] <= want)
             continue;
-        uint32 surplus = census.count[f][8] - want;
+        uint32 surplus = census.count[f][80] - want;
 
         uint32 removedThisFaction = 0;
-        for (Player* bot : perBracket[f][8])             // safe level-80 bots only
+        for (Player* bot : perLevel[f][80])              // safe level-80 bots only
         {
             if (removedThisFaction >= budget || surplus == 0)
                 break;
@@ -257,38 +321,61 @@ void PopulationDynamicsMgr::Update(uint32 diff)
 
     std::lock_guard<std::mutex> lock(_mutex);
     _tickTimerMs += diff;
-    if (_tickTimerMs < sPlayerbotAIConfig.populationPeriod * 1000u)
-        return;
-    _tickTimerMs = 0;
+    _sinkTimerMs += diff;
+
+    bool conveyorTick = _tickTimerMs >= sPlayerbotAIConfig.populationPeriod * 1000u;
+    bool sinkTick     = _sinkTimerMs >= sPlayerbotAIConfig.populationSinkPeriod * 1000u;
+    if (!conveyorTick && !sinkTick)
+        return;                                            // neither cadence elapsed — nothing to do
 
     uint8 cap = ComputeCap(_frontier);
-    _cap = cap;                               // keep the cached cap fresh for the DK-login gate
-    std::array<uint32, 9> targets{};
-    uint32 P = 0;
-    ComputeTargets(cap, targets, P);
-
-    LOG_INFO("playerbots", "PopDyn tick: F={} C={} P={} targets=[{},{},{},{},{},{},{},{},{}]",
-             uint32(_frontier), uint32(cap), P,
-             targets[0], targets[1], targets[2], targets[3], targets[4],
-             targets[5], targets[6], targets[7], targets[8]);
+    _cap = cap;                                            // keep the cached cap fresh for the DK-login gate
 
     Census census;
     TakeCensus(census);
-    LOG_INFO("playerbots", "PopDyn census: total={} A=[{},{},{},{},{},{},{},{},{}] H=[{},{},{},{},{},{},{},{},{}]",
+
+    std::array<uint32, 81> targets{};
+    uint32 P = 0;
+    ComputeTargets(cap, census, targets, P);               // P uses census.count[80] (spec §3)
+
+    // Band-summed census (can't log 81 per-level numbers). One sum per band 0..7 + count[80], per faction,
+    // plus min/max occupied level. Greppable for live verification.
+    uint32 bandA[8] = {}, bandH[8] = {};
+    uint8  minLvl = 0, maxLvl = 0;
+    for (uint8 lvl = 1; lvl <= 79; ++lvl)
+    {
+        uint32 a = census.count[0][lvl], h = census.count[1][lvl];
+        bandA[BandOf(lvl)] += a;
+        bandH[BandOf(lvl)] += h;
+        if (a + h > 0) { if (minLvl == 0) minLvl = lvl; maxLvl = lvl; }
+    }
+    if (census.count[0][80] + census.count[1][80] > 0) { if (minLvl == 0) minLvl = 80; maxLvl = 80; }
+
+    LOG_INFO("playerbots", "PopDyn tick: F={} C={} P={} count80={} occupied=[{}..{}]",
+             uint32(_frontier), uint32(cap), P,
+             census.count[0][80] + census.count[1][80], uint32(minLvl), uint32(maxLvl));
+    LOG_INFO("playerbots", "PopDyn census: total={} bandA=[{},{},{},{},{},{},{},{}] bandH=[{},{},{},{},{},{},{},{}] c80=(A{} H{})",
              census.total,
-             census.count[0][0],census.count[0][1],census.count[0][2],census.count[0][3],census.count[0][4],
-             census.count[0][5],census.count[0][6],census.count[0][7],census.count[0][8],
-             census.count[1][0],census.count[1][1],census.count[1][2],census.count[1][3],census.count[1][4],
-             census.count[1][5],census.count[1][6],census.count[1][7],census.count[1][8]);
+             bandA[0],bandA[1],bandA[2],bandA[3],bandA[4],bandA[5],bandA[6],bandA[7],
+             bandH[0],bandH[1],bandH[2],bandH[3],bandH[4],bandH[5],bandH[6],bandH[7],
+             census.count[0][80], census.count[1][80]);
 
     sRandomPlayerbotMgr.SetPopulationTarget(P);
 
-    std::array<std::vector<Player*>, 9> perBracket[2];
-    CollectSafeBots(perBracket);
-    DriftUp(targets, census, perBracket);   // logs its own per-faction "PopDyn drift" line
+    std::array<std::vector<Player*>, 81> perLevel[2];
+    CollectSafeBots(perLevel);
 
-    uint32 pruned = PruneTop(targets, census, perBracket);
-    LOG_INFO("playerbots", "PopDyn prune: removed={} (target80={})", pruned, targets[8]);
+    if (conveyorTick)
+    {
+        _tickTimerMs = 0;
+        DriftUp(targets, census, perLevel);                // logs its own "PopDyn conveyor" line
+    }
+    if (sinkTick)
+    {
+        _sinkTimerMs = 0;
+        SinkGate(targets, census, perLevel);               // logs its own "PopDyn sink" line
+    }
 
-    // All reconcile flows (count target, drift, prune) now implemented.
+    uint32 pruned = PruneTop(targets, census, perLevel);   // dormant in normal operation (spec §6)
+    LOG_INFO("playerbots", "PopDyn prune: removed={} (target80={})", pruned, targets[80]);
 }

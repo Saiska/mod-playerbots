@@ -792,9 +792,11 @@ AiPlayerbot.RandomBotMinLevelChance = 0.1
 # Default 0.1 (10%)
 AiPlayerbot.RandomBotMaxLevelChance = 0.1
 
-# Fix the level of randombots (they won't level up)
+# Fix the level of randombots (they won't level up via XP).
 # Default: 0 (disabled)
-AiPlayerbot.RandomBotFixedLevel = 0
+# REQUIRED by PopulationDynamics per-level shaping: set to 1 so all level movement is
+# conveyor-driven (sets PLAYER_FLAGS_NO_XP_GAIN; does NOT pin levels, does NOT block IncreaseLevel).
+AiPlayerbot.RandomBotFixedLevel = 1
 
 # Set RandomBotMaxLevel bots to RandomBotMinLevel
 # Default: 0 (disabled)
@@ -2528,3 +2530,60 @@ AiPlayerbot.SummonAtInnkeepersEnabled = 1
 # Buffs will be applied on PP, Sindragosa and Lich King
 
 AiPlayerbot.EnableICCBuffs = 1
+
+###############################################################################
+# POPULATION DYNAMICS (server-population-dynamics + per-level shaping)
+#
+# A monotonic real-player max-level "frontier" drives a level cap; bots fill a
+# per-LEVEL target column (flat within each 10-level band, sloped across bands).
+# A deficit-fill conveyor lifts each level from the level below every Period; a
+# separate slow sink gate is the only path into level 80.
+# REQUIRES AiPlayerbot.RandomBotFixedLevel = 1 (above) and SyncLevelWithPlayers = 0.
+###############################################################################
+
+# Master switch for the population dynamics controller.
+# Default: 1 (enabled)
+PopulationDynamics.Enable = 1
+
+# Total bot population at full endgame (cap = 80). Level 80's target is the
+# remainder: MaxPopulation - sum(band bots-per-level x band span). If the bands
+# alone exceed this, a warning is logged and target[80] clamps to 0.
+# Default: 2000
+PopulationDynamics.MaxPopulation = 2000
+
+# Cap headroom above the frontier: cap = min(80, max(MinCap, frontier + Headroom)).
+# Default: 10
+PopulationDynamics.Headroom = 10
+
+# Minimum level cap regardless of frontier.
+# Default: 20
+PopulationDynamics.MinCap = 20
+
+# Seconds between conveyor ticks.
+# Default: 60
+PopulationDynamics.Period = 60
+
+# Max bot promotions per conveyor tick, PER FACTION.
+# Default: 10
+PopulationDynamics.MaxPromotionsPerCycle = 10
+
+# Seconds between level-80 sink-gate ticks (independent of Period).
+# Default: 1800
+PopulationDynamics.SinkPeriod = 1800
+
+# Bots promoted 79->80 per faction per sink tick (slow endgame fill).
+# Default: 1
+PopulationDynamics.SinkBatch = 1
+
+# Bots-per-level for each 10-level band (absolute counts; 0-indexed).
+# Bracket0 = each level 1..9, Bracket1 = 10..19, ..., Bracket7 = 70..79.
+# Flat within a band, increasing across bands = more accumulation at higher levels.
+# Defaults: a gently rising curve.
+PopulationDynamics.Bracket0 = 20
+PopulationDynamics.Bracket1 = 23
+PopulationDynamics.Bracket2 = 26
+PopulationDynamics.Bracket3 = 29
+PopulationDynamics.Bracket4 = 32
+PopulationDynamics.Bracket5 = 35
+PopulationDynamics.Bracket6 = 38
+PopulationDynamics.Bracket7 = 41
