@@ -160,11 +160,11 @@ void PopulationDynamicsMgr::TakeCensus(Census& out) const
     }
 }
 
-void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 9> perBracket[2]) const
+void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 81> perLevel[2]) const
 {
     for (uint32 f = 0; f < 2; ++f)
-        for (uint32 b = 0; b < 9; ++b)
-            perBracket[f][b].clear();
+        for (uint32 lvl = 0; lvl < 81; ++lvl)
+            perLevel[f][lvl].clear();
 
     for (auto const& it : ObjectAccessor::GetPlayers())
     {
@@ -173,14 +173,14 @@ void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 9> 
             continue;
         if (!IsSafeBot(p))
             continue;
+        uint8 lvl = p->GetLevel();
+        if (lvl < 1 || lvl > 80)
+            continue;
         uint32 f = p->GetTeamId() == TEAM_ALLIANCE ? 0u : 1u;
-        perBracket[f][BracketOf(p->GetLevel())].push_back(p);
+        perLevel[f][lvl].push_back(p);
     }
-    // Highest level first within each bracket — promote the bracket's top members.
-    for (uint32 f = 0; f < 2; ++f)
-        for (uint32 b = 0; b < 9; ++b)
-            std::sort(perBracket[f][b].begin(), perBracket[f][b].end(),
-                      [](Player* a, Player* c){ return a->GetLevel() > c->GetLevel(); });
+    // No sort: the conveyor picks a RANDOM safe bot at each source level (fairer than highest-first,
+    // lets the column equilibrate instead of escalating one cohort — spec §4).
 }
 
 uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 9> const& targets, Census const& census,
