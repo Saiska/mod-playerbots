@@ -2034,8 +2034,8 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
     if (sPlayerbotAIConfig.populationDynamicsEnable)
     {
         // Controller-managed spawn: enter at the bottom decade so the conveyor carries the bot up.
-        uint32 lo = PopulationDynamicsMgr::BracketLower(0);   // 1
-        uint32 hi = PopulationDynamicsMgr::BracketUpper(0);   // 9
+        uint32 lo = 1;   // base of the conveyor: spawn across levels 1..9 (band 0)
+        uint32 hi = 9;   // the per-level conveyor lifts bots up from here (spec: 1-9 spawner feeds the base)
         if (bot->getClass() == CLASS_DEATH_KNIGHT)            // DKs cannot exist below 55
         {
             lo = hi = sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL);  // 55
