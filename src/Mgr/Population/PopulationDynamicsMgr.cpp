@@ -15,10 +15,10 @@
 #include "PlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
 
-uint32 PopulationDynamicsMgr::BracketOf(uint8 level)
+uint32 PopulationDynamicsMgr::BandOf(uint8 level)
 {
-    if (level >= 80) return 8;
-    if (level < 10)  return 0;
+    // Maps a LEVELING level (1..79) to its 10-level band 0..7. Level 80 is the sink, handled separately.
+    if (level < 10) return 0;             // 1-9 -> band 0
     return uint32(level / 10);            // 10-19 -> 1, ..., 70-79 -> 7
 }
 
@@ -29,24 +29,40 @@ uint8 PopulationDynamicsMgr::ComputeCap(uint8 frontier) const
     return uint8(std::min<uint32>(80, c));
 }
 
-float PopulationDynamicsMgr::Openness(uint32 b, uint8 cap) const
-{
-    uint8 lo = BracketLower(b), hi = BracketUpper(b);
-    if (cap >= hi) return 1.0f;
-    if (cap <  lo) return 0.0f;
-    return float(int(cap) - int(lo) + 1) / float(int(hi) - int(lo) + 1);
-}
 
-void PopulationDynamicsMgr::ComputeTargets(uint8 cap, std::array<uint32, 9>& targets, uint32& outP) const
+void PopulationDynamicsMgr::ComputeTargets(uint8 cap, Census const& census,
+                                           std::array<uint32, 81>& targets, uint32& outP) const
 {
+    targets = {};                                          // index 0 unused; all levels default 0
     outP = 0;
-    for (uint32 b = 0; b < 9; ++b)
+
+    // Leveling levels 1..79: each gets its band's bots-per-level knob, but only if authorized (<= cap).
+    for (uint8 lvl = 1; lvl <= 79; ++lvl)
     {
-        float share = float(sPlayerbotAIConfig.populationBracketPct[b]) / 100.0f;
-        uint32 t = uint32(std::lround(float(sPlayerbotAIConfig.populationMaxPopulation) * share * Openness(b, cap)));
-        targets[b] = t;
-        outP += t;
+        if (lvl > cap)                                     // level not yet authorized by the frontier
+            continue;
+        targets[lvl] = sPlayerbotAIConfig.populationBracket[BandOf(lvl)];
+        outP += targets[lvl];                              // spawn target counts leveling targets only...
     }
+
+    // Level 80 = the sink / remainder: MaxPopulation minus every band's full contribution.
+    // span(band 0) = 9 levels (1..9); span(bands 1..7) = 10 levels each.
+    uint32 bandsSum = sPlayerbotAIConfig.populationBracket[0] * 9u;
+    for (uint32 b = 1; b < 8; ++b)
+        bandsSum += sPlayerbotAIConfig.populationBracket[b] * 10u;
+
+    uint32 maxPop = sPlayerbotAIConfig.populationMaxPopulation;
+    if (bandsSum > maxPop)
+    {
+        LOG_WARN("playerbots", "PopDyn: band sum {} exceeds MaxPopulation {}; clamping target[80]=0.", bandsSum, maxPop);
+        targets[80] = 0;
+    }
+    else
+        targets[80] = maxPop - bandsSum;
+
+    // ...plus the ACTUAL current level-80 population (count[80]), so P tracks the slowly-filling sink
+    // (spec §3): the spawner injects fresh base bots only as the sink moves bots 79->80, never all at once.
+    outP += census.count[0][80] + census.count[1][80];
 }
 
 void PopulationDynamicsMgr::LoadFromDB()
@@ -68,9 +84,11 @@ void PopulationDynamicsMgr::LoadFromDB()
 
     if (sPlayerbotAIConfig.populationDynamicsEnable)
     {
-        std::array<uint32, 9> targets{};
+        Census census;
+        TakeCensus(census);
+        std::array<uint32, 81> targets{};
         uint32 P = 0;
-        ComputeTargets(_cap, targets, P);
+        ComputeTargets(_cap, census, targets, P);
         sRandomPlayerbotMgr.SetPopulationTarget(P);
         LOG_INFO("playerbots", "PopDyn: initial population target P={} set at world-init (cap={}).", P, uint32(_cap));
     }
@@ -133,8 +151,11 @@ void PopulationDynamicsMgr::TakeCensus(Census& out) const
         Player* p = it.second;
         if (!p || !p->IsInWorld() || !p->GetSession()->IsBot())
             continue;
+        uint8 lvl = p->GetLevel();
+        if (lvl < 1 || lvl > 80)                           // defensive: ignore out-of-range levels
+            continue;
         uint32 faction = p->GetTeamId() == TEAM_ALLIANCE ? 0u : 1u;
-        out.count[faction][BracketOf(p->GetLevel())]++;
+        out.count[faction][lvl]++;
         out.total++;
     }
 }
