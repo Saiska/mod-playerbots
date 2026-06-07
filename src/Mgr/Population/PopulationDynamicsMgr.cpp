@@ -237,20 +237,71 @@ uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 81> const& targets, Cen
     return total;
 }
 
-uint32 PopulationDynamicsMgr::PruneTop(std::array<uint32, 9> const& targets, Census const& census,
-                                       std::array<std::vector<Player*>, 9> perBracket[2])
+uint32 PopulationDynamicsMgr::SinkGate(std::array<uint32, 81> const& targets, Census const& census,
+                                       std::array<std::vector<Player*>, 81> perLevel[2])
 {
+    // The ONLY path into level 80, on its own slow timer. Decoupled from the conveyor so the
+    // endgame fills gradually (spec §5). Returns early per faction when not applicable.
+    uint32 issuedPerFaction[2] = { 0, 0 };
+
+    if (CurrentCap() < 80)                                  // endgame not open (needs frontier >= 70)
+    {
+        // Still emit the line for greppability/symmetry once we are near the cap; cheap.
+        LOG_INFO("playerbots", "PopDyn sink: promoted=0 (A=0 H=0) count80={} (closed: cap<80)",
+                 census.count[0][80] + census.count[1][80]);
+        return 0;
+    }
+
+    uint32 batch = sPlayerbotAIConfig.populationSinkBatch;
+    for (uint32 f = 0; f < 2; ++f)
+    {
+        uint32 want = targets[80] / 2;                      // per-faction level-80 target
+        if (census.count[f][80] >= want)
+            continue;                                       // sink full for this faction
+
+        uint32 room   = want - census.count[f][80];
+        uint32 toMove = std::min(batch, room);
+        std::vector<Player*>& src = perLevel[f][79];        // source: level 79
+
+        while (toMove > 0 && !src.empty())
+        {
+            uint32 idx = urand(0, uint32(src.size()) - 1);  // random level-79 bot
+            std::swap(src[idx], src.back());
+            Player* bot = src.back();
+            src.pop_back();
+
+            sRandomPlayerbotMgr.IncreaseLevel(bot);         // +1 (79 -> 80), re-gears
+            ++issuedPerFaction[f];
+            --toMove;
+        }
+    }
+
+    uint32 total = issuedPerFaction[0] + issuedPerFaction[1];
+    LOG_INFO("playerbots", "PopDyn sink: promoted={} (A={} H={}) count80={}",
+             total, issuedPerFaction[0], issuedPerFaction[1],
+             census.count[0][80] + census.count[1][80]);
+    return total;
+}
+
+uint32 PopulationDynamicsMgr::PruneTop(std::array<uint32, 81> const& targets, Census const& census,
+                                       std::array<std::vector<Player*>, 81> perLevel[2])
+{
+    // Dormant insurance (spec §6): the conveyor never pushes past target and the sink stops at
+    // target[80], so count[80] <= target[80] in normal operation. This fires only if target[80] later
+    // DROPS below the current level-80 population (MaxPopulation lowered / band counts raised) — then it
+    // sheds the excess endgame bots, per-faction budget, never below target. Level 80 is the ONLY level
+    // that can exceed its target (all leveling movement is conveyor-driven + RandomBotFixedLevel).
     uint32 removed = 0;
     for (uint32 f = 0; f < 2; ++f)
     {
         uint32 budget = sPlayerbotAIConfig.populationMaxPromotionsPerCycle;  // PER-FACTION ceiling
-        uint32 want   = targets[8] / 2;                  // per-faction target for the level-80 bracket
-        if (census.count[f][8] <= want)
+        uint32 want   = targets[80] / 2;                 // per-faction target for level 80
+        if (census.count[f][80] <= want)
             continue;
-        uint32 surplus = census.count[f][8] - want;
+        uint32 surplus = census.count[f][80] - want;
 
         uint32 removedThisFaction = 0;
-        for (Player* bot : perBracket[f][8])             // safe level-80 bots only
+        for (Player* bot : perLevel[f][80])              // safe level-80 bots only
         {
             if (removedThisFaction >= budget || surplus == 0)
                 break;
@@ -270,38 +321,61 @@ void PopulationDynamicsMgr::Update(uint32 diff)
 
     std::lock_guard<std::mutex> lock(_mutex);
     _tickTimerMs += diff;
-    if (_tickTimerMs < sPlayerbotAIConfig.populationPeriod * 1000u)
-        return;
-    _tickTimerMs = 0;
+    _sinkTimerMs += diff;
+
+    bool conveyorTick = _tickTimerMs >= sPlayerbotAIConfig.populationPeriod * 1000u;
+    bool sinkTick     = _sinkTimerMs >= sPlayerbotAIConfig.populationSinkPeriod * 1000u;
+    if (!conveyorTick && !sinkTick)
+        return;                                            // neither cadence elapsed — nothing to do
 
     uint8 cap = ComputeCap(_frontier);
-    _cap = cap;                               // keep the cached cap fresh for the DK-login gate
-    std::array<uint32, 9> targets{};
-    uint32 P = 0;
-    ComputeTargets(cap, targets, P);
-
-    LOG_INFO("playerbots", "PopDyn tick: F={} C={} P={} targets=[{},{},{},{},{},{},{},{},{}]",
-             uint32(_frontier), uint32(cap), P,
-             targets[0], targets[1], targets[2], targets[3], targets[4],
-             targets[5], targets[6], targets[7], targets[8]);
+    _cap = cap;                                            // keep the cached cap fresh for the DK-login gate
 
     Census census;
     TakeCensus(census);
-    LOG_INFO("playerbots", "PopDyn census: total={} A=[{},{},{},{},{},{},{},{},{}] H=[{},{},{},{},{},{},{},{},{}]",
+
+    std::array<uint32, 81> targets{};
+    uint32 P = 0;
+    ComputeTargets(cap, census, targets, P);               // P uses census.count[80] (spec §3)
+
+    // Band-summed census (can't log 81 per-level numbers). One sum per band 0..7 + count[80], per faction,
+    // plus min/max occupied level. Greppable for live verification.
+    uint32 bandA[8] = {}, bandH[8] = {};
+    uint8  minLvl = 0, maxLvl = 0;
+    for (uint8 lvl = 1; lvl <= 79; ++lvl)
+    {
+        uint32 a = census.count[0][lvl], h = census.count[1][lvl];
+        bandA[BandOf(lvl)] += a;
+        bandH[BandOf(lvl)] += h;
+        if (a + h > 0) { if (minLvl == 0) minLvl = lvl; maxLvl = lvl; }
+    }
+    if (census.count[0][80] + census.count[1][80] > 0) { if (minLvl == 0) minLvl = 80; maxLvl = 80; }
+
+    LOG_INFO("playerbots", "PopDyn tick: F={} C={} P={} count80={} occupied=[{}..{}]",
+             uint32(_frontier), uint32(cap), P,
+             census.count[0][80] + census.count[1][80], uint32(minLvl), uint32(maxLvl));
+    LOG_INFO("playerbots", "PopDyn census: total={} bandA=[{},{},{},{},{},{},{},{}] bandH=[{},{},{},{},{},{},{},{}] c80=(A{} H{})",
              census.total,
-             census.count[0][0],census.count[0][1],census.count[0][2],census.count[0][3],census.count[0][4],
-             census.count[0][5],census.count[0][6],census.count[0][7],census.count[0][8],
-             census.count[1][0],census.count[1][1],census.count[1][2],census.count[1][3],census.count[1][4],
-             census.count[1][5],census.count[1][6],census.count[1][7],census.count[1][8]);
+             bandA[0],bandA[1],bandA[2],bandA[3],bandA[4],bandA[5],bandA[6],bandA[7],
+             bandH[0],bandH[1],bandH[2],bandH[3],bandH[4],bandH[5],bandH[6],bandH[7],
+             census.count[0][80], census.count[1][80]);
 
     sRandomPlayerbotMgr.SetPopulationTarget(P);
 
-    std::array<std::vector<Player*>, 9> perBracket[2];
-    CollectSafeBots(perBracket);
-    DriftUp(targets, census, perBracket);   // logs its own per-faction "PopDyn drift" line
+    std::array<std::vector<Player*>, 81> perLevel[2];
+    CollectSafeBots(perLevel);
 
-    uint32 pruned = PruneTop(targets, census, perBracket);
-    LOG_INFO("playerbots", "PopDyn prune: removed={} (target80={})", pruned, targets[8]);
+    if (conveyorTick)
+    {
+        _tickTimerMs = 0;
+        DriftUp(targets, census, perLevel);                // logs its own "PopDyn conveyor" line
+    }
+    if (sinkTick)
+    {
+        _sinkTimerMs = 0;
+        SinkGate(targets, census, perLevel);               // logs its own "PopDyn sink" line
+    }
 
-    // All reconcile flows (count target, drift, prune) now implemented.
+    uint32 pruned = PruneTop(targets, census, perLevel);   // dormant in normal operation (spec §6)
+    LOG_INFO("playerbots", "PopDyn prune: removed={} (target80={})", pruned, targets[80]);
 }
