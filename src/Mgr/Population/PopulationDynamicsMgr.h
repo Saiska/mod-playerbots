@@ -33,6 +33,10 @@ public:
     void Update(uint32 diff);                // ticked from PlayerbotsWorldScript::OnUpdate
     void ConsiderPlayerLevel(Player* player);// monotonic frontier feed from a REAL player (caller bot-filters)
 
+    // faction index: 0 = Alliance, 1 = Horde. Per-LEVEL census: count[f][level], level 1..80 (index 0 unused).
+    // Declared here (before ComputeTargets) so the public signature below can name it.
+    struct Census { std::array<uint32, 81> count[2] = {}; uint32 total = 0; };
+
     // --- pure math helpers (no DB, no locks); public for clarity/log-verification ---
     static uint32 BandOf(uint8 level);                     // level 1..79 -> band index 0..7 (80 = sink, handled separately)
     uint8  ComputeCap(uint8 frontier) const;               // C = min(80, max(MinCap, F+Headroom)) — UNCHANGED
@@ -44,8 +48,6 @@ public:
 private:
     PopulationDynamicsMgr() = default;
 
-    // faction index: 0 = Alliance, 1 = Horde. Per-LEVEL census: count[f][level], level 1..80 (index 0 unused).
-    struct Census { std::array<uint32, 81> count[2] = {}; uint32 total = 0; };
     bool   IsSafeBot(Player* bot) const;       // alive, in world, idle, not raid-sim, no real-player adjacency
     void   TakeCensus(Census& out) const;      // iterate live bots, bin by (faction, level)
 
