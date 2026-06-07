@@ -228,21 +228,24 @@ uint32 PopulationDynamicsMgr::PruneTop(std::array<uint32, 9> const& targets, Cen
                                        std::array<std::vector<Player*>, 9> perBracket[2])
 {
     uint32 removed = 0;
-    uint32 budget = sPlayerbotAIConfig.populationMaxPromotionsPerCycle;   // reuse the same per-cycle safety ceiling
-    for (uint32 f = 0; f < 2 && removed < budget; ++f)
+    for (uint32 f = 0; f < 2; ++f)
     {
-        uint32 want = targets[8] / 2;                  // per-faction target for the 80 bracket
+        uint32 budget = sPlayerbotAIConfig.populationMaxPromotionsPerCycle;  // PER-FACTION ceiling
+        uint32 want   = targets[8] / 2;                  // per-faction target for the level-80 bracket
         if (census.count[f][8] <= want)
             continue;
         uint32 surplus = census.count[f][8] - want;
-        for (Player* bot : perBracket[f][8])           // safe level-80 bots only
+
+        uint32 removedThisFaction = 0;
+        for (Player* bot : perBracket[f][8])             // safe level-80 bots only
         {
-            if (removed >= budget || surplus == 0)
+            if (removedThisFaction >= budget || surplus == 0)
                 break;
-            sRandomPlayerbotMgr.Remove(bot);           // immediate delete + logout (recycles the slot)
+            sRandomPlayerbotMgr.Remove(bot);             // immediate delete + logout (recycles the slot)
             --surplus;
-            ++removed;
+            ++removedThisFaction;
         }
+        removed += removedThisFaction;
     }
     return removed;
 }
