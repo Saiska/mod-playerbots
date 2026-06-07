@@ -7,6 +7,7 @@
 #define _PLAYERBOT_PLAYERbotAICONFIG_H
 
 #include <mutex>
+#include <array>
 #include <unordered_map>
 #include <set>
 #include <vector>
