@@ -183,65 +183,57 @@ void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 81>
     // lets the column equilibrate instead of escalating one cohort — spec §4).
 }
 
-uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 9> const& targets, Census const& census,
-                                      std::array<std::vector<Player*>, 9> perBracket[2])
+uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 81> const& targets, Census const& census,
+                                      std::array<std::vector<Player*>, 81> perLevel[2])
 {
     uint32 issuedPerFaction[2] = { 0, 0 };
 
+    uint8 cap = CurrentCap();
     for (uint32 f = 0; f < 2; ++f)
     {
-        // Per-faction deficit: shortfall summed across THIS faction's brackets only, so one
-        // faction can no longer consume the other's promotion budget.
-        uint32 deficit = 0;
-        for (uint32 b = 0; b < 9; ++b)
-        {
-            uint32 want = targets[b] / 2;                 // per-faction target (symmetric profile)
-            if (census.count[f][b] < want)
-                deficit += want - census.count[f][b];
-        }
-
-        uint32 budget = uint32(std::lround(sPlayerbotAIConfig.populationDriftRate * float(deficit)));
-        budget = std::min(budget, sPlayerbotAIConfig.populationMaxPromotionsPerCycle);  // PER-FACTION ceiling
+        // Per-faction budget: the MaxPromotionsPerCycle ceiling, consumed top-down so the highest
+        // deficits fill first. No DriftRate (retired) — the cap alone bounds the per-cycle movement.
+        uint32 budget = sPlayerbotAIConfig.populationMaxPromotionsPerCycle;
         if (budget == 0)
             continue;
 
-        // Source surplus high->low: a bracket donates only its over-target excess, and only when
-        // some higher bracket is still under target. High->low so an over-full bracket (e.g. lvl
-        // 10-19 piled 2x over target) advances UP before a lower bracket refills it -- this drains
-        // the level-10 jam. Never drain a bracket below its own target.
         uint32 issued = 0;
-        for (int b = 7; b >= 0 && issued < budget; --b)   // bracket 8 (lvl 80) cannot drift up
+        // Top-down conveyor: fill each authorized level L from a RANDOM safe bot at L-1.
+        // NEVER touch L=80 (that is the sink gate, §5). L=1 has no L-1 (base is spawner-fed).
+        for (int L = 79; L >= 2 && issued < budget; --L)
         {
-            uint32 want = targets[uint32(b)] / 2;
-            if (census.count[f][uint32(b)] <= want)
-                continue;                                 // no surplus here
-            uint32 surplus = census.count[f][uint32(b)] - want;
+            if (uint32(L) > cap)                           // level not authorized yet
+                continue;
 
-            bool higherWants = false;
-            for (uint32 hb = uint32(b) + 1; hb < 9; ++hb)
-            {
-                if (census.count[f][hb] < targets[hb] / 2) { higherWants = true; break; }
-            }
-            if (!higherWants)
-                continue;                                 // nothing above this bracket needs more
+            uint32 want = targets[uint32(L)] / 2;          // per-faction target for level L
+            if (census.count[f][uint32(L)] >= want)
+                continue;                                  // level L already at/over target
 
-            uint32 canPromote = std::min(surplus, budget - issued);
-            for (Player* bot : perBracket[f][uint32(b)])  // highest-level members first (pre-sorted)
+            uint32 need = std::min(want - census.count[f][uint32(L)], budget - issued);
+            std::vector<Player*>& src = perLevel[f][uint32(L) - 1];   // source: level L-1
+
+            while (need > 0 && !src.empty())
             {
-                if (canPromote == 0)
-                    break;
-                sRandomPlayerbotMgr.IncreaseLevel(bot);   // +1, re-gears (PlayerbotFactory.Randomize(true))
+                // Random source pick (AzerothCore idiom): swap a random element to the back, pop it.
+                uint32 idx = urand(0, uint32(src.size()) - 1);
+                std::swap(src[idx], src.back());
+                Player* bot = src.back();
+                src.pop_back();
+
+                sRandomPlayerbotMgr.IncreaseLevel(bot);    // +1 (L-1 -> L), re-gears
                 ++issued;
-                --canPromote;
+                --need;
+                if (issued >= budget)
+                    break;
             }
         }
         issuedPerFaction[f] = issued;
     }
 
     uint32 total = issuedPerFaction[0] + issuedPerFaction[1];
-    LOG_INFO("playerbots", "PopDyn drift: promoted={} (A={} H={}) (driftRate={} cycleCap={})",
+    LOG_INFO("playerbots", "PopDyn conveyor: promoted={} (A={} H={}) (cycleCap={})",
              total, issuedPerFaction[0], issuedPerFaction[1],
-             sPlayerbotAIConfig.populationDriftRate, sPlayerbotAIConfig.populationMaxPromotionsPerCycle);
+             sPlayerbotAIConfig.populationMaxPromotionsPerCycle);
     return total;
 }
 
