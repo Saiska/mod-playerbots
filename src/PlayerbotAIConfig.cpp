@@ -457,46 +457,24 @@ bool PlayerbotAIConfig::Initialize()
     populationMaxPopulation        = sConfigMgr->GetOption<uint32>("PopulationDynamics.MaxPopulation", 2000);
     populationHeadroom             = sConfigMgr->GetOption<uint32>("PopulationDynamics.Headroom", 10);
     populationMinCap               = sConfigMgr->GetOption<uint32>("PopulationDynamics.MinCap", 20);
-    populationPeriod               = sConfigMgr->GetOption<uint32>("PopulationDynamics.Period", 300);
-    populationDriftRate            = sConfigMgr->GetOption<float>("PopulationDynamics.DriftRate", 0.02f);
+    populationPeriod               = sConfigMgr->GetOption<uint32>("PopulationDynamics.Period", 60);
     populationMaxPromotionsPerCycle = sConfigMgr->GetOption<uint32>("PopulationDynamics.MaxPromotionsPerCycle", 10);
+    populationSinkPeriod           = sConfigMgr->GetOption<uint32>("PopulationDynamics.SinkPeriod", 1800);
+    populationSinkBatch            = sConfigMgr->GetOption<uint32>("PopulationDynamics.SinkBatch", 1);
 
-    // Fat-endgame default profile; 8 leveling decades ~50% combined, level-80 ~50%.
-    static const uint32 kDefaultBracketPct[9] = { 6, 6, 6, 6, 6, 6, 6, 8, 50 };
-    populationBracketPct.assign(9, 0);
-    uint32 pctSum = 0;
-    for (uint32 b = 0; b < 9; ++b)
+    // Bots-per-level per 10-level band (absolute counts; flat within a band, sloped across bands).
+    // Default: a gently increasing curve so higher bands hold more bots (more "accumulation" up top).
+    static const uint32 kDefaultBracket[8] = { 20, 23, 26, 29, 32, 35, 38, 41 };
+    for (uint32 b = 0; b < 8; ++b)
     {
-        std::string key = "PopulationDynamics.Bracket" + std::to_string(b + 1) + ".Pct";
-        populationBracketPct[b] = sConfigMgr->GetOption<uint32>(key, kDefaultBracketPct[b]);
-        pctSum += populationBracketPct[b];
+        std::string key = "PopulationDynamics.Bracket" + std::to_string(b);
+        populationBracket[b] = sConfigMgr->GetOption<uint32>(key, kDefaultBracket[b]);
     }
-    // Normalize to exactly 100 by round-robin +1 over non-zero brackets (carried over from the removed
-    // mod-player-bot-level-brackets ClampAndBalanceBrackets logic).
-    if (pctSum != 100 && pctSum > 0)
-    {
-        int missing = int(100) - int(pctSum);
-        int step = missing > 0 ? 1 : -1;
-        while (missing != 0)
-        {
-            for (uint32 b = 0; b < 9 && missing != 0; ++b)
-            {
-                if (populationBracketPct[b] == 0 && step > 0) continue;       // don't activate a zeroed bracket
-                if (populationBracketPct[b] == 0 && step < 0) continue;
-                if (step < 0 && populationBracketPct[b] == 0) continue;
-                populationBracketPct[b] = uint32(int(populationBracketPct[b]) + step);
-                missing -= step;
-            }
-        }
-    }
-    LOG_INFO("playerbots", "PopDyn: config loaded — enable={} Pmax={} headroom={} minCap={} period={}s drift={} maxPromo={} profile=[{},{},{},{},{},{},{},{},{}] sum={}",
+    LOG_INFO("playerbots", "PopDyn: config loaded — enable={} Pmax={} headroom={} minCap={} period={}s maxPromo={} sinkPeriod={}s sinkBatch={} bracket=[{},{},{},{},{},{},{},{}]",
              populationDynamicsEnable, populationMaxPopulation, populationHeadroom, populationMinCap,
-             populationPeriod, populationDriftRate, populationMaxPromotionsPerCycle,
-             populationBracketPct[0], populationBracketPct[1], populationBracketPct[2],
-             populationBracketPct[3], populationBracketPct[4], populationBracketPct[5],
-             populationBracketPct[6], populationBracketPct[7], populationBracketPct[8],
-             populationBracketPct[0]+populationBracketPct[1]+populationBracketPct[2]+populationBracketPct[3]+
-             populationBracketPct[4]+populationBracketPct[5]+populationBracketPct[6]+populationBracketPct[7]+populationBracketPct[8]);
+             populationPeriod, populationMaxPromotionsPerCycle, populationSinkPeriod, populationSinkBatch,
+             populationBracket[0], populationBracket[1], populationBracket[2], populationBracket[3],
+             populationBracket[4], populationBracket[5], populationBracket[6], populationBracket[7]);
 
     LOG_INFO("server.loading", "Loading TalentSpecs...");
 

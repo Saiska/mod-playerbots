@@ -507,16 +507,17 @@ public:
     bool   raidSimBroadcastLoot;       // "<bot> receives <item>" lines
     bool   raidSimAnnounce;            // server-wide SendWorldText announce (debug/flavor; orthogonal)
 
-    // Population dynamics (server-population-dynamics). Decade-bracket ladder is fixed in code (1-9..80);
-    // only the per-bracket share profile is config-driven (PopulationDynamics.Bracket1.Pct .. Bracket9.Pct).
+    // Population dynamics (server-population-dynamics). Per-LEVEL targeting: each 10-level band has one
+    // "bots per level" knob (populationBracket[b]); level 80 is the remainder (MaxPopulation - sum of bands).
     bool   populationDynamicsEnable;
-    uint32 populationMaxPopulation;
+    uint32 populationMaxPopulation;      // total population at full endgame (cap = 80)
     uint32 populationHeadroom;
     uint32 populationMinCap;
-    uint32 populationPeriod;             // seconds between controller ticks
-    float  populationDriftRate;          // fraction of below-target deficit promoted per cycle
+    uint32 populationPeriod;             // seconds between conveyor ticks
     uint32 populationMaxPromotionsPerCycle;
-    std::vector<uint32> populationBracketPct;   // size 9, normalized to sum 100 at load
+    uint32 populationSinkPeriod;         // seconds between level-80 sink-gate ticks
+    uint32 populationSinkBatch;          // bots promoted 79->80 per faction per sink tick
+    std::array<uint32, 8> populationBracket;   // bots-per-level for bands 0..7 (levels 1-9 .. 70-79)
 
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)
