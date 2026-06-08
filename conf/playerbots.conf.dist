@@ -1142,6 +1142,31 @@ AiPlayerbot.Pastime.Social.EmoteInterval = 6
 AiPlayerbot.Pastime.Social.IncludePlayers = 0
 AiPlayerbot.Pastime.Social.Emotes = "dance|sit|cheer|laugh|applaud|point|talk"
 
+# --- More pastimes (pipe 2a) --------------------------------------------------
+# Four extra leisure activities in the pastime registry (weights are relative to
+# the other Pastime.*.Weight values; 0 disables one). Dwell times in seconds
+# (auto-swapped if min>max).
+#   EatDrink / RestEmote: sit and play eat / read-ponder emotes a short while (pure flavor).
+#   RepairSell: walk to the nearest vendor/repair NPC within Radius, sell junk + repair.
+#   Dummy: walk to the nearest FRIENDLY training dummy (entry in Dummy.Entries) within Radius and
+#          melee it for the dwell. Dummy.Entries is a comma-separated creature-entry list (no spaces);
+#          empty = dummy_practice never triggers. Only friendly-faction dummies are used.
+AiPlayerbot.Pastime.EatDrink.Weight = 30
+AiPlayerbot.Pastime.EatDrink.DwellMin = 15
+AiPlayerbot.Pastime.EatDrink.DwellMax = 45
+AiPlayerbot.Pastime.RestEmote.Weight = 30
+AiPlayerbot.Pastime.RestEmote.DwellMin = 15
+AiPlayerbot.Pastime.RestEmote.DwellMax = 45
+AiPlayerbot.Pastime.RepairSell.Weight = 25
+AiPlayerbot.Pastime.RepairSell.DwellMin = 5
+AiPlayerbot.Pastime.RepairSell.DwellMax = 15
+AiPlayerbot.Pastime.RepairSell.Radius = 60.0
+AiPlayerbot.Pastime.Dummy.Weight = 20
+AiPlayerbot.Pastime.Dummy.DwellMin = 30
+AiPlayerbot.Pastime.Dummy.DwellMax = 90
+AiPlayerbot.Pastime.Dummy.Radius = 60.0
+AiPlayerbot.Pastime.Dummy.Entries =
+
 # Loiter activity tuning (the loiter activity within the pastime registry; replaces the old standalone CityLife status).
 # Loiter.Weight: relative weight of the loiter activity within the pastime registry.
 # Loiter.DwellMin/DwellMax: seconds a bot lingers at the chosen city service POI (random in range; auto-swapped if inverted).
