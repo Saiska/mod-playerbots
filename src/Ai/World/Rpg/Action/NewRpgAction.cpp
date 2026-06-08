@@ -484,6 +484,122 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return true;
     }
 
+    if (data.activityType == ACTIVITY_EAT_DRINK)
+    {
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeEatDrinkDwellMin,
+                                 sPlayerbotAIConfig.pastimeEatDrinkDwellMax) * IN_MILLISECONDS;
+            bot->SetStandState(UNIT_STAND_STATE_SIT);
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+        {
+            bot->SetStandState(UNIT_STAND_STATE_STAND);
+            info.ChangeToIdle();
+            return true;
+        }
+        if (!data.lastEmote || GetMSTimeDiffToNow(data.lastEmote) >= 5 * IN_MILLISECONDS)
+        {
+            bot->HandleEmoteCommand(EMOTE_ONESHOT_EAT);   // flavor only; no consumable
+            data.lastEmote = getMSTime();
+        }
+        return false;
+    }
+
+    if (data.activityType == ACTIVITY_REST_EMOTE)
+    {
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeRestEmoteDwellMin,
+                                 sPlayerbotAIConfig.pastimeRestEmoteDwellMax) * IN_MILLISECONDS;
+            bot->SetStandState(UNIT_STAND_STATE_SIT);
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+        {
+            bot->SetStandState(UNIT_STAND_STATE_STAND);
+            info.ChangeToIdle();
+            return true;
+        }
+        if (!data.lastEmote || GetMSTimeDiffToNow(data.lastEmote) >= 6 * IN_MILLISECONDS)
+        {
+            static const uint32 restEmotes[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION };
+            bot->HandleEmoteCommand(restEmotes[urand(0, 1)]);   // read/ponder flavor
+            data.lastEmote = getMSTime();
+        }
+        return false;
+    }
+
+    if (data.activityType == ACTIVITY_REPAIR_SELL)
+    {
+        if (data.target.IsEmpty())
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        WorldObject* vendor = ObjectAccessor::GetWorldObject(*bot, data.target);
+        if (!vendor)
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        if (!IsWithinInteractionDist(vendor))
+        {
+            if (MoveWorldObjectTo(data.target))
+                return true;
+            return MoveRandomNear(15.0f);
+        }
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeRepairSellDwellMin,
+                                 sPlayerbotAIConfig.pastimeRepairSellDwellMax) * IN_MILLISECONDS;
+            bot->SetFacingToObject(vendor);
+            botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);   // SellAction (vendor mode)
+            botAI->DoSpecificAction("repair", Event(), true);                       // RepairAllAction (re-finds vendor)
+            return true;
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
+            return false;
+        info.ChangeToIdle();
+        return true;
+    }
+
+    if (data.activityType == ACTIVITY_DUMMY)
+    {
+        Creature* dummy = ObjectAccessor::GetCreature(*bot, data.target);
+        if (!dummy || !dummy->IsInWorld() || !dummy->IsAlive())
+        {
+            bot->AttackStop();
+            info.ChangeToIdle();
+            return true;
+        }
+        if (bot->GetExactDist(dummy) > INTERACTION_DISTANCE)
+        {
+            if (MoveWorldObjectTo(data.target))
+                return true;
+            return MoveRandomNear(10.0f);
+        }
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeDummyDwellMin,
+                                 sPlayerbotAIConfig.pastimeDummyDwellMax) * IN_MILLISECONDS;
+            bot->SetFacingToObject(dummy);
+            bot->Attack(dummy, true);   // melee auto-attack the practice target
+            return true;
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+        {
+            bot->AttackStop();
+            info.ChangeToIdle();
+            return true;
+        }
+        bot->Attack(dummy, true);   // keep swinging
+        return false;
+    }
+
     // ACTIVITY_SOCIAL (default): converge on a friendly player and emote.
     Player* target = ObjectAccessor::FindPlayer(data.target);
     bool targetOk = target && target->IsInWorld() &&

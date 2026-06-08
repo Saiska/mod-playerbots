@@ -786,6 +786,42 @@ bool PlayerbotAIConfig::Initialize()
     pastimeDuelRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Duel.Radius", 30.0f);
     pastimeDuelIncludePlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Duel.IncludePlayers", false);
 
+    pastimeEatDrinkWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.EatDrink.Weight", 30);
+    pastimeEatDrinkDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.EatDrink.DwellMin", 15);
+    pastimeEatDrinkDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.EatDrink.DwellMax", 45);
+    if (pastimeEatDrinkDwellMax < pastimeEatDrinkDwellMin) std::swap(pastimeEatDrinkDwellMin, pastimeEatDrinkDwellMax);
+
+    pastimeRestEmoteWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RestEmote.Weight", 30);
+    pastimeRestEmoteDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RestEmote.DwellMin", 15);
+    pastimeRestEmoteDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RestEmote.DwellMax", 45);
+    if (pastimeRestEmoteDwellMax < pastimeRestEmoteDwellMin) std::swap(pastimeRestEmoteDwellMin, pastimeRestEmoteDwellMax);
+
+    pastimeRepairSellWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RepairSell.Weight", 25);
+    pastimeRepairSellDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RepairSell.DwellMin", 5);
+    pastimeRepairSellDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RepairSell.DwellMax", 15);
+    if (pastimeRepairSellDwellMax < pastimeRepairSellDwellMin) std::swap(pastimeRepairSellDwellMin, pastimeRepairSellDwellMax);
+    pastimeRepairSellRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.RepairSell.Radius", 60.0f);
+
+    pastimeDummyWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Dummy.Weight", 20);
+    pastimeDummyDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Dummy.DwellMin", 30);
+    pastimeDummyDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Dummy.DwellMax", 90);
+    if (pastimeDummyDwellMax < pastimeDummyDwellMin) std::swap(pastimeDummyDwellMin, pastimeDummyDwellMax);
+    pastimeDummyRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Dummy.Radius", 60.0f);
+    pastimeDummyEntries.clear();
+    {
+        std::string raw = sConfigMgr->GetOption<std::string>("AiPlayerbot.Pastime.Dummy.Entries", "");
+        std::stringstream ss(raw);
+        std::string tok;
+        while (std::getline(ss, tok, ','))
+        {
+            try { if (!tok.empty()) pastimeDummyEntries.push_back(std::stoul(tok)); }
+            catch (...) {}   // skip non-numeric tokens
+        }
+    }
+    LOG_INFO("playerbots", "[Pastime] +eat={} rest={} repairSell={} dummy={} (dummyEntries={})",
+             pastimeEatDrinkWeight, pastimeRestEmoteWeight, pastimeRepairSellWeight,
+             pastimeDummyWeight, uint32(pastimeDummyEntries.size()));
+
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);
 

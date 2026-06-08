@@ -115,7 +115,7 @@ enum BotCityPoi : uint8
     POI_MAILBOX
 };
 
-enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER, ACTIVITY_FISH, ACTIVITY_GATHER, ACTIVITY_CRAFT, ACTIVITY_DUEL, ACTIVITY_NONE = 0xFF };
+enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER, ACTIVITY_FISH, ACTIVITY_GATHER, ACTIVITY_CRAFT, ACTIVITY_DUEL, ACTIVITY_EAT_DRINK, ACTIVITY_REST_EMOTE, ACTIVITY_REPAIR_SELL, ACTIVITY_DUMMY, ACTIVITY_NONE = 0xFF };
 
 #define MAX_SPECNO 20
 
@@ -467,6 +467,22 @@ public:
     uint32 pastimeDuelWeight;
     float  pastimeDuelRadius;
     bool   pastimeDuelIncludePlayers;
+    // --- more-activities-pastimes (pipe 2a) ---
+    uint32 pastimeEatDrinkWeight{30};
+    uint32 pastimeEatDrinkDwellMin{15};
+    uint32 pastimeEatDrinkDwellMax{45};
+    uint32 pastimeRestEmoteWeight{30};
+    uint32 pastimeRestEmoteDwellMin{15};
+    uint32 pastimeRestEmoteDwellMax{45};
+    uint32 pastimeRepairSellWeight{25};
+    uint32 pastimeRepairSellDwellMin{5};
+    uint32 pastimeRepairSellDwellMax{15};
+    float  pastimeRepairSellRadius{60.0f};
+    uint32 pastimeDummyWeight{20};
+    uint32 pastimeDummyDwellMin{30};
+    uint32 pastimeDummyDwellMax{90};
+    float  pastimeDummyRadius{60.0f};
+    std::vector<uint32> pastimeDummyEntries;  // training-dummy creature entries (CSV in conf)
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;
