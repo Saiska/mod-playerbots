@@ -811,6 +811,27 @@ ObjectGuid NewRpgBaseAction::SelectVendorNpc()
     return best ? best->GetGUID() : ObjectGuid();
 }
 
+ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
+{
+    auto const& entries = sPlayerbotAIConfig.pastimeDummyEntries;
+    if (entries.empty())
+        return ObjectGuid();
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    Creature* best = nullptr;
+    float bestDist = sPlayerbotAIConfig.pastimeDummyRadius;
+    for (ObjectGuid& guid : npcs)
+    {
+        Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+        if (!c || !c->IsInWorld())
+            continue;
+        if (std::find(entries.begin(), entries.end(), c->GetEntry()) == entries.end())
+            continue;
+        float d = bot->GetExactDist(c);
+        if (d <= bestDist) { bestDist = d; best = c; }
+    }
+    return best ? best->GetGUID() : ObjectGuid();
+}
+
 ObjectGuid NewRpgBaseAction::SelectSocialPartner()
 {
     GuidVector friends = AI_VALUE(GuidVector, "nearest friendly players");
@@ -1030,6 +1051,10 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
     if (sPlayerbotAIConfig.pastimeRepairSellWeight > 0)
         if (ObjectGuid v = SelectVendorNpc())
             cands.push_back({ uint8(ACTIVITY_REPAIR_SELL), v, sPlayerbotAIConfig.pastimeRepairSellWeight });
+
+    if (sPlayerbotAIConfig.pastimeDummyWeight > 0)
+        if (ObjectGuid d = SelectTrainingDummy())
+            cands.push_back({ uint8(ACTIVITY_DUMMY), d, sPlayerbotAIConfig.pastimeDummyWeight });
 
     if (cands.empty())
         return false;
