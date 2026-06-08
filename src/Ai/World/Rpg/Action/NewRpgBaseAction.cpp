@@ -961,8 +961,7 @@ static bool BotHasCraftingProfession(Player* bot)
 static bool BotHasGatheringProfession(Player* bot)
 {
     return bot->HasSkill(SKILL_MINING) ||
-           bot->HasSkill(SKILL_HERBALISM) ||
-           bot->HasSkill(SKILL_SKINNING);
+           bot->HasSkill(SKILL_HERBALISM);
 }
 
 static bool BotInDuelAllowedArea(Player* bot)
