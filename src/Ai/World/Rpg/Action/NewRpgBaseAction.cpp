@@ -826,6 +826,8 @@ ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
             continue;
         if (std::find(entries.begin(), entries.end(), c->GetEntry()) == entries.end())
             continue;
+        if (!c->IsFriendlyTo(bot))
+            continue;   // only inert friendly dummies; hostile-faction targets would drag the bot into the combat engine
         float d = bot->GetExactDist(c);
         if (d <= bestDist) { bestDist = d; best = c; }
     }
