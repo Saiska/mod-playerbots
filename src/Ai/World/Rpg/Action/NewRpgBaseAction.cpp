@@ -880,10 +880,8 @@ ObjectGuid NewRpgBaseAction::SelectSocialPartner()
     return best ? best->GetGUID() : ObjectGuid();
 }
 
-static ObjectGuid SelectGatherNode(PlayerbotAI* botAI)
+ObjectGuid NewRpgBaseAction::SelectGatherNode()
 {
-    Player* bot = botAI->GetBot();
-    AiObjectContext* context = botAI->GetAiObjectContext();
     GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
     ObjectGuid best;
     float bestDist = sPlayerbotAIConfig.pastimeGatherRadius;
@@ -927,6 +925,26 @@ static ObjectGuid SelectGatherNode(PlayerbotAI* botAI)
         }
     }
     return best;
+}
+
+bool NewRpgBaseAction::SelectFarTaxiDest(WorldPosition& out)
+{
+    uint32 mapId = bot->GetMapId();
+    std::vector<WorldPosition> cands;
+    for (uint32 i = 0; i < sTaxiNodesStore.GetNumRows(); ++i)
+    {
+        TaxiNodesEntry const* node = sTaxiNodesStore.LookupEntry(i);
+        if (!node || node->map_id != mapId)
+            continue;
+        WorldPosition p(mapId, node->x, node->y, node->z, 0.0f);
+        float d = bot->GetExactDist(p);
+        if (d >= sPlayerbotAIConfig.travelMountDistMin && d <= sPlayerbotAIConfig.travelMountDistMax)
+            cands.push_back(p);
+    }
+    if (cands.empty())
+        return false;
+    out = cands[urand(0, cands.size() - 1)];
+    return true;
 }
 
 static bool BotHasCraftingProfession(Player* bot)
@@ -1031,7 +1049,7 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
 
     if (sPlayerbotAIConfig.pastimeGatherWeight > 0)
     {
-        if (ObjectGuid node = SelectGatherNode(botAI))
+        if (ObjectGuid node = SelectGatherNode())
             cands.push_back({ uint8(ACTIVITY_GATHER), node, sPlayerbotAIConfig.pastimeGatherWeight });
     }
 
@@ -1432,9 +1450,9 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     {
         NewRpgInfo const& ri = botAI->rpgInfo;
         LOG_DEBUG("playerbots",
-                  "[RpgSatiation] Bot #{} sat[ADV,SOC,REST,TRV,PVP]=[{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}] chose={}",
+                  "[RpgSatiation] Bot #{} sat[ADV,SOC,WORK,TRV,PVP]=[{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}] chose={}",
                   bot->GetGUID().GetCounter(),
-                  ri.satiation[CAT_ADVENTURE], ri.satiation[CAT_SOCIAL], ri.satiation[CAT_REST],
+                  ri.satiation[CAT_ADVENTURE], ri.satiation[CAT_SOCIAL], ri.satiation[CAT_WORK],
                   ri.satiation[CAT_TRAVEL], ri.satiation[CAT_PVP],
                   static_cast<uint32>(chosenStatus));
     }

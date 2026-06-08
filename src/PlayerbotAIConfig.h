@@ -60,6 +60,9 @@ enum NewRpgStatus : int
     RPG_REST = 7,
     RPG_OUTDOOR_PVP = 8,
     RPG_PASTIME,      // leisure/social activities (framework + social starter)
+    RPG_TRAVEL_MOUNT,       // ride overland to a far hub
+    RPG_EXPLORE_LANDMARK,   // go to a hub/landmark and look around
+    RPG_GATHERING_CIRCUIT,  // multi-node profession-gathering loop
     RPG_STATUS_END
 };
 
@@ -70,7 +73,7 @@ enum BotActivityCategory : uint8
 {
     CAT_ADVENTURE = 0,
     CAT_SOCIAL,
-    CAT_REST,
+    CAT_WORK,      // was CAT_REST
     CAT_TRAVEL,
     CAT_PVP,
     CAT_COUNT          // element count AND the "none" sentinel (e.g. RPG_IDLE)
@@ -82,14 +85,17 @@ inline BotActivityCategory CategoryOf(NewRpgStatus s)
     {
         case RPG_GO_GRIND:
         case RPG_GO_CAMP:
-        case RPG_WANDER_RANDOM:
-        case RPG_DO_QUEST:      return CAT_ADVENTURE;
+        case RPG_WANDER_RANDOM:        return CAT_ADVENTURE;
+        case RPG_DO_QUEST:
+        case RPG_GATHERING_CIRCUIT:    return CAT_WORK;
+        case RPG_REST:
         case RPG_WANDER_NPC:
-        case RPG_PASTIME:       return CAT_SOCIAL;
-        case RPG_REST:          return CAT_REST;
-        case RPG_TRAVEL_FLIGHT: return CAT_TRAVEL;
-        case RPG_OUTDOOR_PVP:   return CAT_PVP;
-        default:                return CAT_COUNT;  // RPG_IDLE / unknown
+        case RPG_PASTIME:              return CAT_SOCIAL;
+        case RPG_TRAVEL_FLIGHT:
+        case RPG_TRAVEL_MOUNT:
+        case RPG_EXPLORE_LANDMARK:     return CAT_TRAVEL;
+        case RPG_OUTDOOR_PVP:          return CAT_PVP;
+        default:                       return CAT_COUNT;  // RPG_IDLE / none
     }
 }
 
@@ -442,6 +448,13 @@ public:
     float rpgSatiationDecayRatePerSec{0.0015f};  // meter loss/sec otherwise (~670s to empty)
     float rpgSatiationSuppressExponent{1.5f};    // steepness of (1-meter)^k
     float rpgSatiationMinAppealFrac{0.05f};      // floor as fraction of base weight
+    // --- more-activities-occupations (pipe 2b) ---
+    float  travelMountDistMin{300.0f};
+    float  travelMountDistMax{2000.0f};
+    uint32 exploreLandmarkDwellMin{20};
+    uint32 exploreLandmarkDwellMax{60};
+    uint32 gatheringCircuitMinNodes{3};
+    uint32 gatheringCircuitMaxNodes{6};
     uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
