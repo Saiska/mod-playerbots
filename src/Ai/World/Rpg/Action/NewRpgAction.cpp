@@ -556,8 +556,8 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             data.dwellMs = urand(sPlayerbotAIConfig.pastimeRepairSellDwellMin,
                                  sPlayerbotAIConfig.pastimeRepairSellDwellMax) * IN_MILLISECONDS;
             bot->SetFacingToObject(vendor);
-            botAI->DoSpecificAction("sell", Event(), true);     // RpgSellAction
-            botAI->DoSpecificAction("repair", Event(), true);   // RpgRepairAction
+            botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);   // SellAction (vendor mode)
+            botAI->DoSpecificAction("repair", Event(), true);                       // RepairAllAction (re-finds vendor)
             return true;
         }
         if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
