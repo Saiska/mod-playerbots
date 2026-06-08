@@ -531,6 +531,41 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return false;
     }
 
+    if (data.activityType == ACTIVITY_REPAIR_SELL)
+    {
+        if (data.target.IsEmpty())
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        WorldObject* vendor = ObjectAccessor::GetWorldObject(*bot, data.target);
+        if (!vendor)
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        if (!IsWithinInteractionDist(vendor))
+        {
+            if (MoveWorldObjectTo(data.target))
+                return true;
+            return MoveRandomNear(15.0f);
+        }
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeRepairSellDwellMin,
+                                 sPlayerbotAIConfig.pastimeRepairSellDwellMax) * IN_MILLISECONDS;
+            bot->SetFacingToObject(vendor);
+            botAI->DoSpecificAction("sell", Event(), true);     // RpgSellAction
+            botAI->DoSpecificAction("repair", Event(), true);   // RpgRepairAction
+            return true;
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
+            return false;
+        info.ChangeToIdle();
+        return true;
+    }
+
     // ACTIVITY_SOCIAL (default): converge on a friendly player and emote.
     Player* target = ObjectAccessor::FindPlayer(data.target);
     bool targetOk = target && target->IsInWorld() &&

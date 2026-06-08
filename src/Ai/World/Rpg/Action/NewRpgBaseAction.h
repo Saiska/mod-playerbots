@@ -37,6 +37,7 @@ protected:
     /* QUEST RELATED CHECK */
     ObjectGuid ChooseNpcOrGameObjectToInteract(bool questgiverOnly = false, float distanceLimit = 0.0f);
     ObjectGuid SelectLoiterPoi(uint8& outPoiType);
+    ObjectGuid SelectVendorNpc();
     // Nearest random bot within Pastime.Social.Radius that is idle-ish OR already socializing
     // (or a player if Pastime.Social.IncludePlayers). Empty if none.
     ObjectGuid SelectSocialPartner();
