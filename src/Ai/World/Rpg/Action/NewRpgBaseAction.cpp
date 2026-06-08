@@ -1003,6 +1003,12 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
             cands.push_back({ uint8(ACTIVITY_DUEL), partner, sPlayerbotAIConfig.pastimeDuelWeight });
     }
 
+    if (sPlayerbotAIConfig.pastimeEatDrinkWeight > 0)
+        cands.push_back({ uint8(ACTIVITY_EAT_DRINK), ObjectGuid(), sPlayerbotAIConfig.pastimeEatDrinkWeight });
+
+    if (sPlayerbotAIConfig.pastimeRestEmoteWeight > 0)
+        cands.push_back({ uint8(ACTIVITY_REST_EMOTE), ObjectGuid(), sPlayerbotAIConfig.pastimeRestEmoteWeight });
+
     if (cands.empty())
         return false;
 

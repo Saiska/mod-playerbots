@@ -484,6 +484,53 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return true;
     }
 
+    if (data.activityType == ACTIVITY_EAT_DRINK)
+    {
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeEatDrinkDwellMin,
+                                 sPlayerbotAIConfig.pastimeEatDrinkDwellMax) * IN_MILLISECONDS;
+            bot->SetStandState(UNIT_STAND_STATE_SIT);
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+        {
+            bot->SetStandState(UNIT_STAND_STATE_STAND);
+            info.ChangeToIdle();
+            return true;
+        }
+        if (!data.lastEmote || GetMSTimeDiffToNow(data.lastEmote) >= 5 * IN_MILLISECONDS)
+        {
+            bot->HandleEmoteCommand(EMOTE_ONESHOT_EAT);   // flavor only; no consumable
+            data.lastEmote = getMSTime();
+        }
+        return false;
+    }
+
+    if (data.activityType == ACTIVITY_REST_EMOTE)
+    {
+        if (!data.lastReach)
+        {
+            data.lastReach = getMSTime();
+            data.dwellMs = urand(sPlayerbotAIConfig.pastimeRestEmoteDwellMin,
+                                 sPlayerbotAIConfig.pastimeRestEmoteDwellMax) * IN_MILLISECONDS;
+            bot->SetStandState(UNIT_STAND_STATE_SIT);
+        }
+        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
+        {
+            bot->SetStandState(UNIT_STAND_STATE_STAND);
+            info.ChangeToIdle();
+            return true;
+        }
+        if (!data.lastEmote || GetMSTimeDiffToNow(data.lastEmote) >= 6 * IN_MILLISECONDS)
+        {
+            static const uint32 restEmotes[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION };
+            bot->HandleEmoteCommand(restEmotes[urand(0, 1)]);   // read/ponder flavor
+            data.lastEmote = getMSTime();
+        }
+        return false;
+    }
+
     // ACTIVITY_SOCIAL (default): converge on a friendly player and emote.
     Player* target = ObjectAccessor::FindPlayer(data.target);
     bool targetOk = target && target->IsInWorld() &&
