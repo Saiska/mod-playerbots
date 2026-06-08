@@ -109,7 +109,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_IDLE:
             return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
                                        RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT,
-                                       RPG_EXPLORE_LANDMARK});
+                                       RPG_EXPLORE_LANDMARK, RPG_GATHERING_CIRCUIT});
 
         case RPG_GO_GRIND:
         {
@@ -219,6 +219,15 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_EXPLORE_LANDMARK:
         {
             if (info.HasStatusPersisted(statusExploreDuration))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
+        case RPG_GATHERING_CIRCUIT:
+        {
+            if (info.HasStatusPersisted(statusGatheringDuration))
             {
                 info.ChangeToIdle();
                 return true;
@@ -958,4 +967,49 @@ bool NewRpgExploreLandmarkAction::Execute(Event /*event*/)
         bot->HandleEmoteCommand(lookEmotes[urand(0, 2)]);
     }
     return false;
+}
+
+bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    auto* data = std::get_if<NewRpgInfo::GatheringCircuit>(&info.data);
+    if (!data)
+        return false;
+    if (data->visited >= data->maxNodes)
+    {
+        info.ChangeToIdle();
+        return true;
+    }
+    if (data->node.IsEmpty())
+    {
+        data->node = SelectGatherNode();
+        if (data->node.IsEmpty())
+        {
+            info.ChangeToIdle();   // no node nearby -> done
+            return true;
+        }
+    }
+    GameObject* node = ObjectAccessor::GetGameObject(*bot, data->node);
+    if (!node || !node->isSpawned())
+    {
+        data->node = ObjectGuid();   // harvested/despawned -> re-pick
+        return true;
+    }
+    if (!IsWithinInteractionDist(node))
+    {
+        if (MoveWorldObjectTo(data->node))
+            return true;
+        data->node = ObjectGuid();   // unreachable -> try another
+        return true;
+    }
+    // arrived: harvest — mirrors the existing ACTIVITY_GATHER harvest delegation
+    LootObject lootObj(bot, data->node);
+    if (lootObj.IsLootPossible(bot))
+    {
+        context->GetValue<LootObject>("loot target")->Set(lootObj);
+        botAI->DoSpecificAction("open loot", Event(), true);
+    }
+    ++data->visited;
+    data->node = ObjectGuid();   // advance to the next node
+    return true;
 }

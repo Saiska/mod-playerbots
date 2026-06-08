@@ -86,6 +86,13 @@ struct NewRpgInfo
         uint32 lastReach{0};
         uint32 dwellMs{0};
     };
+    // RPG_GATHERING_CIRCUIT
+    struct GatheringCircuit
+    {
+        ObjectGuid node{};
+        uint32 visited{0};
+        uint32 maxNodes{0};
+    };
     struct Idle
     {
     };
@@ -115,7 +122,8 @@ struct NewRpgInfo
         TravelFlight,
         OutdoorPvP,
         TravelMount,
-        ExploreLandmark
+        ExploreLandmark,
+        GatheringCircuit
     >;
     RpgData data;
 
@@ -131,6 +139,7 @@ struct NewRpgInfo
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
     void ChangeToTravelMount(WorldPosition pos);
     void ChangeToExploreLandmark(WorldPosition pos);
+    void ChangeToGatheringCircuit(uint32 maxNodes);
     void ChangeToRest();
     void ChangeToIdle();
     bool CanChangeTo(NewRpgStatus status);

@@ -275,6 +275,7 @@ public:
         creators["new rpg pastime"] = &ActionContext::new_rpg_pastime;
         creators["new rpg travel mount"] = &ActionContext::new_rpg_travel_mount;
         creators["new rpg explore landmark"] = &ActionContext::new_rpg_explore_landmark;
+        creators["new rpg gathering circuit"] = &ActionContext::new_rpg_gathering_circuit;
         creators["new rpg do quest"] = &ActionContext::new_rpg_do_quest;
         creators["new rpg travel flight"] = &ActionContext::new_rpg_travel_flight;
         creators["new rpg outdoor pvp"] = &ActionContext::new_rpg_outdoor_pvp;
@@ -483,6 +484,7 @@ private:
     static Action* new_rpg_pastime(PlayerbotAI* ai) { return new NewRpgPastimeAction(ai); }
     static Action* new_rpg_travel_mount(PlayerbotAI* ai) { return new NewRpgTravelMountAction(ai); }
     static Action* new_rpg_explore_landmark(PlayerbotAI* ai) { return new NewRpgExploreLandmarkAction(ai); }
+    static Action* new_rpg_gathering_circuit(PlayerbotAI* ai) { return new NewRpgGatheringCircuitAction(ai); }
     static Action* new_rpg_do_quest(PlayerbotAI* ai) { return new NewRpgDoQuestAction(ai); }
     static Action* new_rpg_travel_flight(PlayerbotAI* ai) { return new NewRpgTravelFlightAction(ai); }
     static Action* new_rpg_outdoor_pvp(PlayerbotAI* ai) { return new NewRpgOutdoorPvpAction(ai); }

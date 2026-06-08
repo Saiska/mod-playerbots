@@ -958,6 +958,13 @@ static bool BotHasCraftingProfession(Player* bot)
            bot->HasSkill(SKILL_COOKING);
 }
 
+static bool BotHasGatheringProfession(Player* bot)
+{
+    return bot->HasSkill(SKILL_MINING) ||
+           bot->HasSkill(SKILL_HERBALISM) ||
+           bot->HasSkill(SKILL_SKINNING);
+}
+
 static bool BotInDuelAllowedArea(Player* bot)
 {
     if (sPlayerbotAIConfig.IsInPvpProhibitedZone(bot->GetZoneId()))
@@ -1574,6 +1581,13 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             }
             return false;
         }
+        case RPG_GATHERING_CIRCUIT:
+        {
+            uint32 maxNodes = urand(sPlayerbotAIConfig.gatheringCircuitMinNodes,
+                                    sPlayerbotAIConfig.gatheringCircuitMaxNodes);
+            botAI->rpgInfo.ChangeToGatheringCircuit(maxNodes);
+            return true;
+        }
         default:
         {
             botAI->rpgInfo.ChangeToRest();
@@ -1657,6 +1671,8 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             WorldPosition pos;
             return SelectFarTaxiDest(pos);
         }
+        case RPG_GATHERING_CIRCUIT:
+            return BotHasGatheringProfession(bot);
         default:
             return false;
     }
