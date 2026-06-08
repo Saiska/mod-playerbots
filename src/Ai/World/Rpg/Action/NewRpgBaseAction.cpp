@@ -1,5 +1,8 @@
 #include "NewRpgBaseAction.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include "AiObjectContext.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
@@ -1323,19 +1326,34 @@ bool NewRpgBaseAction::SelectRandomFlightTaxiNode(uint32& flightMasterEntry, Wor
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
 {
     std::vector<NewRpgStatus> availableStatus;
+    std::vector<uint32> statusWeight;
     uint32 probSum = 0;
     for (NewRpgStatus status : candidateStatus)
     {
-        if (sPlayerbotAIConfig.RpgStatusProbWeight[status] == 0)
+        uint32 base = sPlayerbotAIConfig.RpgStatusProbWeight[status];
+        if (base == 0)
+            continue;
+        if (!CheckRpgStatusAvailable(status))
             continue;
 
-        if (CheckRpgStatusAvailable(status))
+        uint32 weight = base;  // Enable=0 -> weight==base -> legacy roulette byte-for-byte
+        if (sPlayerbotAIConfig.rpgSatiationEnable)
         {
-            availableStatus.push_back(status);
-            probSum += sPlayerbotAIConfig.RpgStatusProbWeight[status];
+            BotActivityCategory cat = CategoryOf(status);
+            float sat = (cat < CAT_COUNT) ? botAI->rpgInfo.satiation[cat] : 0.0f;
+            float appeal = base * RpgSatiationSuppress(sat, sPlayerbotAIConfig.rpgSatiationSuppressExponent);
+            float floorAppeal = base * sPlayerbotAIConfig.rpgSatiationMinAppealFrac;
+            if (appeal < floorAppeal)
+                appeal = floorAppeal;
+            // scale to integer so we keep the existing urand roulette; never 0 for an eligible status
+            weight = std::max<uint32>(1u, static_cast<uint32>(std::lround(appeal * 1000.0f)));
         }
+
+        availableStatus.push_back(status);
+        statusWeight.push_back(weight);
+        probSum += weight;
     }
-    // Safety check. Default to "rest" if all RPG weights = 0
+    // Safety check. Default to "rest" if nothing is eligible.
     if (availableStatus.empty() || probSum == 0)
     {
         botAI->rpgInfo.ChangeToRest();
@@ -1345,14 +1363,25 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     uint32 rand = urand(1, probSum);
     uint32 accumulate = 0;
     NewRpgStatus chosenStatus = RPG_STATUS_END;
-    for (NewRpgStatus status : availableStatus)
+    for (size_t i = 0; i < availableStatus.size(); ++i)
     {
-        accumulate += sPlayerbotAIConfig.RpgStatusProbWeight[status];
+        accumulate += statusWeight[i];
         if (accumulate >= rand)
         {
-            chosenStatus = status;
+            chosenStatus = availableStatus[i];
             break;
         }
+    }
+
+    if (sPlayerbotAIConfig.rpgSatiationEnable && chosenStatus != RPG_STATUS_END)
+    {
+        NewRpgInfo const& ri = botAI->rpgInfo;
+        LOG_DEBUG("playerbots",
+                  "[RpgSatiation] Bot #{} sat[ADV,SOC,REST,TRV,PVP]=[{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}] chose={}",
+                  bot->GetGUID().GetCounter(),
+                  ri.satiation[CAT_ADVENTURE], ri.satiation[CAT_SOCIAL], ri.satiation[CAT_REST],
+                  ri.satiation[CAT_TRAVEL], ri.satiation[CAT_PVP],
+                  static_cast<uint32>(chosenStatus));
     }
 
     switch (chosenStatus)
