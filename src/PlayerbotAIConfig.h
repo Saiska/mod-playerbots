@@ -519,6 +519,7 @@ public:
     uint32 populationSinkPeriod;         // seconds between level-80 sink-gate ticks
     uint32 populationSinkBatch;          // bots promoted 79->80 per faction per sink tick
     std::array<uint32, 8> populationBracket;   // bots-per-level for bands 0..7 (levels 1-9 .. 70-79)
+    bool   populationClassFavor;               // favor most under-represented class when promoting
 
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)

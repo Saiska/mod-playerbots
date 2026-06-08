@@ -2587,3 +2587,12 @@ PopulationDynamics.Bracket4 = 32
 PopulationDynamics.Bracket5 = 35
 PopulationDynamics.Bracket6 = 38
 PopulationDynamics.Bracket7 = 41
+
+#
+#    PopulationDynamics.ClassFavor
+#        1 = the level conveyor favors the most under-represented class when promoting
+#            (deficit-weighted, bracket-granular) so every class reaches a fair share
+#            per level (fixes Death Knight starvation above level 55).
+#        0 = legacy uniform-random source pick (no class balancing).
+#        Default: 1
+PopulationDynamics.ClassFavor = 1
