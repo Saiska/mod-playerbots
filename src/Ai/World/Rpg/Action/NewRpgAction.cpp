@@ -108,7 +108,8 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     {
         case RPG_IDLE:
             return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
-                                       RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT});
+                                       RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT,
+                                       RPG_EXPLORE_LANDMARK});
 
         case RPG_GO_GRIND:
         {
@@ -209,6 +210,15 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             auto& data = std::get<NewRpgInfo::TravelMount>(info.data);
             if (bot->GetExactDist(data.pos) < 10.0f || info.HasStatusPersisted(statusTravelMountDuration))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
+        case RPG_EXPLORE_LANDMARK:
+        {
+            if (info.HasStatusPersisted(statusExploreDuration))
             {
                 info.ChangeToIdle();
                 return true;
@@ -914,6 +924,38 @@ bool NewRpgTravelMountAction::Execute(Event /*event*/)
         if (MoveFarTo(data->pos))
             return true;
         return MoveRandomNear(10.0f);
+    }
+    return false;
+}
+
+bool NewRpgExploreLandmarkAction::Execute(Event /*event*/)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    auto* data = std::get_if<NewRpgInfo::ExploreLandmark>(&info.data);
+    if (!data)
+        return false;
+    if (bot->GetExactDist(data->pos) > 10.0f)
+    {
+        if (MoveFarTo(data->pos))
+            return true;
+        return MoveRandomNear(10.0f);
+    }
+    // arrived: linger and look around
+    if (!data->lastReach)
+    {
+        data->lastReach = getMSTime();
+        data->dwellMs = urand(sPlayerbotAIConfig.exploreLandmarkDwellMin,
+                              sPlayerbotAIConfig.exploreLandmarkDwellMax) * IN_MILLISECONDS;
+    }
+    if (GetMSTimeDiffToNow(data->lastReach) >= data->dwellMs)
+    {
+        info.ChangeToIdle();
+        return true;
+    }
+    if (urand(0, 100) < 5)   // occasional look-around emote
+    {
+        static const uint32 lookEmotes[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_POINT, EMOTE_ONESHOT_QUESTION };
+        bot->HandleEmoteCommand(lookEmotes[urand(0, 2)]);
     }
     return false;
 }

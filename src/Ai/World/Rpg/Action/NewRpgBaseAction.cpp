@@ -1564,6 +1564,16 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             }
             return false;
         }
+        case RPG_EXPLORE_LANDMARK:
+        {
+            WorldPosition pos;
+            if (SelectFarTaxiDest(pos))
+            {
+                botAI->rpgInfo.ChangeToExploreLandmark(pos);
+                return true;
+            }
+            return false;
+        }
         default:
         {
             botAI->rpgInfo.ChangeToRest();
@@ -1638,6 +1648,11 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             return outdoorPvP != nullptr;
         }
         case RPG_TRAVEL_MOUNT:
+        {
+            WorldPosition pos;
+            return SelectFarTaxiDest(pos);
+        }
+        case RPG_EXPLORE_LANDMARK:
         {
             WorldPosition pos;
             return SelectFarTaxiDest(pos);

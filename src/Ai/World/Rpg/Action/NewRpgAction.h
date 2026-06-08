@@ -54,6 +54,7 @@ protected:
     const int32 statusDoQuestDuration = 30 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusOutDoorPvPDuration = HOUR * IN_MILLISECONDS ;
     const int32 statusTravelMountDuration = 15 * MINUTE * IN_MILLISECONDS;
+    const int32 statusExploreDuration = 10 * MINUTE * IN_MILLISECONDS;
 };
 
 class NewRpgGoGrindAction : public NewRpgBaseAction
@@ -117,6 +118,13 @@ class NewRpgTravelMountAction : public NewRpgBaseAction
 {
 public:
     NewRpgTravelMountAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg travel mount") {}
+    bool Execute(Event event) override;
+};
+
+class NewRpgExploreLandmarkAction : public NewRpgBaseAction
+{
+public:
+    NewRpgExploreLandmarkAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg explore landmark") {}
     bool Execute(Event event) override;
 };
 

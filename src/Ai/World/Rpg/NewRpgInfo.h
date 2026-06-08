@@ -79,6 +79,13 @@ struct NewRpgInfo
     {
         WorldPosition pos{};
     };
+    // RPG_EXPLORE_LANDMARK
+    struct ExploreLandmark
+    {
+        WorldPosition pos{};
+        uint32 lastReach{0};
+        uint32 dwellMs{0};
+    };
     struct Idle
     {
     };
@@ -107,7 +114,8 @@ struct NewRpgInfo
         Rest,
         TravelFlight,
         OutdoorPvP,
-        TravelMount
+        TravelMount,
+        ExploreLandmark
     >;
     RpgData data;
 
@@ -122,6 +130,7 @@ struct NewRpgInfo
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
     void ChangeToTravelMount(WorldPosition pos);
+    void ChangeToExploreLandmark(WorldPosition pos);
     void ChangeToRest();
     void ChangeToIdle();
     bool CanChangeTo(NewRpgStatus status);

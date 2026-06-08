@@ -75,6 +75,12 @@ void NewRpgInfo::ChangeToTravelMount(WorldPosition pos)
     data = TravelMount{pos};
 }
 
+void NewRpgInfo::ChangeToExploreLandmark(WorldPosition pos)
+{
+    startT = getMSTime();
+    data = ExploreLandmark{pos, 0, 0};
+}
+
 void NewRpgInfo::ChangeToRest()
 {
     startT = getMSTime();
@@ -124,6 +130,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, TravelFlight>) return RPG_TRAVEL_FLIGHT;
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
         if constexpr (std::is_same_v<T, TravelMount>) return RPG_TRAVEL_MOUNT;
+        if constexpr (std::is_same_v<T, ExploreLandmark>) return RPG_EXPLORE_LANDMARK;
         return RPG_IDLE;
     }, data);
 }
@@ -206,6 +213,10 @@ std::string NewRpgInfo::ToString()
         else if constexpr (std::is_same_v<T, TravelMount>)
         {
             out << "TRAVEL_MOUNT";
+        }
+        else if constexpr (std::is_same_v<T, ExploreLandmark>)
+        {
+            out << "EXPLORE_LANDMARK";
         }
         else
             out << "UNKNOWN";
