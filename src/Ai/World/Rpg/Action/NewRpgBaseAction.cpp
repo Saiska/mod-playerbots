@@ -1554,6 +1554,16 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             botAI->rpgInfo.ChangeToOutdoorPvp();
             return true;
         }
+        case RPG_TRAVEL_MOUNT:
+        {
+            WorldPosition pos;
+            if (SelectFarTaxiDest(pos))
+            {
+                botAI->rpgInfo.ChangeToTravelMount(pos);
+                return true;
+            }
+            return false;
+        }
         default:
         {
             botAI->rpgInfo.ChangeToRest();
@@ -1626,6 +1636,11 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
 
             OutdoorPvP* outdoorPvP = sOutdoorPvPMgr->GetOutdoorPvPToZoneId(zoneId);
             return outdoorPvP != nullptr;
+        }
+        case RPG_TRAVEL_MOUNT:
+        {
+            WorldPosition pos;
+            return SelectFarTaxiDest(pos);
         }
         default:
             return false;

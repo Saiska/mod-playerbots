@@ -81,6 +81,14 @@ void NewRpgStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    triggers.push_back(
+        new TriggerNode(
+            "travel mount status",
+            {
+                NextAction("new rpg travel mount", 3.0f)
+            }
+        )
+    );
 }
 
 void NewRpgStrategy::InitMultipliers(std::vector<Multiplier*>&)

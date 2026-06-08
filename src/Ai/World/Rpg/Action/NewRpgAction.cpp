@@ -108,7 +108,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     {
         case RPG_IDLE:
             return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
-                                       RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP});
+                                       RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT});
 
         case RPG_GO_GRIND:
         {
@@ -199,6 +199,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_OUTDOOR_PVP:
         {
             if (info.HasStatusPersisted(statusOutDoorPvPDuration))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
+        case RPG_TRAVEL_MOUNT:
+        {
+            auto& data = std::get<NewRpgInfo::TravelMount>(info.data);
+            if (bot->GetExactDist(data.pos) < 10.0f || info.HasStatusPersisted(statusTravelMountDuration))
             {
                 info.ChangeToIdle();
                 return true;
@@ -895,4 +905,15 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
         return true;
     }
     return true;
+}
+
+bool NewRpgTravelMountAction::Execute(Event /*event*/)
+{
+    if (auto* data = std::get_if<NewRpgInfo::TravelMount>(&botAI->rpgInfo.data))
+    {
+        if (MoveFarTo(data->pos))
+            return true;
+        return MoveRandomNear(10.0f);
+    }
+    return false;
 }

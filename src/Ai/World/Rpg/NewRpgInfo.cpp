@@ -69,6 +69,12 @@ void NewRpgInfo::ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId)
     data = pvp;
 }
 
+void NewRpgInfo::ChangeToTravelMount(WorldPosition pos)
+{
+    startT = getMSTime();
+    data = TravelMount{pos};
+}
+
 void NewRpgInfo::ChangeToRest()
 {
     startT = getMSTime();
@@ -117,6 +123,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, DoQuest>) return RPG_DO_QUEST;
         if constexpr (std::is_same_v<T, TravelFlight>) return RPG_TRAVEL_FLIGHT;
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
+        if constexpr (std::is_same_v<T, TravelMount>) return RPG_TRAVEL_MOUNT;
         return RPG_IDLE;
     }, data);
 }
@@ -195,6 +202,10 @@ std::string NewRpgInfo::ToString()
                 out << "\nNo capture point assigned.";
             else
                 out << "\ncapturePointSpawnId: " << arg.capturePointSpawnId;
+        }
+        else if constexpr (std::is_same_v<T, TravelMount>)
+        {
+            out << "TRAVEL_MOUNT";
         }
         else
             out << "UNKNOWN";
