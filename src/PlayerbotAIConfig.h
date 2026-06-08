@@ -6,6 +6,7 @@
 #ifndef _PLAYERBOT_PLAYERbotAICONFIG_H
 #define _PLAYERBOT_PLAYERbotAICONFIG_H
 
+#include <cmath>
 #include <mutex>
 #include <array>
 #include <unordered_map>
@@ -61,6 +62,48 @@ enum NewRpgStatus : int
     RPG_PASTIME,      // leisure/social activities (framework + social starter)
     RPG_STATUS_END
 };
+
+// Thematic activity categories for occupation satiation (pipe 1).
+// Data-driven: a future occupation just adds one case to CategoryOf and
+// inherits a satiation axis for free. CAT_COUNT doubles as "no category".
+enum BotActivityCategory : uint8
+{
+    CAT_ADVENTURE = 0,
+    CAT_SOCIAL,
+    CAT_REST,
+    CAT_TRAVEL,
+    CAT_PVP,
+    CAT_COUNT          // element count AND the "none" sentinel (e.g. RPG_IDLE)
+};
+
+inline BotActivityCategory CategoryOf(NewRpgStatus s)
+{
+    switch (s)
+    {
+        case RPG_GO_GRIND:
+        case RPG_GO_CAMP:
+        case RPG_WANDER_RANDOM:
+        case RPG_DO_QUEST:      return CAT_ADVENTURE;
+        case RPG_WANDER_NPC:
+        case RPG_PASTIME:       return CAT_SOCIAL;
+        case RPG_REST:          return CAT_REST;
+        case RPG_TRAVEL_FLIGHT: return CAT_TRAVEL;
+        case RPG_OUTDOOR_PVP:   return CAT_PVP;
+        default:                return CAT_COUNT;  // RPG_IDLE / unknown
+    }
+}
+
+// Pure appeal multiplier: 1.0 at empty meter, 0.0 at full. Higher exponent =
+// sharper "had enough". Invariants (relied on, no unit harness in this module):
+//   sat<=0 -> 1.0 ; sat>=1 -> 0.0 ; strictly decreasing in sat for exponent>0.
+inline float RpgSatiationSuppress(float sat, float exponent)
+{
+    if (sat <= 0.0f)
+        return 1.0f;
+    if (sat >= 1.0f)
+        return 0.0f;
+    return std::pow(1.0f - sat, exponent);
+}
 
 enum BotCityPoi : uint8
 {
@@ -393,6 +436,12 @@ public:
     bool autoDoQuests;
     bool enableNewRpgStrategy;
     std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
+    // --- occupation satiation (pipe 1: bot-occupation-satiation) ---
+    bool  rpgSatiationEnable{true};
+    float rpgSatiationRiseRatePerSec{0.0025f};   // meter gain/sec while in-category (~400s to fill)
+    float rpgSatiationDecayRatePerSec{0.0015f};  // meter loss/sec otherwise (~670s to empty)
+    float rpgSatiationSuppressExponent{1.5f};    // steepness of (1-meter)^k
+    float rpgSatiationMinAppealFrac{0.05f};      // floor as fraction of base weight
     uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
