@@ -470,9 +470,11 @@ bool PlayerbotAIConfig::Initialize()
         std::string key = "PopulationDynamics.Bracket" + std::to_string(b);
         populationBracket[b] = sConfigMgr->GetOption<uint32>(key, kDefaultBracket[b]);
     }
-    LOG_INFO("playerbots", "PopDyn: config loaded — enable={} Pmax={} headroom={} minCap={} period={}s maxPromo={} sinkPeriod={}s sinkBatch={} bracket=[{},{},{},{},{},{},{},{}]",
+    populationClassFavor = sConfigMgr->GetOption<bool>("PopulationDynamics.ClassFavor", true);
+    LOG_INFO("playerbots", "PopDyn: config loaded — enable={} Pmax={} headroom={} minCap={} period={}s maxPromo={} sinkPeriod={}s sinkBatch={} classFavor={} bracket=[{},{},{},{},{},{},{},{}]",
              populationDynamicsEnable, populationMaxPopulation, populationHeadroom, populationMinCap,
              populationPeriod, populationMaxPromotionsPerCycle, populationSinkPeriod, populationSinkBatch,
+             populationClassFavor,
              populationBracket[0], populationBracket[1], populationBracket[2], populationBracket[3],
              populationBracket[4], populationBracket[5], populationBracket[6], populationBracket[7]);
 
