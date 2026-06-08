@@ -722,6 +722,15 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 12);
 
+    rpgSatiationEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSatiation.Enable", true);
+    rpgSatiationRiseRatePerSec = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.RiseRatePerSec", 0.0025f);
+    rpgSatiationDecayRatePerSec = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.DecayRatePerSec", 0.0015f);
+    rpgSatiationSuppressExponent = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.SuppressExponent", 1.5f);
+    rpgSatiationMinAppealFrac = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.MinAppealFrac", 0.05f);
+    LOG_INFO("playerbots", "[RpgSatiation] enabled={} rise={} decay={} exp={} minFrac={}",
+             rpgSatiationEnable, rpgSatiationRiseRatePerSec, rpgSatiationDecayRatePerSec,
+             rpgSatiationSuppressExponent, rpgSatiationMinAppealFrac);
+
     pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
     pastimeSocialClusterDist = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.ClusterDist", 5.0f);
