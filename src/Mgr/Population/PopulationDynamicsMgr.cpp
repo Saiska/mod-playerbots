@@ -5,6 +5,7 @@
 #include "PopulationDynamicsMgr.h"
 #include "PlayerbotAIConfig.h"
 #include "Player.h"
+#include "World.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
 #include <algorithm>
@@ -20,6 +21,18 @@ uint32 PopulationDynamicsMgr::BandOf(uint8 level)
     // Maps a LEVELING level (1..79) to its 10-level band 0..7. Level 80 is the sink, handled separately.
     if (level < 10) return 0;             // 1-9 -> band 0
     return uint32(level / 10);            // 10-19 -> 1, ..., 70-79 -> 7
+}
+
+uint32 PopulationDynamicsMgr::CensusBand(uint8 level)
+{
+    return level >= 80 ? 8u : BandOf(level);          // 80 -> sink band 8
+}
+
+uint32 PopulationDynamicsMgr::EligibleClassCount(uint8 level)
+{
+    // WotLK: both factions can play all 10 classes; Death Knight only at level >= 55
+    // (CONFIG_START_HEROIC_PLAYER_LEVEL). 9 below 55, 10 at/above.
+    return level >= sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL) ? 10u : 9u;
 }
 
 uint8 PopulationDynamicsMgr::ComputeCap(uint8 frontier) const
@@ -156,8 +169,42 @@ void PopulationDynamicsMgr::TakeCensus(Census& out) const
             continue;
         uint32 faction = p->GetTeamId() == TEAM_ALLIANCE ? 0u : 1u;
         out.count[faction][lvl]++;
+        out.clsCount[faction][CensusBand(lvl)][p->getClass()]++;
         out.total++;
     }
+}
+
+void PopulationDynamicsMgr::ComputeClassDeficit(uint8 cap, Census const& census,
+        std::array<uint32, 81> const& targets,
+        float deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS]) const
+{
+    uint8 const dkFloor = uint8(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL)); // 55
+
+    // 1) fair share per band per class = Sum over levels in band (<= cap) of
+    //    (target[L]/2) / eligibleClasses(L), counting class c only where eligible.
+    //    Faction-independent (per-faction want is target[L]/2 for both) -> compute once.
+    float fair[POPDYN_BANDS][POPDYN_CLASS_SLOTS] = {};
+    for (uint8 L = 1; L <= 80; ++L)
+    {
+        if (L > cap) continue;                          // unauthorized level contributes nothing
+        uint32 const band = CensusBand(L);
+        float const perClass = (float(targets[L]) / 2.0f) / float(EligibleClassCount(L));
+        for (uint32 c = 1; c < POPDYN_CLASS_SLOTS; ++c)
+        {
+            if (c == 10u) continue;                       // class id 10 unused in WotLK
+            if (c == static_cast<uint32>(CLASS_DEATH_KNIGHT) && L < dkFloor) continue;   // DK not eligible below 55
+            fair[band][c] += perClass;
+        }
+    }
+
+    // 2) deficit per faction = max(0, fair - census).
+    for (uint32 f = 0; f < 2; ++f)
+        for (uint32 b = 0; b < POPDYN_BANDS; ++b)
+            for (uint32 c = 0; c < POPDYN_CLASS_SLOTS; ++c)
+            {
+                float d = fair[b][c] - float(census.clsCount[f][b][c]);
+                deficit[f][b][c] = d > 0.0f ? d : 0.0f;
+            }
 }
 
 void PopulationDynamicsMgr::CollectSafeBots(std::array<std::vector<Player*>, 81> perLevel[2]) const

@@ -17,6 +17,11 @@
 
 class Player;
 
+// Class ids run 1..11 (10 is unused in WotLK); index arrays by class id directly. 9 census
+// bands: 0..7 = the decades (BandOf), 8 = level 80 (the sink).
+inline constexpr uint32 POPDYN_CLASS_SLOTS = 12;   // valid class ids < 12
+inline constexpr uint32 POPDYN_BANDS       = 9;    // 0..7 decades + 8 = level 80
+
 // Server population dynamics controller. Mirrors RaidSimulationMgr's frontier pattern:
 // a monotonic, persisted, cached real-player max-level value drives bot count + an up-only
 // level conveyor. See docs/superpowers/specs/2026-05-31-server-population-dynamics-design.md.
@@ -35,10 +40,16 @@ public:
 
     // faction index: 0 = Alliance, 1 = Horde. Per-LEVEL census: count[f][level], level 1..80 (index 0 unused).
     // Declared here (before ComputeTargets) so the public signature below can name it.
-    struct Census { std::array<uint32, 81> count[2] = {}; uint32 total = 0; };
+    struct Census {
+        std::array<uint32, 81> count[2] = {};                       // [faction][level] (unchanged)
+        uint32 clsCount[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS] = {};   // [faction][band][class]
+        uint32 total = 0;
+    };
 
     // --- pure math helpers (no DB, no locks); public for clarity/log-verification ---
     static uint32 BandOf(uint8 level);                     // level 1..79 -> band index 0..7 (80 = sink, handled separately)
+    static uint32 CensusBand(uint8 level);                 // 1..79 -> BandOf; 80 -> 8 (sink band)
+    static uint32 EligibleClassCount(uint8 level);         // playable classes allowed at level (10, or 9 below 55)
     uint8  ComputeCap(uint8 frontier) const;               // C = min(80, max(MinCap, F+Headroom)) — UNCHANGED
     // Per-level targets target[1..80] (index 0 unused). Level in band b -> populationBracket[b];
     // level 80 -> remainder (MaxPopulation - sum of bands); any level > cap -> 0. Returns spawn target P.
@@ -50,6 +61,10 @@ private:
 
     bool   IsSafeBot(Player* bot) const;       // alive, in world, idle, not raid-sim, no real-player adjacency
     void   TakeCensus(Census& out) const;      // iterate live bots, bin by (faction, level)
+    // fairShare - census, clamped >=0, per [faction][band][class]; pure (no DB/locks).
+    void ComputeClassDeficit(uint8 cap, Census const& census,
+                             std::array<uint32, 81> const& targets,
+                             float deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS]) const;
 
     // Collect SAFE bots per LEVEL per faction (pointers); no sort (the conveyor picks randomly).
     void CollectSafeBots(std::array<std::vector<Player*>, 81> perLevel[2]) const;
