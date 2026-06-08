@@ -11,6 +11,7 @@
 #define _PLAYERBOT_POPULATIONDYNAMICSMGR_H
 
 #include "Common.h"
+#include "ObjectGuid.h"   // PendingPromotion stores a bot GUID resolved at drain time
 #include <array>
 #include <mutex>
 #include <vector>
@@ -76,9 +77,18 @@ private:
 
     // Collect SAFE bots per LEVEL per CLASS per faction (pointers); no sort (the conveyor picks randomly).
     void CollectSafeBots(SafeBotPool& pool) const;
-    // The per-level deficit-fill conveyor (top-down L=79..2, random source from L-1, per-faction budget).
-    uint32 DriftUp(std::array<uint32, 81> const& targets, Census const& census,
-                   float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);  // returns promotions issued
+    // A queued promotion: a bot to level +1, resolved lazily at drain time. expectLevel is the
+    // source level (L-1) at plan time — a staleness guard so a logged-out/already-moved bot is skipped.
+    struct PendingPromotion { ObjectGuid guid; uint8 expectLevel; };
+
+    // Build the conveyor plan once per Period: the same top-down, class-favored deficit fill the old
+    // DriftUp did (PickFavoredSource/PickAnySource over the pool) — but push each picked bot onto
+    // _pending instead of promoting it inline. Per-faction MaxPromotionsPerCycle budget. Logs "PopDyn plan".
+    void BuildPlan(std::array<uint32, 81> const& targets, Census const& census,
+                   float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
+    // Drain queued promotions self-paced across world ticks (due = _planTotal * elapsed / Period).
+    // Re-validates each bot (FindPlayer + IsSafeBot + expectLevel) before IncreaseLevel.
+    void DripDrain();
     // The slow sink gate: only path into level 80 (random 79->80, SinkBatch/faction). Returns promotions issued.
     uint32 SinkGate(std::array<uint32, 81> const& targets, Census const& census,
                     float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
@@ -97,6 +107,13 @@ private:
     uint8  _cap = 0;                          // cached level cap = ComputeCap(_frontier); read by the DK-spawn gate
     uint32 _tickTimerMs = 0;                 // accumulator for Period (conveyor) cadence
     uint32 _sinkTimerMs = 0;                 // accumulator for SinkPeriod (level-80 sink-gate) cadence
+    // Conveyor drip state (BuildPlan fills once per Period; DripDrain consumes across ticks).
+    // _tickTimerMs (above) doubles as the elapsed-in-period clock that paces the drain.
+    std::vector<PendingPromotion> _pending;  // promotions queued by BuildPlan, drained over the period
+    uint32 _planTotal    = 0;                // size of the current plan
+    uint32 _planDrained  = 0;               // entries processed this period (promoted + skipped) — paces the drip
+    uint32 _planPromoted = 0;               // promoted this period (summary line)
+    uint32 _planSkipped  = 0;               // skipped (stale/unsafe) this period (summary line)
 };
 
 #define sPopulationDynamicsMgr PopulationDynamicsMgr::instance()

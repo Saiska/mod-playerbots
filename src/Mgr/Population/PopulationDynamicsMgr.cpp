@@ -294,57 +294,87 @@ Player* PopulationDynamicsMgr::PickFavoredSource(uint32 f, uint32 srcLevel, uint
     return bot;
 }
 
-uint32 PopulationDynamicsMgr::DriftUp(std::array<uint32, 81> const& targets, Census const& census,
+void PopulationDynamicsMgr::BuildPlan(std::array<uint32, 81> const& targets, Census const& census,
                                       float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool)
 {
-    uint32 issuedPerFaction[2] = { 0, 0 };
+    _pending.clear();
+    _planDrained = _planPromoted = _planSkipped = 0;
 
+    uint32 queuedPerFaction[2] = { 0, 0 };
     uint8 cap = CurrentCap();
     for (uint32 f = 0; f < 2; ++f)
     {
-        // Per-faction budget: the MaxPromotionsPerCycle ceiling, consumed top-down so the highest
-        // deficits fill first. No DriftRate (retired) — the cap alone bounds the per-cycle movement.
         uint32 budget = sPlayerbotAIConfig.populationMaxPromotionsPerCycle;
         if (budget == 0)
             continue;
 
         uint32 issued = 0;
-        // Top-down conveyor: fill each authorized level L from a safe bot at L-1,
-        // drawn by class deficit weight (or uniformly if favor is off).
-        // NEVER touch L=80 (that is the sink gate, §5). L=1 has no L-1 (base is spawner-fed).
         for (int L = 79; L >= 2 && issued < budget; --L)
         {
-            if (uint32(L) > cap)                           // level not authorized yet
+            if (uint32(L) > cap)
                 continue;
 
-            uint32 want = targets[uint32(L)] / 2;          // per-faction target for level L
+            uint32 want = targets[uint32(L)] / 2;
             if (census.count[f][uint32(L)] >= want)
-                continue;                                  // level L already at/over target
+                continue;
 
             uint32 need = std::min(want - census.count[f][uint32(L)], budget - issued);
 
             while (need > 0)
             {
+                // SAME class-favored source pick as the original DriftUp (preserves the DK fix).
+                // PickFavoredSource/PickAnySource REMOVE the bot from the pool; we queue its GUID
+                // + source level instead of promoting it now.
                 Player* bot = sPlayerbotAIConfig.populationClassFavor
                     ? PickFavoredSource(f, uint32(L) - 1, BandOf(uint8(L)), deficit, pool)
                     : PickAnySource(f, uint32(L) - 1, pool);
                 if (!bot)
-                    break;                                 // no safe bots at L-1
-                sRandomPlayerbotMgr.IncreaseLevel(bot);   // +1 (L-1 -> L), re-gears
+                    break;
+
+                _pending.push_back(PendingPromotion{ bot->GetGUID(), uint8(L - 1) });
                 ++issued;
                 --need;
                 if (issued >= budget)
                     break;
             }
         }
-        issuedPerFaction[f] = issued;
+        queuedPerFaction[f] = issued;
     }
 
-    uint32 total = issuedPerFaction[0] + issuedPerFaction[1];
-    LOG_INFO("playerbots", "PopDyn conveyor: promoted={} (A={} H={}) (cycleCap={})",
-             total, issuedPerFaction[0], issuedPerFaction[1],
+    _planTotal = uint32(_pending.size());
+    LOG_INFO("playerbots", "PopDyn plan: queued={} (A={} H={}) (cycleCap={})",
+             _planTotal, queuedPerFaction[0], queuedPerFaction[1],
              sPlayerbotAIConfig.populationMaxPromotionsPerCycle);
-    return total;
+}
+
+void PopulationDynamicsMgr::DripDrain()
+{
+    if (_pending.empty())
+        return;
+
+    uint32 periodMs = sPlayerbotAIConfig.populationPeriod * 1000u;
+    if (periodMs == 0)
+        periodMs = 1;
+    uint32 elapsed = std::min(_tickTimerMs, periodMs);
+    uint32 due = uint32(uint64(_planTotal) * elapsed / periodMs);
+    uint32 toDrain = due > _planDrained ? due - _planDrained : 0;
+
+    while (toDrain > 0 && !_pending.empty())
+    {
+        PendingPromotion pp = _pending.back();
+        _pending.pop_back();
+        ++_planDrained;
+        --toDrain;
+
+        Player* bot = ObjectAccessor::FindPlayer(pp.guid);
+        if (!bot || !IsSafeBot(bot) || bot->GetLevel() != pp.expectLevel)
+        {
+            ++_planSkipped;
+            continue;
+        }
+        sRandomPlayerbotMgr.IncreaseLevel(bot);         // +1 (expectLevel -> expectLevel+1), slim LevelUp
+        ++_planPromoted;
+    }
 }
 
 uint32 PopulationDynamicsMgr::SinkGate(std::array<uint32, 81> const& targets, Census const& census,
@@ -379,7 +409,7 @@ uint32 PopulationDynamicsMgr::SinkGate(std::array<uint32, 81> const& targets, Ce
                 : PickAnySource(f, 79u, pool);
             if (!bot)
                 break;
-            sRandomPlayerbotMgr.IncreaseLevel(bot);         // +1 (79 -> 80), re-gears
+            sRandomPlayerbotMgr.IncreaseLevel(bot);         // +1 (79 -> 80), slim LevelUp (gear/spec frozen)
             ++issuedPerFaction[f];
             --toMove;
         }
@@ -435,69 +465,84 @@ void PopulationDynamicsMgr::Update(uint32 diff)
 
     bool conveyorTick = _tickTimerMs >= sPlayerbotAIConfig.populationPeriod * 1000u;
     bool sinkTick     = _sinkTimerMs >= sPlayerbotAIConfig.populationSinkPeriod * 1000u;
-    if (!conveyorTick && !sinkTick)
-        return;                                            // neither cadence elapsed — nothing to do
 
-    uint8 cap = ComputeCap(_frontier);
-    _cap = cap;                                            // keep the cached cap fresh for the DK-login gate
-
-    Census census;
-    TakeCensus(census);
-
-    std::array<uint32, 81> targets{};
-    uint32 P = 0;
-    ComputeTargets(cap, census, targets, P);               // P uses census.count[80] (spec §3)
-
-    // Band-summed census (can't log 81 per-level numbers). One sum per band 0..7 + count[80], per faction,
-    // plus min/max occupied level. Greppable for live verification.
-    uint32 bandA[8] = {}, bandH[8] = {};
-    uint8  minLvl = 0, maxLvl = 0;
-    for (uint8 lvl = 1; lvl <= 79; ++lvl)
+    if (conveyorTick || sinkTick)
     {
-        uint32 a = census.count[0][lvl], h = census.count[1][lvl];
-        bandA[BandOf(lvl)] += a;
-        bandH[BandOf(lvl)] += h;
-        if (a + h > 0) { if (minLvl == 0) minLvl = lvl; maxLvl = lvl; }
+        uint8 cap = ComputeCap(_frontier);
+        _cap = cap;                                        // keep the cached cap fresh for the DK-login gate
+
+        Census census;
+        TakeCensus(census);
+
+        std::array<uint32, 81> targets{};
+        uint32 P = 0;
+        ComputeTargets(cap, census, targets, P);           // P uses census.count[80] (spec §3)
+
+        // Band-summed census (can't log 81 per-level numbers). One sum per band 0..7 + count[80], per faction,
+        // plus min/max occupied level. Greppable for live verification.
+        uint32 bandA[8] = {}, bandH[8] = {};
+        uint8  minLvl = 0, maxLvl = 0;
+        for (uint8 lvl = 1; lvl <= 79; ++lvl)
+        {
+            uint32 a = census.count[0][lvl], h = census.count[1][lvl];
+            bandA[BandOf(lvl)] += a;
+            bandH[BandOf(lvl)] += h;
+            if (a + h > 0) { if (minLvl == 0) minLvl = lvl; maxLvl = lvl; }
+        }
+        if (census.count[0][80] + census.count[1][80] > 0) { if (minLvl == 0) minLvl = 80; maxLvl = 80; }
+
+        LOG_INFO("playerbots", "PopDyn tick: F={} C={} P={} count80={} occupied=[{}..{}]",
+                 uint32(_frontier), uint32(cap), P,
+                 census.count[0][80] + census.count[1][80], uint32(minLvl), uint32(maxLvl));
+        LOG_INFO("playerbots", "PopDyn census: total={} bandA=[{},{},{},{},{},{},{},{}] bandH=[{},{},{},{},{},{},{},{}] c80=(A{} H{})",
+                 census.total,
+                 bandA[0],bandA[1],bandA[2],bandA[3],bandA[4],bandA[5],bandA[6],bandA[7],
+                 bandH[0],bandH[1],bandH[2],bandH[3],bandH[4],bandH[5],bandH[6],bandH[7],
+                 census.count[0][80], census.count[1][80]);
+
+        sRandomPlayerbotMgr.SetPopulationTarget(P);
+
+        float deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS] = {};
+        if (sPlayerbotAIConfig.populationClassFavor)
+            ComputeClassDeficit(cap, census, targets, deficit);
+
+        SafeBotPool pool;
+        CollectSafeBots(pool);
+
+        // DK is the canary: log its per-band census each tick (greppable: "PopDyn classfavor").
+        LOG_INFO("playerbots", "PopDyn classfavor: favor={} dkBand=[b5(A{} H{}) b6(A{} H{}) b7(A{} H{}) b8(A{} H{})]",
+                 sPlayerbotAIConfig.populationClassFavor ? 1 : 0,
+                 census.clsCount[0][5][CLASS_DEATH_KNIGHT], census.clsCount[1][5][CLASS_DEATH_KNIGHT],
+                 census.clsCount[0][6][CLASS_DEATH_KNIGHT], census.clsCount[1][6][CLASS_DEATH_KNIGHT],
+                 census.clsCount[0][7][CLASS_DEATH_KNIGHT], census.clsCount[1][7][CLASS_DEATH_KNIGHT],
+                 census.clsCount[0][8][CLASS_DEATH_KNIGHT], census.clsCount[1][8][CLASS_DEATH_KNIGHT]);
+
+        if (conveyorTick)
+        {
+            // Flush the PREVIOUS plan's remainder at full period before rebuilding. The self-paced
+            // ramp's `elapsed` maxes out at periodMs-diff before this reset, so `due` never reaches
+            // planTotal — without this flush the last few promotions of every plan are dropped on
+            // clear(), and a tiny plan (due rounds to 0) would starve permanently. Forcing
+            // elapsed=periodMs drains the tail; then we log the plan's completion summary.
+            if (_planTotal > 0)
+            {
+                _tickTimerMs = std::max<uint32>(sPlayerbotAIConfig.populationPeriod * 1000u, 1u);  // elapsed=periodMs -> due=_planTotal -> drain all remaining
+                DripDrain();
+                LOG_INFO("playerbots", "PopDyn conveyor: promoted={} skipped={} of {}",
+                         _planPromoted, _planSkipped, _planTotal);
+            }
+            _tickTimerMs = 0;                              // new period's drip clock starts at 0 (no inline burst)
+            BuildPlan(targets, census, deficit, pool);     // queues the class-favored picks; logs "PopDyn plan"
+        }
+        if (sinkTick)
+        {
+            _sinkTimerMs = 0;
+            SinkGate(targets, census, deficit, pool);      // logs its own "PopDyn sink" line (tiny, kept inline)
+        }
+
+        uint32 pruned = PruneTop(targets, census, pool);
+        LOG_INFO("playerbots", "PopDyn prune: removed={} (target80={})", pruned, targets[80]);
     }
-    if (census.count[0][80] + census.count[1][80] > 0) { if (minLvl == 0) minLvl = 80; maxLvl = 80; }
 
-    LOG_INFO("playerbots", "PopDyn tick: F={} C={} P={} count80={} occupied=[{}..{}]",
-             uint32(_frontier), uint32(cap), P,
-             census.count[0][80] + census.count[1][80], uint32(minLvl), uint32(maxLvl));
-    LOG_INFO("playerbots", "PopDyn census: total={} bandA=[{},{},{},{},{},{},{},{}] bandH=[{},{},{},{},{},{},{},{}] c80=(A{} H{})",
-             census.total,
-             bandA[0],bandA[1],bandA[2],bandA[3],bandA[4],bandA[5],bandA[6],bandA[7],
-             bandH[0],bandH[1],bandH[2],bandH[3],bandH[4],bandH[5],bandH[6],bandH[7],
-             census.count[0][80], census.count[1][80]);
-
-    sRandomPlayerbotMgr.SetPopulationTarget(P);
-
-    float deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS] = {};
-    if (sPlayerbotAIConfig.populationClassFavor)
-        ComputeClassDeficit(cap, census, targets, deficit);
-
-    SafeBotPool pool;
-    CollectSafeBots(pool);
-
-    // DK is the canary: log its per-band census each tick (greppable: "PopDyn classfavor").
-    LOG_INFO("playerbots", "PopDyn classfavor: favor={} dkBand=[b5(A{} H{}) b6(A{} H{}) b7(A{} H{}) b8(A{} H{})]",
-             sPlayerbotAIConfig.populationClassFavor ? 1 : 0,
-             census.clsCount[0][5][CLASS_DEATH_KNIGHT], census.clsCount[1][5][CLASS_DEATH_KNIGHT],
-             census.clsCount[0][6][CLASS_DEATH_KNIGHT], census.clsCount[1][6][CLASS_DEATH_KNIGHT],
-             census.clsCount[0][7][CLASS_DEATH_KNIGHT], census.clsCount[1][7][CLASS_DEATH_KNIGHT],
-             census.clsCount[0][8][CLASS_DEATH_KNIGHT], census.clsCount[1][8][CLASS_DEATH_KNIGHT]);
-
-    if (conveyorTick)
-    {
-        _tickTimerMs = 0;
-        DriftUp(targets, census, deficit, pool);           // logs its own "PopDyn conveyor" line
-    }
-    if (sinkTick)
-    {
-        _sinkTimerMs = 0;
-        SinkGate(targets, census, deficit, pool);          // logs its own "PopDyn sink" line
-    }
-
-    uint32 pruned = PruneTop(targets, census, pool);       // dormant in normal operation (spec §6)
-    LOG_INFO("playerbots", "PopDyn prune: removed={} (target80={})", pruned, targets[80]);
+    DripDrain();                                            // every tick: self-paced conveyor promotions
 }

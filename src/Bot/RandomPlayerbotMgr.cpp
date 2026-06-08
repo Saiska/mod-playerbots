@@ -1989,7 +1989,7 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
     if (lastLevel != level)
     {
         PlayerbotFactory factory(bot, level);
-        factory.Randomize(true);
+        factory.LevelUp();
     }
 
     if (pmo)

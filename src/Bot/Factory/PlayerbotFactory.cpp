@@ -808,6 +808,26 @@ void PlayerbotFactory::Randomize(bool incremental)
         pmo->finish();
 }
 
+// Slim level-up used by the PopulationDynamics conveyor. Does ONLY the level-defining work:
+// set the level + stats, then learn the new level's skills/spells so the bot is combat-ready.
+// Everything else Randomize(true) re-runs every promotion (mounts/bags/food/reputation/glyphs/
+// pet/consumables/enchant-reapply + a SetMoney gold re-roll) is intentionally dropped here — it
+// is already owned by MaintenanceAction on its staggered 2-4h timer. Gear and spec are untouched
+// (already frozen under EquipmentPersistence). This is a contiguous, proven subset of Randomize.
+void PlayerbotFactory::LevelUp()
+{
+    Prepare();                       // mirror Randomize's setup (bot/botAI/level context)
+    bot->GiveLevel(level);           // confirm new level (Prepare() already set it; kept to mirror Randomize)
+    bot->InitStatsForLevel(true);    // HP/mana/stats for the new level
+    bot->LearnDefaultSkills();
+    InitSkills();                    // weapon/defense skill caps scale with level
+    InitClassSpells();
+    InitAvailableSpells();           // learn the new level's abilities -> combat-ready immediately
+    bot->SetHealth(bot->GetMaxHealth());
+    bot->SetPower(POWER_MANA, bot->GetMaxPower(POWER_MANA));
+    bot->SaveToDB(false, false);
+}
+
 void PlayerbotFactory::Refresh()
 {
     // Prepare();
