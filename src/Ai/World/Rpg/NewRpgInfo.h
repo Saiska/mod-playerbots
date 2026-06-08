@@ -80,6 +80,10 @@ struct NewRpgInfo
 
     uint32 startT{0};  // start timestamp of the current status
 
+    // --- occupation satiation (pipe 1) — in-memory only, no DB ---
+    float  satiation[CAT_COUNT] = {0.0f};  // [0,1] per BotActivityCategory
+    uint32 lastSatiationUpdateMs{0};       // last meter-integration tick (0 = uninitialised)
+
     // MOVE_FAR
     float nearestMoveFarDis{FLT_MAX};
     uint32 stuckTs{0};

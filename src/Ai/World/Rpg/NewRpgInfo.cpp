@@ -90,6 +90,9 @@ void NewRpgInfo::Reset()
 {
     data = Idle{};
     startT = getMSTime();
+    for (uint8 c = 0; c < CAT_COUNT; ++c)
+        satiation[c] = 0.0f;
+    lastSatiationUpdateMs = 0;
 }
 
 void NewRpgInfo::SetMoveFarTo(WorldPosition pos)

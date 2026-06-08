@@ -1104,6 +1104,27 @@ AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.Pastime = 12
 
+# --- Occupation satiation (variety) -------------------------------------------
+# Biases the RPG occupation pick above AWAY from recently-done activities. Each
+# bot keeps a per-category meter that rises while doing that category and decays
+# otherwise; a high meter suppresses that category's weight in the pick.
+# Categories:
+#   ADVENTURE = GoGrind, GoCamp, WanderRandom, DoQuest
+#   SOCIAL    = WanderNpc, Pastime
+#   REST      = Rest
+#   TRAVEL    = TravelFlight
+#   PVP       = OutdoorPvp
+# Enable = 0 restores the legacy static-weight pick (byte-for-byte).
+# RiseRatePerSec / DecayRatePerSec: meter units per second (meter range 0..1);
+#   defaults fill a meter in ~400s of activity, recover it in ~670s of neglect.
+# SuppressExponent: steepness of (1 - meter)^k (higher = sharper "had enough").
+# MinAppealFrac: floor as a fraction of base weight so nothing is fully starved.
+AiPlayerbot.RpgSatiation.Enable = 1
+AiPlayerbot.RpgSatiation.RiseRatePerSec = 0.0025
+AiPlayerbot.RpgSatiation.DecayRatePerSec = 0.0015
+AiPlayerbot.RpgSatiation.SuppressExponent = 1.5
+AiPlayerbot.RpgSatiation.MinAppealFrac = 0.05
+
 # Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, gather, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
 # Social.Radius: yards to search for a companion bot (also the leash - partner beyond this is dropped).

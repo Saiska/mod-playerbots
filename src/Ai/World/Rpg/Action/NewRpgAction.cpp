@@ -1,5 +1,6 @@
 #include "NewRpgAction.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <unordered_map>
@@ -71,6 +72,37 @@ bool StartRpgDoQuestAction::Execute(Event event)
 bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
+
+    // --- occupation satiation: integrate meters (dt-based; runs every tick) ---
+    // Current category rises; all others decay. IDLE -> CategoryOf == CAT_COUNT,
+    // so no category matches and everything decays.
+    if (sPlayerbotAIConfig.rpgSatiationEnable)
+    {
+        uint32 nowMs = getMSTime();
+        if (info.lastSatiationUpdateMs == 0)
+        {
+            info.lastSatiationUpdateMs = nowMs;
+        }
+        else
+        {
+            uint32 elapsedMs = GetMSTimeDiffToNow(info.lastSatiationUpdateMs);  // wrap-safe
+            info.lastSatiationUpdateMs = nowMs;
+            if (elapsedMs > 60000)
+                elapsedMs = 60000;  // clamp long idle gaps so meters don't jump
+            float dt = elapsedMs / 1000.0f;
+            BotActivityCategory cur = CategoryOf(info.GetStatus());
+            for (uint8 c = 0; c < CAT_COUNT; ++c)
+            {
+                if (c == static_cast<uint8>(cur))
+                    info.satiation[c] =
+                        std::min(1.0f, info.satiation[c] + sPlayerbotAIConfig.rpgSatiationRiseRatePerSec * dt);
+                else
+                    info.satiation[c] =
+                        std::max(0.0f, info.satiation[c] - sPlayerbotAIConfig.rpgSatiationDecayRatePerSec * dt);
+            }
+        }
+    }
+
     NewRpgStatus status = info.GetStatus();
     switch (status)
     {
