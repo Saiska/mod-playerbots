@@ -22,6 +22,14 @@ class Player;
 inline constexpr uint32 POPDYN_CLASS_SLOTS = 12;   // valid class ids < 12
 inline constexpr uint32 POPDYN_BANDS       = 9;    // 0..7 decades + 8 = level 80
 
+// Safe bots binned [faction][level][class] so the conveyor can draw a chosen class at L-1.
+struct SafeBotPool {
+    std::vector<Player*> bots[2][81][POPDYN_CLASS_SLOTS];
+    void clear() {
+        for (auto& f : bots) for (auto& l : f) for (auto& c : l) c.clear();
+    }
+};
+
 // Server population dynamics controller. Mirrors RaidSimulationMgr's frontier pattern:
 // a monotonic, persisted, cached real-player max-level value drives bot count + an up-only
 // level conveyor. See docs/superpowers/specs/2026-05-31-server-population-dynamics-design.md.
@@ -66,17 +74,21 @@ private:
                              std::array<uint32, 81> const& targets,
                              float deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS]) const;
 
-    // Collect SAFE bots per LEVEL per faction (pointers); no sort (the conveyor picks randomly).
-    void CollectSafeBots(std::array<std::vector<Player*>, 81> perLevel[2]) const;
+    // Collect SAFE bots per LEVEL per CLASS per faction (pointers); no sort (the conveyor picks randomly).
+    void CollectSafeBots(SafeBotPool& pool) const;
     // The per-level deficit-fill conveyor (top-down L=79..2, random source from L-1, per-faction budget).
     uint32 DriftUp(std::array<uint32, 81> const& targets, Census const& census,
-                   std::array<std::vector<Player*>, 81> perLevel[2]);    // returns promotions issued
+                   float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);  // returns promotions issued
     // The slow sink gate: only path into level 80 (random 79->80, SinkBatch/faction). Returns promotions issued.
     uint32 SinkGate(std::array<uint32, 81> const& targets, Census const& census,
-                    std::array<std::vector<Player*>, 81> perLevel[2]);
+                    float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
     // Dormant insurance: sheds level-80 surplus if target[80] later drops below count[80] (per-faction budget).
-    uint32 PruneTop(std::array<uint32, 81> const& targets, Census const& census,
-                    std::array<std::vector<Player*>, 81> perLevel[2]);   // returns bots removed
+    uint32 PruneTop(std::array<uint32, 81> const& targets, Census const& census, SafeBotPool& pool);  // returns bots removed
+    // Draw a source bot from level `srcLevel`, faction `f`: weighted-random by class deficit in
+    // `band` (favored), or uniform over all classes (legacy). Removes+returns it; nullptr if none.
+    Player* PickFavoredSource(uint32 f, uint32 srcLevel, uint32 band,
+                              float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
+    Player* PickAnySource(uint32 f, uint32 srcLevel, SafeBotPool& pool);
 
     void PersistFrontier();                  // UPDATE playerbots_population_state ... WHERE id=1 (caller holds _mutex)
 
