@@ -69,6 +69,26 @@ void NewRpgInfo::ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId)
     data = pvp;
 }
 
+void NewRpgInfo::ChangeToTravelMount(WorldPosition pos)
+{
+    startT = getMSTime();
+    data = TravelMount{pos};
+}
+
+void NewRpgInfo::ChangeToExploreLandmark(WorldPosition pos)
+{
+    startT = getMSTime();
+    data = ExploreLandmark{pos, 0, 0};
+}
+
+void NewRpgInfo::ChangeToGatheringCircuit(uint32 maxNodes)
+{
+    startT = getMSTime();
+    GatheringCircuit g;
+    g.maxNodes = maxNodes;
+    data = g;
+}
+
 void NewRpgInfo::ChangeToRest()
 {
     startT = getMSTime();
@@ -117,6 +137,9 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, DoQuest>) return RPG_DO_QUEST;
         if constexpr (std::is_same_v<T, TravelFlight>) return RPG_TRAVEL_FLIGHT;
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
+        if constexpr (std::is_same_v<T, TravelMount>) return RPG_TRAVEL_MOUNT;
+        if constexpr (std::is_same_v<T, ExploreLandmark>) return RPG_EXPLORE_LANDMARK;
+        if constexpr (std::is_same_v<T, GatheringCircuit>) return RPG_GATHERING_CIRCUIT;
         return RPG_IDLE;
     }, data);
 }
@@ -195,6 +218,19 @@ std::string NewRpgInfo::ToString()
                 out << "\nNo capture point assigned.";
             else
                 out << "\ncapturePointSpawnId: " << arg.capturePointSpawnId;
+        }
+        else if constexpr (std::is_same_v<T, TravelMount>)
+        {
+            out << "TRAVEL_MOUNT";
+        }
+        else if constexpr (std::is_same_v<T, ExploreLandmark>)
+        {
+            out << "EXPLORE_LANDMARK";
+        }
+        else if constexpr (std::is_same_v<T, GatheringCircuit>)
+        {
+            out << "GATHERING_CIRCUIT";
+            out << "\nvisited: " << arg.visited << "/" << arg.maxNodes;
         }
         else
             out << "UNKNOWN";

@@ -233,6 +233,9 @@ public:
         creators["wander random status"] = &TriggerContext::wander_random_status;
         creators["wander npc status"] = &TriggerContext::wander_npc_status;
         creators["pastime status"] = &TriggerContext::pastime_status;
+        creators["travel mount status"] = &TriggerContext::travel_mount_status;
+        creators["explore landmark status"] = &TriggerContext::explore_landmark_status;
+        creators["gathering circuit status"] = &TriggerContext::gathering_circuit_status;
         creators["do quest status"] = &TriggerContext::do_quest_status;
         creators["travel flight status"] = &TriggerContext::travel_flight_status;
         creators["outdoor pvp status"] = &TriggerContext::outdoor_pvp_status;
@@ -444,6 +447,9 @@ private:
     static Trigger* wander_random_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_WANDER_RANDOM); }
     static Trigger* wander_npc_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_WANDER_NPC); }
     static Trigger* pastime_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_PASTIME); }
+    static Trigger* travel_mount_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_TRAVEL_MOUNT); }
+    static Trigger* explore_landmark_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_EXPLORE_LANDMARK); }
+    static Trigger* gathering_circuit_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_GATHERING_CIRCUIT); }
     static Trigger* do_quest_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_DO_QUEST); }
     static Trigger* travel_flight_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_TRAVEL_FLIGHT); }
     static Trigger* outdoor_pvp_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_OUTDOOR_PVP); }

@@ -39,6 +39,8 @@ protected:
     ObjectGuid SelectLoiterPoi(uint8& outPoiType);
     ObjectGuid SelectVendorNpc();
     ObjectGuid SelectTrainingDummy();
+    bool       SelectFarTaxiDest(WorldPosition& out);
+    ObjectGuid SelectGatherNode();   // promoted from file-static
     // Nearest random bot within Pastime.Social.Radius that is idle-ish OR already socializing
     // (or a player if Pastime.Social.IncludePlayers). Empty if none.
     ObjectGuid SelectSocialPartner();

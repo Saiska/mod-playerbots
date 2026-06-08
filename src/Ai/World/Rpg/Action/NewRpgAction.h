@@ -53,6 +53,9 @@ protected:
     const int32 statusRestDuration = 30 * IN_MILLISECONDS ;
     const int32 statusDoQuestDuration = 30 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusOutDoorPvPDuration = HOUR * IN_MILLISECONDS ;
+    const int32 statusTravelMountDuration = 15 * MINUTE * IN_MILLISECONDS;
+    const int32 statusExploreDuration = 10 * MINUTE * IN_MILLISECONDS;
+    const int32 statusGatheringDuration = 20 * MINUTE * IN_MILLISECONDS;
 };
 
 class NewRpgGoGrindAction : public NewRpgBaseAction
@@ -109,6 +112,27 @@ class NewRpgTravelFlightAction : public NewRpgBaseAction
 {
 public:
     NewRpgTravelFlightAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg travel flight") {}
+    bool Execute(Event event) override;
+};
+
+class NewRpgTravelMountAction : public NewRpgBaseAction
+{
+public:
+    NewRpgTravelMountAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg travel mount") {}
+    bool Execute(Event event) override;
+};
+
+class NewRpgExploreLandmarkAction : public NewRpgBaseAction
+{
+public:
+    NewRpgExploreLandmarkAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg explore landmark") {}
+    bool Execute(Event event) override;
+};
+
+class NewRpgGatheringCircuitAction : public NewRpgBaseAction
+{
+public:
+    NewRpgGatheringCircuitAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg gathering circuit") {}
     bool Execute(Event event) override;
 };
 
