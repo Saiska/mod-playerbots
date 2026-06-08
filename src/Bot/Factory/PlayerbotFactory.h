@@ -57,6 +57,7 @@ public:
     static void Init();
     void Refresh();
     void Randomize(bool incremental);
+    void LevelUp();   // slim +1 level-up: level-essential subset of Randomize (no kit re-init, no gold re-roll)
     static std::list<uint32> classQuestIds;
     void ClearEverything();
     void InitSkills();
