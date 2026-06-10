@@ -34,6 +34,11 @@ protected:
     bool MoveRandomNear(float moveStep = 50.0f, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, WorldObject* center = nullptr);
     bool ForceToWait(uint32 duration, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
 
+    /* EMOTE CADENCE (occupation-emote-palettes) */
+    // Re-assert the behavior's sustained pose + fire a timed, jittered, non-repeating
+    // one-shot from the (beh,variant) EmotePalette. Call from a stationary dwell point.
+    void TickEmoteCadence(BotBehaviorId beh, uint8 variant);
+
     /* QUEST RELATED CHECK */
     ObjectGuid ChooseNpcOrGameObjectToInteract(bool questgiverOnly = false, float distanceLimit = 0.0f);
     ObjectGuid SelectLoiterPoi(uint8& outPoiType);

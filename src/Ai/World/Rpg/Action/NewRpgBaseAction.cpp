@@ -132,6 +132,44 @@ namespace
     }
 } // anonymous namespace
 
+void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant)
+{
+    const EmotePalette& pal = LookupPalette(beh, variant);
+    NewRpgInfo& info = botAI->rpgInfo;
+
+    // 1. sustained pose (held, replicated) — re-assert each tick; dismount first (a mount hides the pose)
+    if (pal.sustainedPose)
+    {
+        if (bot->IsMounted())
+            bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+        if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != pal.sustainedPose)
+            bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, pal.sustainedPose);
+    }
+
+    // 2. timed, jittered, non-repeating one-shot
+    if (!sPlayerbotAIConfig.emoteCadenceEnable || pal.oneShotCount == 0)
+        return;
+    uint32 mn = sPlayerbotAIConfig.emoteCadenceMin[beh];
+    uint32 mx = sPlayerbotAIConfig.emoteCadenceMax[beh];
+    if (mn == 0 && mx == 0) return;                       // off for this behavior
+    uint32 now = getMSTime();
+    if (info.lastEmoteMs == 0)
+    {
+        info.lastEmoteMs = now;
+        info.nextEmoteGapMs = urand(mn, mx) * IN_MILLISECONDS;
+        return;
+    }
+    if (GetMSTimeDiffToNow(info.lastEmoteMs) < info.nextEmoteGapMs)
+        return;
+    uint8 idx = (uint8)urand(0, pal.oneShotCount - 1);
+    if (pal.oneShotCount > 1 && idx == info.lastEmoteIdx)  // non-repeat
+        idx = (idx + 1) % pal.oneShotCount;
+    bot->HandleEmoteCommand(pal.oneShots[idx]);
+    info.lastEmoteIdx = idx;
+    info.lastEmoteMs = now;
+    info.nextEmoteGapMs = urand(mn, mx) * IN_MILLISECONDS;
+}
+
 bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
 {
     if (dest == WorldPosition())

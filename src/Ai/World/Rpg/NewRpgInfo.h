@@ -89,6 +89,11 @@ struct NewRpgInfo
 
     uint32 startT{0};  // start timestamp of the current status
 
+    // --- emote cadence state (occupation-emote-palettes) — restarts each status change ---
+    uint32 lastEmoteMs{0};
+    uint32 nextEmoteGapMs{0};
+    uint8  lastEmoteIdx{0xFF};
+
     // --- occupation satiation (pipe 1) — in-memory only, no DB ---
     float  satiation[CAT_COUNT] = {0.0f};  // [0,1] per BotActivityCategory
     uint32 lastSatiationUpdateMs{0};       // last meter-integration tick (0 = uninitialised)
