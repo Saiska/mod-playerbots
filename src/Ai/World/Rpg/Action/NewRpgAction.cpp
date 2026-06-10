@@ -292,7 +292,10 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
         }
 
         if (data.lastReach && GetMSTimeDiffToNow(data.lastReach) < npcStayTime)
+        {
+            TickEmoteCadence(BEH_WANDER_NPC, 0);   // dwell-facing-NPC hold
             return false;
+        }
 
         // has reached the npc for more than `npcStayTime`, select the next target
         data.npcOrGo = ObjectGuid();
@@ -309,31 +312,6 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
     }
 
     return true;
-}
-
-static void PerformSocialEmote(Player* bot)
-{
-    auto const& names = sPlayerbotAIConfig.pastimeSocialEmotes;
-    if (names.empty())
-        return;
-    std::string const& name = names[urand(0, names.size() - 1)];
-    if (name == "sit")
-    {
-        bot->SetStandState(UNIT_STAND_STATE_SIT);
-        return;
-    }
-    static const std::unordered_map<std::string, uint32> m = {
-        {"dance", EMOTE_STATE_DANCE}, {"cheer", EMOTE_ONESHOT_CHEER}, {"laugh", EMOTE_ONESHOT_LAUGH},
-        {"applaud", EMOTE_ONESHOT_APPLAUD}, {"point", EMOTE_ONESHOT_POINT}, {"talk", EMOTE_ONESHOT_TALK},
-        {"wave", EMOTE_ONESHOT_WAVE}, {"bow", EMOTE_ONESHOT_BOW}, {"roar", EMOTE_ONESHOT_ROAR}
-    };
-    auto it = m.find(name);
-    if (it != m.end())
-    {
-        if (bot->getStandState() != UNIT_STAND_STATE_STAND)
-            bot->SetStandState(UNIT_STAND_STATE_STAND);
-        bot->HandleEmoteCommand(it->second);
-    }
 }
 
 bool NewRpgPastimeAction::Execute(Event /*event*/)
@@ -456,7 +434,7 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             info.ChangeToIdle();
             return true;
         }
-        bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
+        TickEmoteCadence(BEH_CRAFT, 0);   // table holds USE_STANDING as the sustained pose; cadence layers one-shots
         return false;
     }
 
@@ -510,7 +488,10 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             return true;
         }
         if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
+        {
+            TickEmoteCadence(BEH_REPAIR_SELL, 0);   // post-arrival dwell hold at the vendor
             return false;
+        }
         info.ChangeToIdle();
         return true;
     }
@@ -587,12 +568,11 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return true;
     }
     bot->SetFacingToObject(target);
-    if (!data.lastEmote ||
-        GetMSTimeDiffToNow(data.lastEmote) >= sPlayerbotAIConfig.pastimeSocialEmoteInterval * IN_MILLISECONDS)
-    {
-        PerformSocialEmote(bot);
-        data.lastEmote = getMSTime();
-    }
+    // Route the social emote through the shared cadence helper (self-gating timer +
+    // non-repeating pick from the BEH_SOCIAL one-shot pool). This replaces the old
+    // PerformSocialEmote one-shot + the pastimeSocialEmoteInterval gate (the helper
+    // owns the timing now).
+    TickEmoteCadence(BEH_SOCIAL, 0);
     return false;
 }
 
@@ -852,6 +832,10 @@ bool NewRpgTravelMountAction::Execute(Event /*event*/)
     {
         if (MoveFarTo(data->pos))
             return true;
+        // Arrival/holding nudge: pathing couldn't advance, so the bot is effectively
+        // parked. BEH_TRAVEL_MOUNT's palette is {nullptr,0} (a mount hides any pose),
+        // so this is a no-op today but keeps travel on the shared cadence call site.
+        TickEmoteCadence(BEH_TRAVEL_MOUNT, 0);
         return MoveRandomNear(10.0f);
     }
     return false;
@@ -897,6 +881,7 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
         context->GetValue<LootObject>("loot target")->Set(lootObj);
         botAI->DoSpecificAction("open loot", Event(), true);
     }
+    TickEmoteCadence(BEH_GATHERING_CIRCUIT, 0);   // between-node pause at the harvested node
     ++data->visited;
     data->node = ObjectGuid();   // advance to the next node
     return true;

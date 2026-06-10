@@ -63,8 +63,9 @@ namespace
     //
     // Constants resolved against SharedDefines.h. Spec-listed emotes that have no
     // matching EMOTE_ONESHOT_* in 3.3.5a (SHRUG, WORK-oneshot, YAWN, DRINK) were
-    // dropped to the nearest proven one-shot (the PerformSocialEmote set + EAT /
-    // QUESTION). FISH/DUMMY/DUEL/TRAVEL_*/OUTDOOR_PVP carry no pool — the action
+    // dropped to the nearest proven one-shot (the legacy social-emote set —
+    // dance/cheer/laugh/applaud/point/talk/wave/bow/roar — plus EAT / QUESTION).
+    // FISH/DUMMY/DUEL/TRAVEL_*/OUTDOOR_PVP carry no pool — the action
     // (channel / melee / cast / movement) is itself the animation.
     // -----------------------------------------------------------------------
 

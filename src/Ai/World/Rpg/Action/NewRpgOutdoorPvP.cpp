@@ -118,7 +118,12 @@ bool NewRpgOutdoorPvpAction::PatrolCapturePoint(GameObject* objectiveGO, float r
 
     // Randomly pause at the current spot before picking a new patrol point
     if (urand(0, 2) == 0)
+    {
+        // Stationary patrol hold. BEH_OUTDOOR_PVP's palette is {nullptr,0} (the fight is
+        // the action), so this is a no-op today but keeps the hold on the shared cadence.
+        TickEmoteCadence(BEH_OUTDOOR_PVP, 0);
         return ForceToWait(urand(3000, 6000));
+    }
 
     float patrolRadius = radius * 0.8f;
     if (MoveRandomNear(patrolRadius, MovementPriority::MOVEMENT_NORMAL, objectiveGO))
