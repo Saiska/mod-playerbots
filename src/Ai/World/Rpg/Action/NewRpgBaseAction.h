@@ -81,4 +81,10 @@ protected:
     const uint32 stuckTime = 90 * 1000;
 };
 
+// ---------------------------------------------------------------------------
+// Pastime eligibility probe accessor (Task 2 census log calls this).
+// Arrays must be size 10 (one slot per BotActivity index 0..9).
+// ---------------------------------------------------------------------------
+void GetPastimeProbeCounts(uint32 elig[10], uint32 chosen[10], uint32 saw[10], uint32& duelAreaBlocked);
+
 #endif
