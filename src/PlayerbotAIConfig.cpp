@@ -856,6 +856,61 @@ bool PlayerbotAIConfig::Initialize()
              pastimeRepairSellWeight,
              pastimeDummyWeight, uint32(pastimeDummyEntries.size()));
 
+    // --- per-behavior emote cadence (occupation-emote-palettes) ---
+    // Tier defaults (seconds), indexed by BotBehaviorId enum order:
+    //   DENSE  3/6  = social, loiter, wander_npc
+    //   MEDIUM 6/12 = rest, craft, gathering_circuit, do_quest, outdoor_pvp, repair_sell
+    //   SPARSE/off 9999 = fish, dummy, duel, go_grind, wander_random, travel_flight, travel_mount
+    //   BEH_NONE = 0/0
+    emoteCadenceEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.EmoteCadence.Enable", true);
+    static const uint32 defMin[BEH_COUNT] = {
+        /*BEH_NONE*/              0,
+        /*BEH_GO_GRIND*/         9999,
+        /*BEH_WANDER_RANDOM*/    9999,
+        /*BEH_DO_QUEST*/         6,
+        /*BEH_GATHERING_CIRCUIT*/6,
+        /*BEH_REST*/             6,
+        /*BEH_WANDER_NPC*/       3,
+        /*BEH_TRAVEL_FLIGHT*/    9999,
+        /*BEH_TRAVEL_MOUNT*/     9999,
+        /*BEH_OUTDOOR_PVP*/      6,
+        /*BEH_SOCIAL*/           3,
+        /*BEH_LOITER*/           3,
+        /*BEH_FISH*/             9999,
+        /*BEH_CRAFT*/            6,
+        /*BEH_DUEL*/             9999,
+        /*BEH_REPAIR_SELL*/      6,
+        /*BEH_DUMMY*/            9999,
+    };
+    static const uint32 defMax[BEH_COUNT] = {
+        /*BEH_NONE*/              0,
+        /*BEH_GO_GRIND*/         9999,
+        /*BEH_WANDER_RANDOM*/    9999,
+        /*BEH_DO_QUEST*/         12,
+        /*BEH_GATHERING_CIRCUIT*/12,
+        /*BEH_REST*/             12,
+        /*BEH_WANDER_NPC*/       6,
+        /*BEH_TRAVEL_FLIGHT*/    9999,
+        /*BEH_TRAVEL_MOUNT*/     9999,
+        /*BEH_OUTDOOR_PVP*/      12,
+        /*BEH_SOCIAL*/           6,
+        /*BEH_LOITER*/           6,
+        /*BEH_FISH*/             9999,
+        /*BEH_CRAFT*/            12,
+        /*BEH_DUEL*/             9999,
+        /*BEH_REPAIR_SELL*/      12,
+        /*BEH_DUMMY*/            9999,
+    };
+    for (uint8 b = 0; b < BEH_COUNT; ++b)
+    {
+        std::string key = PlayerbotAI::BehaviorKey((BotBehaviorId)b);
+        if (key.empty()) continue;   // BEH_NONE has no key
+        emoteCadenceMin[b] = sConfigMgr->GetOption<uint32>("AiPlayerbot.EmoteCadence." + key + ".Min", defMin[b]);
+        emoteCadenceMax[b] = sConfigMgr->GetOption<uint32>("AiPlayerbot.EmoteCadence." + key + ".Max", defMax[b]);
+        if (emoteCadenceMax[b] < emoteCadenceMin[b]) std::swap(emoteCadenceMin[b], emoteCadenceMax[b]);
+    }
+    LOG_INFO("server.loading", "[EmoteCadence] enabled={} (per-behavior min/max loaded)", emoteCadenceEnable);
+
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);
 

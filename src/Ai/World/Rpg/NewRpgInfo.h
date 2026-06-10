@@ -65,6 +65,8 @@ struct NewRpgInfo
     struct Rest
     {
         Rest() = default;
+        ObjectGuid chair{};     // seated chair GO (empty = floor-sit / not yet resolved)
+        uint32 lastReach{0};    // 0 = en route / not yet resolved; set once on arrival at the rest pos
     };
     // RPG_OUTDOOR_PVP
     struct OutdoorPvP
@@ -88,6 +90,11 @@ struct NewRpgInfo
     };
 
     uint32 startT{0};  // start timestamp of the current status
+
+    // --- emote cadence state (occupation-emote-palettes) — restarts each status change ---
+    uint32 lastEmoteMs{0};
+    uint32 nextEmoteGapMs{0};
+    uint8  lastEmoteIdx{0xFF};
 
     // --- occupation satiation (pipe 1) — in-memory only, no DB ---
     float  satiation[CAT_COUNT] = {0.0f};  // [0,1] per BotActivityCategory

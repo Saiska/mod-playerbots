@@ -39,22 +39,6 @@ static void EndSocialPastime(Player* bot)
     bot->ClearEmoteState();   // zeroes UNIT_NPC_EMOTESTATE -> drops any held loiter pose
 }
 
-// Sustained, replicated pose per loiter POI. Driven via UNIT_NPC_EMOTESTATE (a UF_FLAG_PUBLIC field that
-// renders on nearby clients — the same mechanism mod-ollama-chat uses for a held dance), NOT SetStandState
-// or a one-shot HandleEmoteCommand, neither of which holds a visible pose on a bot. 0 = no pose (just stand).
-static uint32 LoiterEmoteState(uint8 poiType)
-{
-    switch (static_cast<BotCityPoi>(poiType))
-    {
-        case POI_INNKEEPER:  return EMOTE_STATE_SIT;            // 13  — seated at the inn
-        case POI_FORGE:      return EMOTE_STATE_USE_STANDING;   // 69  — smith/use pose at the anvil
-        case POI_BANKER:
-        case POI_AUCTIONEER:
-        case POI_TRAINER:    return EMOTE_STATE_TALK;           // 378 — conversing / doing business
-        default:             return 0;                          // mailbox / none — just stand
-    }
-}
-
 bool TellRpgStatusAction::Execute(Event event)
 {
     Player* owner = event.getOwner();
@@ -192,13 +176,64 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
         case RPG_REST:
         {
+            auto& rest = std::get<NewRpgInfo::Rest>(info.data);
             // REST -> IDLE
             if (info.HasStatusPersisted(statusRestDuration))
             {
+                // Leave REST in a neutral pose: the chair Use set a SIT_*_CHAIR stand-state
+                // and/or TickEmoteCadence held EMOTE_STATE_SIT — clear both so the bot stands.
+                if (bot->getStandState() != UNIT_STAND_STATE_STAND)
+                    bot->SetStandState(UNIT_STAND_STATE_STAND);
+                bot->ClearEmoteState();
+                rest.chair = ObjectGuid();
                 info.ChangeToIdle();
                 return true;
             }
-            break;
+
+            // Stationary REST hold. ChangeToRest() already sat the bot (UNIT_STAND_STATE_SIT)
+            // in place; there is no dedicated REST perform action, so this arm is the per-tick
+            // stationary point. On first reach, resolve a nearby inn chair once.
+            if (!rest.lastReach)
+            {
+                rest.lastReach = getMSTime();
+                rest.chair = SelectInnChair(15.0f);
+            }
+
+            bool chaired = false;
+            if (rest.chair)
+            {
+                GameObject* chair = ObjectAccessor::GetGameObject(*bot, rest.chair);
+                if (!chair || !chair->isSpawned())
+                {
+                    rest.chair = ObjectGuid();   // chair despawned -> floor fallback
+                }
+                else if (bot->GetExactDist(chair) > INTERACTION_DISTANCE)
+                {
+                    // Path into seating range; keep the bot moving toward the chair this tick.
+                    if (MoveWorldObjectTo(rest.chair))
+                        return true;
+                    // Pathing failed (offset in geometry); abandon the chair and floor-sit.
+                    rest.chair = ObjectGuid();
+                }
+                else
+                {
+                    // In range. Seat on a free slot if not already chair-seated. The bot starts
+                    // this status at UNIT_STAND_STATE_SIT(1); a successful chair Use teleports it
+                    // onto a slot and sets UNIT_STAND_STATE_SIT_LOW_CHAIR(4)..SIT_HIGH_CHAIR(6).
+                    if (bot->getStandState() < UNIT_STAND_STATE_SIT_LOW_CHAIR)
+                        chair->Use(bot);
+                    if (bot->getStandState() >= UNIT_STAND_STATE_SIT_LOW_CHAIR)
+                        chaired = true;
+                    else
+                        rest.chair = ObjectGuid();   // chair full / Use failed -> floor fallback
+                }
+            }
+
+            // Chaired: the chair already provides the seated pose, so do one-shots ONLY (skip the
+            // EMOTE_STATE_SIT re-assert that would fight the SIT_*_CHAIR stand-state). Floor fallback:
+            // the BEH_REST palette pose (EMOTE_STATE_SIT) is the held seated baseline.
+            TickEmoteCadence(BEH_REST, 0, chaired);
+            return true;   // HOLD so movement AI doesn't walk the resting bot off
         }
         case RPG_OUTDOOR_PVP:
         {
@@ -292,7 +327,10 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
         }
 
         if (data.lastReach && GetMSTimeDiffToNow(data.lastReach) < npcStayTime)
+        {
+            TickEmoteCadence(BEH_WANDER_NPC, 0);   // dwell-facing-NPC hold
             return false;
+        }
 
         // has reached the npc for more than `npcStayTime`, select the next target
         data.npcOrGo = ObjectGuid();
@@ -309,31 +347,6 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
     }
 
     return true;
-}
-
-static void PerformSocialEmote(Player* bot)
-{
-    auto const& names = sPlayerbotAIConfig.pastimeSocialEmotes;
-    if (names.empty())
-        return;
-    std::string const& name = names[urand(0, names.size() - 1)];
-    if (name == "sit")
-    {
-        bot->SetStandState(UNIT_STAND_STATE_SIT);
-        return;
-    }
-    static const std::unordered_map<std::string, uint32> m = {
-        {"dance", EMOTE_STATE_DANCE}, {"cheer", EMOTE_ONESHOT_CHEER}, {"laugh", EMOTE_ONESHOT_LAUGH},
-        {"applaud", EMOTE_ONESHOT_APPLAUD}, {"point", EMOTE_ONESHOT_POINT}, {"talk", EMOTE_ONESHOT_TALK},
-        {"wave", EMOTE_ONESHOT_WAVE}, {"bow", EMOTE_ONESHOT_BOW}, {"roar", EMOTE_ONESHOT_ROAR}
-    };
-    auto it = m.find(name);
-    if (it != m.end())
-    {
-        if (bot->getStandState() != UNIT_STAND_STATE_STAND)
-            bot->SetStandState(UNIT_STAND_STATE_STAND);
-        bot->HandleEmoteCommand(it->second);
-    }
 }
 
 bool NewRpgPastimeAction::Execute(Event /*event*/)
@@ -362,37 +375,17 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                                         sPlayerbotAIConfig.pastimeLoiterDwellMax);
                 data.dwellMs = dwellSec * IN_MILLISECONDS;
                 bot->SetFacingToObject(object);
-                // Themed arrival: set sustained pose once on reaching the POI.
-                if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
-                {
-                    // A mounted bot can't visibly pose (the mount model overrides it) — dismount on arrival.
-                    bool wasMounted = bot->IsMounted();
-                    if (wasMounted)
-                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
-                    // Hold the pose via the replicated UNIT_NPC_EMOTESTATE field (see LoiterEmoteState).
-                    uint32 es = LoiterEmoteState(data.poiType);
-                    if (es)
-                        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
-                }
+                // Per-POI sustained pose + cadence one-shots now live in the EmotePalette
+                // table (kLoiterByPoi, keyed by BotCityPoi via data.poiType). The helper
+                // dismounts and sets the table pose; one-shots are gated by EmoteCadence.Enable.
+                TickEmoteCadence(BEH_LOITER, data.poiType);
                 return true;
             }
             if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
             {
-                if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
-                {
-                    // Stay dismounted + hold the sustained pose every tick (movement/idle AI resets both).
-                    if (bot->IsMounted())
-                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
-                    uint32 es = LoiterEmoteState(data.poiType);
-                    if (es && bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != es)
-                        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
-                }
-                else
-                {
-                    // Legacy path — byte-for-byte unchanged.
-                    if (urand(0, 100) < 5)
-                        bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
-                }
+                // Re-assert the table pose (movement/idle AI resets it) + emit cadence
+                // one-shots. Dismount + pose hold are handled inside TickEmoteCadence.
+                TickEmoteCadence(BEH_LOITER, data.poiType);
                 // Hold the bot in place for the dwell. Returning false here let the lower-priority
                 // movement AI walk it off the POI within a tick or two, so it never actually lingered
                 // (bots arrived but never dwelt — the pose flashed for one tick and was gone).
@@ -456,7 +449,7 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             info.ChangeToIdle();
             return true;
         }
-        bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
+        TickEmoteCadence(BEH_CRAFT, 0);   // table holds USE_STANDING as the sustained pose; cadence layers one-shots
         return false;
     }
 
@@ -510,7 +503,10 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             return true;
         }
         if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
+        {
+            TickEmoteCadence(BEH_REPAIR_SELL, 0);   // post-arrival dwell hold at the vendor
             return false;
+        }
         info.ChangeToIdle();
         return true;
     }
@@ -587,12 +583,11 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return true;
     }
     bot->SetFacingToObject(target);
-    if (!data.lastEmote ||
-        GetMSTimeDiffToNow(data.lastEmote) >= sPlayerbotAIConfig.pastimeSocialEmoteInterval * IN_MILLISECONDS)
-    {
-        PerformSocialEmote(bot);
-        data.lastEmote = getMSTime();
-    }
+    // Route the social emote through the shared cadence helper (self-gating timer +
+    // non-repeating pick from the BEH_SOCIAL one-shot pool). This replaces the old
+    // PerformSocialEmote one-shot + the pastimeSocialEmoteInterval gate (the helper
+    // owns the timing now).
+    TickEmoteCadence(BEH_SOCIAL, 0);
     return false;
 }
 
@@ -852,6 +847,10 @@ bool NewRpgTravelMountAction::Execute(Event /*event*/)
     {
         if (MoveFarTo(data->pos))
             return true;
+        // Arrival/holding nudge: pathing couldn't advance, so the bot is effectively
+        // parked. BEH_TRAVEL_MOUNT's palette is {nullptr,0} (a mount hides any pose),
+        // so this is a no-op today but keeps travel on the shared cadence call site.
+        TickEmoteCadence(BEH_TRAVEL_MOUNT, 0);
         return MoveRandomNear(10.0f);
     }
     return false;
@@ -897,6 +896,7 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
         context->GetValue<LootObject>("loot target")->Set(lootObj);
         botAI->DoSpecificAction("open loot", Event(), true);
     }
+    TickEmoteCadence(BEH_GATHERING_CIRCUIT, 0);   // between-node pause at the harvested node
     ++data->visited;
     data->node = ObjectGuid();   // advance to the next node
     return true;

@@ -133,6 +133,16 @@ enum BotBehaviorId : uint8
     BEH_COUNT
 };
 
+// Curated emote set for a behavior (or a behavior+variant). Held pose + a pool
+// of one-shots picked from at random by the cadence tick. See the kPalette table
+// in NewRpgBaseAction.cpp (data-driven, one row per BotBehaviorId).
+struct EmotePalette
+{
+    uint32        sustainedPose;   // UNIT_NPC_EMOTESTATE value; 0 = none/stand
+    const uint32* oneShots;        // static pool; nullptr/0 count = no one-shots
+    uint8         oneShotCount;
+};
+
 #define MAX_SPECNO 20
 
 class PlayerbotAIConfig
@@ -497,6 +507,10 @@ public:
     uint32 pastimeDummyDwellMax{90};
     float  pastimeDummyRadius{60.0f};
     std::vector<uint32> pastimeDummyEntries;  // training-dummy creature entries (CSV in conf)
+    // --- per-behavior emote cadence (occupation-emote-palettes) ---
+    bool   emoteCadenceEnable{true};
+    uint32 emoteCadenceMin[BEH_COUNT]{};   // seconds, per BotBehaviorId
+    uint32 emoteCadenceMax[BEH_COUNT]{};
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;

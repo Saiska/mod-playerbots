@@ -52,7 +52,126 @@ namespace
     std::atomic<uint32> g_pastimeChosen[PASTIME_ACT_COUNT]{};
     std::atomic<uint32> g_pastimeSawTarget[PASTIME_ACT_COUNT]{};
     std::atomic<uint32> g_pastimeDuelAreaBlocked{};
+
+    // -----------------------------------------------------------------------
+    // Emote palettes (Task 1: data only — no behavior wired yet).
+    //
+    // One curated EmotePalette per BotBehaviorId (kPalette), plus per-POI loiter
+    // rows (kLoiterByPoi) folding loiter-themed-scenes' 528bc948 pose switch into
+    // the same data-driven table. LookupPalette resolves (behaviorId, variant);
+    // loiter variants are BotCityPoi 1..6.
+    //
+    // Constants resolved against SharedDefines.h. Spec-listed emotes that have no
+    // matching EMOTE_ONESHOT_* in 3.3.5a (SHRUG, WORK-oneshot, YAWN, DRINK) were
+    // dropped to the nearest proven one-shot (the legacy social-emote set —
+    // dance/cheer/laugh/applaud/point/talk/wave/bow/roar — plus EAT / QUESTION).
+    // FISH/DUMMY/DUEL/TRAVEL_*/OUTDOOR_PVP carry no pool — the action
+    // (channel / melee / cast / movement) is itself the animation.
+    // -----------------------------------------------------------------------
+
+    // --- one-shot pools (curated; missing constants resolved to the nearest proven one) ---
+    const uint32 kOneShots_GoGrind[]   = { EMOTE_ONESHOT_ROAR, EMOTE_ONESHOT_FLEX, EMOTE_ONESHOT_POINT,
+                                           EMOTE_ONESHOT_SALUTE, EMOTE_ONESHOT_EXCLAMATION, EMOTE_ONESHOT_TALK };
+    const uint32 kOneShots_WanderRandom[] = { EMOTE_ONESHOT_POINT, EMOTE_ONESHOT_QUESTION, EMOTE_ONESHOT_TALK,
+                                              EMOTE_ONESHOT_EXCLAMATION };  // SHRUG -> dropped
+    const uint32 kOneShots_DoQuest[]   = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION, EMOTE_ONESHOT_EXCLAMATION,
+                                           EMOTE_ONESHOT_BOW, EMOTE_ONESHOT_SALUTE, EMOTE_ONESHOT_YES };
+    const uint32 kOneShots_Gather[]    = { EMOTE_ONESHOT_KNEEL, EMOTE_ONESHOT_EAT, EMOTE_ONESHOT_TALK };  // WORK -> KNEEL/TALK
+    const uint32 kOneShots_Rest[]      = { EMOTE_ONESHOT_EAT, EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION };  // DRINK/YAWN -> EAT/dropped
+    const uint32 kOneShots_WanderNpc[] = { EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_BOW, EMOTE_ONESHOT_SALUTE,
+                                           EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION, EMOTE_ONESHOT_YES };
+    const uint32 kOneShots_Social[]    = { EMOTE_ONESHOT_CHEER, EMOTE_ONESHOT_LAUGH, EMOTE_ONESHOT_APPLAUD,
+                                           EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_BOW, EMOTE_ONESHOT_TALK };
+    const uint32 kOneShots_LoiterTalk[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION, EMOTE_ONESHOT_POINT,
+                                            EMOTE_ONESHOT_LAUGH };
+    const uint32 kOneShots_Craft[]     = { EMOTE_ONESHOT_TALK };  // USE_STANDING is the held pose
+    const uint32 kOneShots_RepairSell[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_BOW, EMOTE_ONESHOT_YES,
+                                            EMOTE_ONESHOT_WAVE };
+
+    #define POOL(a) (a), (uint8)(sizeof(a)/sizeof((a)[0]))
+    // default rows, indexed by BotBehaviorId
+    const EmotePalette kPalette[BEH_COUNT] = {
+        /*BEH_NONE*/              { 0, nullptr, 0 },
+        /*BEH_GO_GRIND*/         { 0, POOL(kOneShots_GoGrind) },
+        /*BEH_WANDER_RANDOM*/    { 0, POOL(kOneShots_WanderRandom) },
+        /*BEH_DO_QUEST*/         { 0, POOL(kOneShots_DoQuest) },
+        /*BEH_GATHERING_CIRCUIT*/{ 0, POOL(kOneShots_Gather) },
+        /*BEH_REST*/             { EMOTE_STATE_SIT, POOL(kOneShots_Rest) },          // floor-sit baseline pose
+        /*BEH_WANDER_NPC*/       { 0, POOL(kOneShots_WanderNpc) },
+        /*BEH_TRAVEL_FLIGHT*/    { 0, nullptr, 0 },                                  // mostly moving — no pool
+        /*BEH_TRAVEL_MOUNT*/     { 0, nullptr, 0 },                                  // mount blocks pose — no pool
+        /*BEH_OUTDOOR_PVP*/      { 0, nullptr, 0 },                                  // the fight is the action
+        /*BEH_SOCIAL*/           { 0, POOL(kOneShots_Social) },
+        /*BEH_LOITER*/           { 0, POOL(kOneShots_LoiterTalk) },                  // default; per-POI rows below
+        /*BEH_FISH*/             { 0, nullptr, 0 },                                  // casting is the animation
+        /*BEH_CRAFT*/            { EMOTE_STATE_USE_STANDING, POOL(kOneShots_Craft) },
+        /*BEH_DUEL*/             { 0, nullptr, 0 },                                  // combat is the action
+        /*BEH_REPAIR_SELL*/      { 0, POOL(kOneShots_RepairSell) },
+        /*BEH_DUMMY*/            { 0, nullptr, 0 },                                  // melee is the action
+    };
+    // Loiter per-POI sustained poses — PARITY with loiter-themed-scenes 528bc948.
+    // Values copied verbatim from LoiterEmoteState (NewRpgAction.cpp): auctioneer/
+    // banker/trainer = TALK(378), innkeeper = SIT(13), forge = USE_STANDING(69),
+    // mailbox = 0 (just stand). Indexed by BotCityPoi 1..6 -> array 0..5.
+    const EmotePalette kLoiterByPoi[6] = {
+        /*POI_AUCTIONEER*/ { EMOTE_STATE_TALK,         POOL(kOneShots_LoiterTalk) },  // 378
+        /*POI_BANKER*/     { EMOTE_STATE_TALK,         POOL(kOneShots_LoiterTalk) },  // 378
+        /*POI_INNKEEPER*/  { EMOTE_STATE_SIT,          POOL(kOneShots_LoiterTalk) },  // 13
+        /*POI_TRAINER*/    { EMOTE_STATE_TALK,         POOL(kOneShots_LoiterTalk) },  // 378
+        /*POI_MAILBOX*/    { 0,                        POOL(kOneShots_LoiterTalk) },  // 0 (stand)
+        /*POI_FORGE*/      { EMOTE_STATE_USE_STANDING, POOL(kOneShots_LoiterTalk) },  // 69
+    };
+    #undef POOL
+
+    const EmotePalette& LookupPalette(BotBehaviorId beh, uint8 variant)
+    {
+        if (beh == BEH_LOITER && variant >= 1 && variant <= 6)
+            return kLoiterByPoi[variant - 1];
+        if (beh > BEH_NONE && beh < BEH_COUNT)
+            return kPalette[beh];
+        return kPalette[BEH_NONE];
+    }
 } // anonymous namespace
+
+void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose)
+{
+    const EmotePalette& pal = LookupPalette(beh, variant);
+    NewRpgInfo& info = botAI->rpgInfo;
+
+    // 1. sustained pose (held, replicated) — re-assert each tick; dismount first (a mount hides the pose).
+    // skipSustainedPose: caller already holds a real pose (e.g. RPG_REST seated on a chair, which sets a
+    // SIT_*_CHAIR stand-state) — re-asserting UNIT_NPC_EMOTESTATE would fight it, so do one-shots only.
+    if (pal.sustainedPose && !skipSustainedPose)
+    {
+        if (bot->IsMounted())
+            bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+        if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != pal.sustainedPose)
+            bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, pal.sustainedPose);
+    }
+
+    // 2. timed, jittered, non-repeating one-shot
+    if (!sPlayerbotAIConfig.emoteCadenceEnable || pal.oneShotCount == 0)
+        return;
+    uint32 mn = sPlayerbotAIConfig.emoteCadenceMin[beh];
+    uint32 mx = sPlayerbotAIConfig.emoteCadenceMax[beh];
+    if (mn == 0 && mx == 0) return;                       // off for this behavior
+    uint32 now = getMSTime();
+    if (info.lastEmoteMs == 0)
+    {
+        info.lastEmoteMs = now;
+        info.nextEmoteGapMs = urand(mn, mx) * IN_MILLISECONDS;
+        return;
+    }
+    if (GetMSTimeDiffToNow(info.lastEmoteMs) < info.nextEmoteGapMs)
+        return;
+    uint8 idx = (uint8)urand(0, pal.oneShotCount - 1);
+    if (pal.oneShotCount > 1 && idx == info.lastEmoteIdx)  // non-repeat
+        idx = (idx + 1) % pal.oneShotCount;
+    bot->HandleEmoteCommand(pal.oneShots[idx]);
+    info.lastEmoteIdx = idx;
+    info.lastEmoteMs = now;
+    info.nextEmoteGapMs = urand(mn, mx) * IN_MILLISECONDS;
+}
 
 bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
 {
@@ -1002,6 +1121,32 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
         if (!eligible)
             continue;
 
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = guid;
+        }
+    }
+    return best;
+}
+
+ObjectGuid NewRpgBaseAction::SelectInnChair(float radius)
+{
+    // Mirror SelectGatherNode's GO scan, filtered to GAMEOBJECT_TYPE_CHAIR (type 7).
+    GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
+    ObjectGuid best;
+    float bestDist = radius;
+
+    for (ObjectGuid const& guid : gos)
+    {
+        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+        if (!go || !go->isSpawned())
+            continue;
+
+        if (go->GetGoType() != GAMEOBJECT_TYPE_CHAIR)
+            continue;
+
+        float dist = bot->GetExactDist(go);
         if (dist < bestDist)
         {
             bestDist = dist;

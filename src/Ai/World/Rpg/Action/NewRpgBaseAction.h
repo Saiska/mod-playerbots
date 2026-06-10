@@ -34,6 +34,14 @@ protected:
     bool MoveRandomNear(float moveStep = 50.0f, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, WorldObject* center = nullptr);
     bool ForceToWait(uint32 duration, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
 
+    /* EMOTE CADENCE (occupation-emote-palettes) */
+    // Re-assert the behavior's sustained pose + fire a timed, jittered, non-repeating
+    // one-shot from the (beh,variant) EmotePalette. Call from a stationary dwell point.
+    // skipSustainedPose=true does the one-shots ONLY (the caller already holds a pose,
+    // e.g. RPG_REST seated on a real chair, so re-asserting EMOTE_STATE_SIT would fight
+    // the chair's SIT_*_CHAIR stand-state).
+    void TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose = false);
+
     /* QUEST RELATED CHECK */
     ObjectGuid ChooseNpcOrGameObjectToInteract(bool questgiverOnly = false, float distanceLimit = 0.0f);
     ObjectGuid SelectLoiterPoi(uint8& outPoiType);
@@ -41,6 +49,9 @@ protected:
     ObjectGuid SelectTrainingDummy();
     bool       SelectFarTaxiDest(WorldPosition& out);
     ObjectGuid SelectGatherNode();   // promoted from file-static
+    // Nearest GAMEOBJECT_TYPE_CHAIR within `radius` (mirrors SelectGatherNode's scan).
+    // Empty if none — RPG_REST then floor-sits in place.
+    ObjectGuid SelectInnChair(float radius);
     // Nearest random bot within Pastime.Social.Radius that is idle-ish OR already socializing
     // (or a player if Pastime.Social.IncludePlayers). Empty if none.
     ObjectGuid SelectSocialPartner();

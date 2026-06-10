@@ -1171,6 +1171,29 @@ AiPlayerbot.Pastime.Dummy.DwellMax = 90
 AiPlayerbot.Pastime.Dummy.Radius = 60.0
 AiPlayerbot.Pastime.Dummy.Entries =
 
+# Per-behavior emote cadence (occupation-emote-palettes).
+# Dwelling bots play a varied, non-repeating emote on a jittered timer keyed to what they are doing.
+# EmoteCadence.Enable: master switch (1=on, 0=off; off keeps sustained poses but plays no timed one-shots).
+# EmoteCadence.<behavior>.Min / .Max: seconds between one-shot emotes for that behavior (random in range; auto-swapped if inverted).
+#   A value of 9999 means "effectively off" (sparse) for that behavior.
+# Behavior keys (16): go_grind wander_random do_quest gathering_circuit rest wander_npc travel_flight
+#   travel_mount outdoor_pvp social loiter fish craft duel repair_sell dummy
+# Tier defaults: dense 3/6 (social, loiter, wander_npc); medium 6/12 (rest, craft, gathering_circuit,
+#   do_quest, outdoor_pvp, repair_sell); sparse 9999 (fish, dummy, duel, go_grind, wander_random,
+#   travel_flight, travel_mount). Unlisted keys below fall back to these tier defaults.
+# Only the keys you wish to override need appear; representative set shown.
+AiPlayerbot.EmoteCadence.Enable = 1
+AiPlayerbot.EmoteCadence.social.Min = 3
+AiPlayerbot.EmoteCadence.social.Max = 6
+AiPlayerbot.EmoteCadence.loiter.Min = 3
+AiPlayerbot.EmoteCadence.loiter.Max = 6
+AiPlayerbot.EmoteCadence.wander_npc.Min = 3
+AiPlayerbot.EmoteCadence.wander_npc.Max = 6
+AiPlayerbot.EmoteCadence.rest.Min = 6
+AiPlayerbot.EmoteCadence.rest.Max = 12
+AiPlayerbot.EmoteCadence.craft.Min = 6
+AiPlayerbot.EmoteCadence.craft.Max = 12
+
 # Loiter activity tuning (the loiter activity within the pastime registry; replaces the old standalone CityLife status).
 # Loiter.Weight: relative weight of the loiter activity within the pastime registry.
 # Loiter.DwellMin/DwellMax: seconds a bot lingers at the chosen city service POI (random in range; auto-swapped if inverted).

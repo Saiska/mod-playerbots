@@ -102,6 +102,9 @@ void NewRpgInfo::Reset()
     for (uint8 c = 0; c < CAT_COUNT; ++c)
         satiation[c] = 0.0f;
     lastSatiationUpdateMs = 0;
+    lastEmoteMs = 0;
+    nextEmoteGapMs = 0;
+    lastEmoteIdx = 0xFF;
 }
 
 void NewRpgInfo::SetMoveFarTo(WorldPosition pos)
