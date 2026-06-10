@@ -764,6 +764,10 @@ ObjectGuid NewRpgBaseAction::ChooseNpcOrGameObjectToInteract(bool questgiverOnly
     return ObjectGuid();
 }
 
+// Defined below (after SelectPastime); forward-declared here because SelectLoiterPoi
+// uses it for the forge crafting-profession gate.
+static bool BotHasCraftingProfession(Player* bot);
+
 ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
 {
     outPoiType = POI_NONE;
