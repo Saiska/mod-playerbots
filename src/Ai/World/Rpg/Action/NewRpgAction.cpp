@@ -36,7 +36,23 @@ static void EndSocialPastime(Player* bot)
 {
     if (bot->getStandState() != UNIT_STAND_STATE_STAND)
         bot->SetStandState(UNIT_STAND_STATE_STAND);
-    bot->ClearEmoteState();
+    bot->ClearEmoteState();   // zeroes UNIT_NPC_EMOTESTATE -> drops any held loiter pose
+}
+
+// Sustained, replicated pose per loiter POI. Driven via UNIT_NPC_EMOTESTATE (a UF_FLAG_PUBLIC field that
+// renders on nearby clients — the same mechanism mod-ollama-chat uses for a held dance), NOT SetStandState
+// or a one-shot HandleEmoteCommand, neither of which holds a visible pose on a bot. 0 = no pose (just stand).
+static uint32 LoiterEmoteState(uint8 poiType)
+{
+    switch (static_cast<BotCityPoi>(poiType))
+    {
+        case POI_INNKEEPER:  return EMOTE_STATE_SIT;            // 13  — seated at the inn
+        case POI_FORGE:      return EMOTE_STATE_USE_STANDING;   // 69  — smith/use pose at the anvil
+        case POI_BANKER:
+        case POI_AUCTIONEER:
+        case POI_TRAINER:    return EMOTE_STATE_TALK;           // 378 — conversing / doing business
+        default:             return 0;                          // mailbox / none — just stand
+    }
 }
 
 bool TellRpgStatusAction::Execute(Event event)
@@ -386,25 +402,17 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                 // Themed arrival: set sustained pose once on reaching the POI.
                 if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
                 {
-                    // A mounted bot can't visibly sit/pose (the mount model overrides it) — dismount on arrival.
+                    // A mounted bot can't visibly pose (the mount model overrides it) — dismount on arrival.
                     bool wasMounted = bot->IsMounted();
                     if (wasMounted)
                         bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
-                    switch (static_cast<BotCityPoi>(data.poiType))
-                    {
-                        case POI_INNKEEPER:
-                            bot->SetStandState(UNIT_STAND_STATE_SIT);
-                            break;
-                        case POI_FORGE:
-                            // Sustained craft pose — mirrors ACTIVITY_CRAFT at ~:492.
-                            bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
-                            break;
-                        default:
-                            break;
-                    }
-                    // [LoiterProbe] TEMP diagnostic: resolved poiType + stand-state + mount right after the arrival pose.
-                    LOG_INFO("playerbots", "[LoiterProbe] arrive {} area={} poiType={} standState={} wasMounted={} mountedNow={}",
-                             bot->GetName(), bot->GetAreaId(), uint32(data.poiType), uint32(bot->getStandState()),
+                    // Hold the pose via the replicated UNIT_NPC_EMOTESTATE field (see LoiterEmoteState).
+                    uint32 es = LoiterEmoteState(data.poiType);
+                    if (es)
+                        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
+                    // [LoiterProbe] TEMP diagnostic: poiType + held emote state + mount, right after the arrival pose.
+                    LOG_INFO("playerbots", "[LoiterProbe] arrive {} area={} poiType={} emoteState={} wasMounted={} mountedNow={}",
+                             bot->GetName(), bot->GetAreaId(), uint32(data.poiType), es,
                              uint32(wasMounted), uint32(bot->IsMounted()));
                 }
                 return true;
@@ -413,52 +421,16 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             {
                 if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
                 {
-                    // Stay dismounted while dwelling (movement/idle AI may re-mount) so the pose stays visible.
+                    // Stay dismounted + hold the sustained pose every tick (movement/idle AI resets both).
                     if (bot->IsMounted())
                         bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
-                    // Maintain the sustained pose every tick — the bot's idle/movement AI resets stand state otherwise.
-                    switch (static_cast<BotCityPoi>(data.poiType))
-                    {
-                        case POI_INNKEEPER:
-                            if (bot->getStandState() != UNIT_STAND_STATE_SIT)
-                                bot->SetStandState(UNIT_STAND_STATE_SIT);
-                            break;
-                        case POI_FORGE:
-                            bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
-                            break;
-                        default:
-                            break;
-                    }
-                    // Themed cadence: POI-specific one-shot emote on the existing 5% tick.
-                    if (urand(0, 100) < 5)
-                    {
-                        switch (static_cast<BotCityPoi>(data.poiType))
-                        {
-                            case POI_INNKEEPER:
-                                bot->HandleEmoteCommand(EMOTE_ONESHOT_EAT);
-                                break;
-                            case POI_FORGE:
-                                // Re-assert the sustained pose in case it was cleared externally.
-                                bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
-                                break;
-                            case POI_BANKER:
-                            case POI_AUCTIONEER:
-                                bot->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
-                                break;
-                            case POI_TRAINER:
-                                bot->HandleEmoteCommand(EMOTE_ONESHOT_QUESTION);
-                                break;
-                            case POI_MAILBOX:
-                            case POI_NONE:
-                            default:
-                                bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
-                                break;
-                        }
-                    }
-                    // [LoiterProbe] TEMP diagnostic: sample stand-state mid-dwell to catch SIT being overridden.
+                    uint32 es = LoiterEmoteState(data.poiType);
+                    if (es && bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != es)
+                        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
+                    // [LoiterProbe] TEMP diagnostic: sample the held emote state mid-dwell.
                     if (urand(0, 50) == 0)
-                        LOG_INFO("playerbots", "[LoiterProbe] dwell {} poiType={} standState={}",
-                                 bot->GetName(), uint32(data.poiType), uint32(bot->getStandState()));
+                        LOG_INFO("playerbots", "[LoiterProbe] dwell {} poiType={} emoteState={}",
+                                 bot->GetName(), uint32(data.poiType), bot->GetUInt32Value(UNIT_NPC_EMOTESTATE));
                 }
                 else
                 {
