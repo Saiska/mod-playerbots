@@ -22,7 +22,7 @@ void NewRpgInfo::ChangeToWanderNpc()
     data = WanderNpc{};
 }
 
-void NewRpgInfo::ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos)
+void NewRpgInfo::ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos, uint8 poiType)
 {
     startT = getMSTime();
     Pastime p;
@@ -32,6 +32,7 @@ void NewRpgInfo::ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPos
     p.lastReach = 0;
     p.lastEmote = 0;
     p.dwellMs = 0;
+    p.poiType = poiType;
     data = p;
 }
 
@@ -179,6 +180,7 @@ std::string NewRpgInfo::ToString()
             out << "\ntarget: " << arg.target.GetCounter();
             out << "\nlastReach: " << arg.lastReach;
             out << "\ndwellMs: " << arg.dwellMs;
+            out << "\npoiType: " << uint32(arg.poiType);
         }
         else if constexpr (std::is_same_v<T, WanderRandom>)
         {

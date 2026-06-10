@@ -118,7 +118,8 @@ enum BotCityPoi : uint8
     POI_BANKER,
     POI_INNKEEPER,
     POI_TRAINER,
-    POI_MAILBOX
+    POI_MAILBOX,
+    POI_FORGE
 };
 
 enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER, ACTIVITY_FISH, ACTIVITY_GATHER, ACTIVITY_CRAFT, ACTIVITY_DUEL, ACTIVITY_EAT_DRINK, ACTIVITY_REST_EMOTE, ACTIVITY_REPAIR_SELL, ACTIVITY_DUMMY, ACTIVITY_NONE = 0xFF };
@@ -467,6 +468,8 @@ public:
     uint32 pastimeLoiterDwellMin;
     uint32 pastimeLoiterDwellMax;
     uint32 pastimeLoiterPoiTypeMask;
+    bool   pastimeLoiterThemedScenes;
+    float  pastimeLoiterTypeWeight[POI_FORGE + 1];
     uint32 pastimeFishWeight;
     uint32 pastimeFishDwellMin;
     uint32 pastimeFishDwellMax;

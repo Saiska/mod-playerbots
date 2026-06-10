@@ -36,7 +36,23 @@ static void EndSocialPastime(Player* bot)
 {
     if (bot->getStandState() != UNIT_STAND_STATE_STAND)
         bot->SetStandState(UNIT_STAND_STATE_STAND);
-    bot->ClearEmoteState();
+    bot->ClearEmoteState();   // zeroes UNIT_NPC_EMOTESTATE -> drops any held loiter pose
+}
+
+// Sustained, replicated pose per loiter POI. Driven via UNIT_NPC_EMOTESTATE (a UF_FLAG_PUBLIC field that
+// renders on nearby clients — the same mechanism mod-ollama-chat uses for a held dance), NOT SetStandState
+// or a one-shot HandleEmoteCommand, neither of which holds a visible pose on a bot. 0 = no pose (just stand).
+static uint32 LoiterEmoteState(uint8 poiType)
+{
+    switch (static_cast<BotCityPoi>(poiType))
+    {
+        case POI_INNKEEPER:  return EMOTE_STATE_SIT;            // 13  — seated at the inn
+        case POI_FORGE:      return EMOTE_STATE_USE_STANDING;   // 69  — smith/use pose at the anvil
+        case POI_BANKER:
+        case POI_AUCTIONEER:
+        case POI_TRAINER:    return EMOTE_STATE_TALK;           // 378 — conversing / doing business
+        default:             return 0;                          // mailbox / none — just stand
+    }
 }
 
 bool TellRpgStatusAction::Execute(Event event)
@@ -369,6 +385,7 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
     {
         if (data.target.IsEmpty())
         {
+            EndSocialPastime(bot);
             info.ChangeToIdle();
             return true;
         }
@@ -382,15 +399,43 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                                         sPlayerbotAIConfig.pastimeLoiterDwellMax);
                 data.dwellMs = dwellSec * IN_MILLISECONDS;
                 bot->SetFacingToObject(object);
+                // Themed arrival: set sustained pose once on reaching the POI.
+                if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
+                {
+                    // A mounted bot can't visibly pose (the mount model overrides it) — dismount on arrival.
+                    bool wasMounted = bot->IsMounted();
+                    if (wasMounted)
+                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+                    // Hold the pose via the replicated UNIT_NPC_EMOTESTATE field (see LoiterEmoteState).
+                    uint32 es = LoiterEmoteState(data.poiType);
+                    if (es)
+                        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
+                }
                 return true;
             }
             if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
             {
-                // dwelling: occasional idle emote keeps it lively
-                if (urand(0, 100) < 5)
-                    bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
-                return false;
+                if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
+                {
+                    // Stay dismounted + hold the sustained pose every tick (movement/idle AI resets both).
+                    if (bot->IsMounted())
+                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+                    uint32 es = LoiterEmoteState(data.poiType);
+                    if (es && bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != es)
+                        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
+                }
+                else
+                {
+                    // Legacy path — byte-for-byte unchanged.
+                    if (urand(0, 100) < 5)
+                        bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
+                }
+                // Hold the bot in place for the dwell. Returning false here let the lower-priority
+                // movement AI walk it off the POI within a tick or two, so it never actually lingered
+                // (bots arrived but never dwelt — the pose flashed for one tick and was gone).
+                return true;
             }
+            EndSocialPastime(bot);
             info.ChangeToIdle();
             return true;
         }

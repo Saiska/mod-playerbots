@@ -1102,7 +1102,7 @@ AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
-AiPlayerbot.RpgStatusProbWeight.Pastime = 12
+AiPlayerbot.RpgStatusProbWeight.Pastime = 24
 AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
 AiPlayerbot.RpgStatusProbWeight.ExploreLandmark = 10
 AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
@@ -1185,11 +1185,19 @@ AiPlayerbot.Pastime.Dummy.Entries =
 # Loiter activity tuning (the loiter activity within the pastime registry; replaces the old standalone CityLife status).
 # Loiter.Weight: relative weight of the loiter activity within the pastime registry.
 # Loiter.DwellMin/DwellMax: seconds a bot lingers at the chosen city service POI (random in range; auto-swapped if inverted).
-# Loiter.PoiTypeMask: bitmask of allowed POI types - bit0 Auctioneer, bit1 Banker, bit2 Innkeeper, bit3 Trainer, bit4 Mailbox (31 = all).
-AiPlayerbot.Pastime.Loiter.Weight = 100
+# Loiter.PoiTypeMask: bitmask of allowed POI types - bit convention 1<<(type-1):
+#   bit0=Auctioneer, bit1=Banker, bit2=Innkeeper, bit3=Trainer, bit4=Mailbox, bit5=Forge (63 = all six types).
+# Loiter.ThemedScenes: enable themed clustered scene enactment at loiter POIs (1=on, 0=uniform emote).
+# Loiter.TypeWeights: space-separated name=weight pairs controlling relative POI selection probability.
+#   Valid names: auctioneer, banker, innkeeper, trainer, mailbox, forge.
+# A present TypeWeights replaces ALL defaults — list every type you want above 1.0 (the example below preserves the innkeeper=3/forge=2 defaults).
+#   Unlisted types default to 1.0. Example: "innkeeper=3 forge=2 banker=1 auctioneer=1 trainer=1 mailbox=1"
+AiPlayerbot.Pastime.Loiter.Weight = 150
 AiPlayerbot.Pastime.Loiter.DwellMin = 30
 AiPlayerbot.Pastime.Loiter.DwellMax = 120
-AiPlayerbot.Pastime.Loiter.PoiTypeMask = 31
+AiPlayerbot.Pastime.Loiter.PoiTypeMask = 63
+AiPlayerbot.Pastime.Loiter.ThemedScenes = 1
+AiPlayerbot.Pastime.Loiter.TypeWeights = "innkeeper=3 forge=2 banker=1 auctioneer=1 trainer=1 mailbox=1"
 
 # Fishing activity tuning (the fish activity within the pastime registry; fishing-skilled idle bots only).
 # Fish.Weight: relative weight of the fishing activity within the pastime registry.
