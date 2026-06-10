@@ -26,6 +26,7 @@
 #include "GridNotifiers.h"
 #include "LFGMgr.h"
 #include "MapMgr.h"
+#include "NewRpgBaseAction.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "ObjectGuid.h"
@@ -3028,6 +3029,31 @@ void RandomPlayerbotMgr::PrintStats()
         LOG_INFO("playerbots", "Bots total quests:");
         LOG_INFO("playerbots", "    Accepted: {}, Rewarded: {}, Dropped: {}", rpgStasticTotal.questAccepted,
                  rpgStasticTotal.questRewarded, rpgStasticTotal.questDropped);
+
+        {
+            uint32 pastimeElig[ACTIVITY_DUMMY + 1] = {};
+            uint32 pastimeChosen[ACTIVITY_DUMMY + 1] = {};
+            uint32 pastimeSaw[ACTIVITY_DUMMY + 1] = {};
+            uint32 pastimeDuelAreaBlocked = 0;
+            GetPastimeProbeCounts(pastimeElig, pastimeChosen, pastimeSaw, pastimeDuelAreaBlocked);
+
+            static const char* const kPastimeNames[ACTIVITY_DUMMY + 1] =
+                { "Social", "Loiter", "Fish", "Gather", "Craft", "Duel", "EatDrink", "RestEmote", "RepairSell", "Dummy" };
+
+            std::ostringstream ssElig, ssChosen, ssSaw;
+            for (uint32 i = 0; i <= ACTIVITY_DUMMY; ++i)
+            {
+                if (i > 0) { ssElig << " "; ssChosen << " "; ssSaw << " "; }
+                ssElig   << kPastimeNames[i] << "=" << pastimeElig[i];
+                ssChosen << kPastimeNames[i] << "=" << pastimeChosen[i];
+                ssSaw    << kPastimeNames[i] << "=" << pastimeSaw[i];
+            }
+            ssSaw << "  (DuelAreaBlocked=" << pastimeDuelAreaBlocked << ")";
+
+            LOG_INFO("playerbots", "Bots pastime eligible:  {}", ssElig.str());
+            LOG_INFO("playerbots", "Bots pastime chosen:    {}", ssChosen.str());
+            LOG_INFO("playerbots", "Bots pastime sawTarget: {}", ssSaw.str());
+        }
     }
 
     LOG_INFO("playerbots", "Bots engine:", dead);
