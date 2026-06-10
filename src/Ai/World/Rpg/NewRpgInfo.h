@@ -4,6 +4,7 @@
 #include "Define.h"
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
+#include "PlayerbotAIConfig.h"
 #include "QuestDef.h"
 #include "Strategy.h"
 #include "Timer.h"
@@ -41,6 +42,7 @@ struct NewRpgInfo
         uint32 lastReach{0};      // arrival timestamp (0 = en route)
         uint32 lastEmote{0};      // last social-emote timestamp
         uint32 dwellMs{0};        // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
+        uint8  poiType{POI_NONE}; // BotCityPoi — set by SelectLoiterPoi; used by themed-scene enactment
     };
     // RPG_WANDER_RANDOM
     struct WanderRandom
@@ -132,7 +134,7 @@ struct NewRpgInfo
     void ChangeToGoGrind(WorldPosition pos);
     void ChangeToGoCamp(WorldPosition pos);
     void ChangeToWanderNpc();
-    void ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos = {});
+    void ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos = {}, uint8 poiType = POI_NONE);
     void ChangeToWanderRandom();
     void ChangeToDoQuest(uint32 questId, const Quest* quest);
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);

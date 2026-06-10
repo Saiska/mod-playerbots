@@ -772,10 +772,47 @@ bool PlayerbotAIConfig::Initialize()
     pastimeLoiterWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.Weight", 100);
     pastimeLoiterDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.DwellMin", 30);
     pastimeLoiterDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.DwellMax", 120);
-    pastimeLoiterPoiTypeMask = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.PoiTypeMask", 31);
+    // default 63 = bits 0-5 = types 1-6 (Auctioneer/Banker/Innkeeper/Trainer/Mailbox/Forge); bit convention: 1<<(type-1)
+    pastimeLoiterPoiTypeMask = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.PoiTypeMask", 63);
     // urand asserts max >= min; guard against an inverted operator config.
     if (pastimeLoiterDwellMax < pastimeLoiterDwellMin)
         std::swap(pastimeLoiterDwellMin, pastimeLoiterDwellMax);
+    pastimeLoiterThemedScenes = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Loiter.ThemedScenes", true);
+    // Initialize all type weights to 1.0; then apply defaults and parse operator overrides.
+    for (uint8 i = 0; i <= POI_FORGE; ++i)
+        pastimeLoiterTypeWeight[i] = 1.0f;
+    pastimeLoiterTypeWeight[POI_INNKEEPER] = 3.0f;
+    pastimeLoiterTypeWeight[POI_FORGE]     = 2.0f;
+    {
+        std::string raw = sConfigMgr->GetOption<std::string>("AiPlayerbot.Pastime.Loiter.TypeWeights", "");
+        if (!raw.empty())
+        {
+            // Reset to uniform before applying operator string so unset entries default to 1.0.
+            for (uint8 i = 0; i <= POI_FORGE; ++i)
+                pastimeLoiterTypeWeight[i] = 1.0f;
+            std::stringstream ss(raw);
+            std::string tok;
+            while (ss >> tok)
+            {
+                auto eq = tok.find('=');
+                if (eq == std::string::npos)
+                    continue;
+                std::string name = tok.substr(0, eq);
+                float val = std::stof(tok.substr(eq + 1));
+                if      (name == "auctioneer") pastimeLoiterTypeWeight[POI_AUCTIONEER] = val;
+                else if (name == "banker")     pastimeLoiterTypeWeight[POI_BANKER]     = val;
+                else if (name == "innkeeper")  pastimeLoiterTypeWeight[POI_INNKEEPER]  = val;
+                else if (name == "trainer")    pastimeLoiterTypeWeight[POI_TRAINER]    = val;
+                else if (name == "mailbox")    pastimeLoiterTypeWeight[POI_MAILBOX]    = val;
+                else if (name == "forge")      pastimeLoiterTypeWeight[POI_FORGE]      = val;
+            }
+        }
+    }
+    LOG_INFO("playerbots", "[LoiterScenes] themed={} forge={} weights(inn={} forge={} bank={} ah={} trainer={})",
+             pastimeLoiterThemedScenes, (pastimeLoiterPoiTypeMask & (1u << (POI_FORGE - 1))) ? 1 : 0,
+             pastimeLoiterTypeWeight[POI_INNKEEPER], pastimeLoiterTypeWeight[POI_FORGE],
+             pastimeLoiterTypeWeight[POI_BANKER], pastimeLoiterTypeWeight[POI_AUCTIONEER],
+             pastimeLoiterTypeWeight[POI_TRAINER]);
 
     pastimeFishWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Fish.Weight", 100);
     pastimeFishDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Fish.DwellMin", 60);
