@@ -967,8 +967,7 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
 {
     GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
     ObjectGuid best;
-    float bestDist = sPlayerbotAIConfig.pastimeGatherRadius;
-    bool sawTarget = false;
+    float bestDist = sPlayerbotAIConfig.gatheringCircuitRadius;
 
     for (ObjectGuid const& guid : gos)
     {
@@ -983,12 +982,7 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
         if (!lockInfo)
             continue;
 
-        // Compute distance once; reuse for both the sawTarget probe and the best-update.
         float dist = bot->GetExactDist(go);
-
-        // In-radius base candidate of the right type (spawned chest with lock) — count once.
-        // The `eligible` skill check below is the downstream filter.
-        if (dist < bestDist && !sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_GATHER].fetch_add(1, std::memory_order_relaxed); }
 
         bool eligible = false;
         for (uint8 i = 0; i < 8; ++i)
@@ -1154,15 +1148,6 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
         cands.push_back({ uint8(ACTIVITY_FISH), ObjectGuid(), sPlayerbotAIConfig.pastimeFishWeight, hole });
     }
 
-    if (sPlayerbotAIConfig.pastimeGatherWeight > 0)
-    {
-        if (ObjectGuid node = SelectGatherNode())
-        {
-            g_pastimeEligible[ACTIVITY_GATHER].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_GATHER), node, sPlayerbotAIConfig.pastimeGatherWeight });
-        }
-    }
-
     if (sPlayerbotAIConfig.pastimeCraftWeight > 0 && BotHasCraftingProfession(bot))
     {
         g_pastimeEligible[ACTIVITY_CRAFT].fetch_add(1, std::memory_order_relaxed);
@@ -1180,18 +1165,6 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
             g_pastimeEligible[ACTIVITY_DUEL].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_DUEL), partner, sPlayerbotAIConfig.pastimeDuelWeight });
         }
-    }
-
-    if (sPlayerbotAIConfig.pastimeEatDrinkWeight > 0)
-    {
-        g_pastimeEligible[ACTIVITY_EAT_DRINK].fetch_add(1, std::memory_order_relaxed);
-        cands.push_back({ uint8(ACTIVITY_EAT_DRINK), ObjectGuid(), sPlayerbotAIConfig.pastimeEatDrinkWeight });
-    }
-
-    if (sPlayerbotAIConfig.pastimeRestEmoteWeight > 0)
-    {
-        g_pastimeEligible[ACTIVITY_REST_EMOTE].fetch_add(1, std::memory_order_relaxed);
-        cands.push_back({ uint8(ACTIVITY_REST_EMOTE), ObjectGuid(), sPlayerbotAIConfig.pastimeRestEmoteWeight });
     }
 
     if (sPlayerbotAIConfig.pastimeRepairSellWeight > 0)
@@ -1642,16 +1615,6 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             }
             return false;
         }
-        case RPG_GO_CAMP:
-        {
-            WorldPosition pos = SelectRandomCampPos(bot);
-            if (pos != WorldPosition())
-            {
-                botAI->rpgInfo.ChangeToGoCamp(pos);
-                return true;
-            }
-            return false;
-        }
         case RPG_DO_QUEST:
         {
             std::vector<uint32> availableQuests;
@@ -1717,16 +1680,6 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             }
             return false;
         }
-        case RPG_EXPLORE_LANDMARK:
-        {
-            WorldPosition pos;
-            if (SelectFarTaxiDest(pos))
-            {
-                botAI->rpgInfo.ChangeToExploreLandmark(pos);
-                return true;
-            }
-            return false;
-        }
         case RPG_GATHERING_CIRCUIT:
         {
             uint32 maxNodes = urand(sPlayerbotAIConfig.gatheringCircuitMinNodes,
@@ -1759,11 +1712,6 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         case RPG_GO_GRIND:
         {
             WorldPosition pos = SelectRandomGrindPos(bot);
-            return pos != WorldPosition();
-        }
-        case RPG_GO_CAMP:
-        {
-            WorldPosition pos = SelectRandomCampPos(bot);
             return pos != WorldPosition();
         }
         case RPG_PASTIME:
@@ -1808,11 +1756,6 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             return outdoorPvP != nullptr;
         }
         case RPG_TRAVEL_MOUNT:
-        {
-            WorldPosition pos;
-            return SelectFarTaxiDest(pos);
-        }
-        case RPG_EXPLORE_LANDMARK:
         {
             WorldPosition pos;
             return SelectFarTaxiDest(pos);

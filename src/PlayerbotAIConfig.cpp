@@ -715,28 +715,24 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_WANDER_RANDOM] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.WanderRandom", 15);
     RpgStatusProbWeight[RPG_WANDER_NPC] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.WanderNpc", 20);
     RpgStatusProbWeight[RPG_GO_GRIND] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoGrind", 15);
-    RpgStatusProbWeight[RPG_GO_CAMP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoCamp", 10);
     RpgStatusProbWeight[RPG_DO_QUEST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoQuest", 60);
     RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 5);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 12);
     RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);
-    RpgStatusProbWeight[RPG_EXPLORE_LANDMARK] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.ExploreLandmark", 10);
     RpgStatusProbWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GatheringCircuit", 15);
 
     travelMountDistMin = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMin", 300.0f);
     travelMountDistMax = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMax", 2000.0f);
     if (travelMountDistMax < travelMountDistMin) std::swap(travelMountDistMin, travelMountDistMax);
-    exploreLandmarkDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.ExploreLandmark.DwellMin", 20);
-    exploreLandmarkDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.ExploreLandmark.DwellMax", 60);
-    if (exploreLandmarkDwellMax < exploreLandmarkDwellMin) std::swap(exploreLandmarkDwellMin, exploreLandmarkDwellMax);
     gatheringCircuitMinNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MinNodes", 3);
     gatheringCircuitMaxNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MaxNodes", 6);
     if (gatheringCircuitMaxNodes < gatheringCircuitMinNodes) std::swap(gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
-    LOG_INFO("playerbots", "[MoreOccupations] travelMount={} exploreLandmark={} gatheringCircuit={} (mountDist={}-{} exploreDwell={}-{} circuitNodes={}-{})",
-             RpgStatusProbWeight[RPG_TRAVEL_MOUNT], RpgStatusProbWeight[RPG_EXPLORE_LANDMARK], RpgStatusProbWeight[RPG_GATHERING_CIRCUIT],
-             travelMountDistMin, travelMountDistMax, exploreLandmarkDwellMin, exploreLandmarkDwellMax,
+    gatheringCircuitRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.Radius", 60.0f);
+    LOG_INFO("playerbots", "[MoreOccupations] travelMount={} gatheringCircuit={} (mountDist={}-{} circuitNodes={}-{})",
+             RpgStatusProbWeight[RPG_TRAVEL_MOUNT], RpgStatusProbWeight[RPG_GATHERING_CIRCUIT],
+             travelMountDistMin, travelMountDistMax,
              gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
 
     rpgSatiationEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSatiation.Enable", true);
@@ -823,14 +819,6 @@ bool PlayerbotAIConfig::Initialize()
     if (pastimeFishDwellMax < pastimeFishDwellMin)
         std::swap(pastimeFishDwellMin, pastimeFishDwellMax);
 
-    pastimeGatherWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Gather.Weight", 100);
-    pastimeGatherRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Gather.Radius", 60.0f);
-    pastimeGatherDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Gather.DwellMin", 20);
-    pastimeGatherDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Gather.DwellMax", 60);
-    // urand asserts max >= min; guard against an inverted operator config.
-    if (pastimeGatherDwellMax < pastimeGatherDwellMin)
-        std::swap(pastimeGatherDwellMin, pastimeGatherDwellMax);
-
     pastimeCraftWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Craft.Weight", 100);
     pastimeCraftDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Craft.DwellMin", 20);
     pastimeCraftDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Craft.DwellMax", 60);
@@ -841,16 +829,6 @@ bool PlayerbotAIConfig::Initialize()
     pastimeDuelWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Duel.Weight", 80);
     pastimeDuelRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Duel.Radius", 30.0f);
     pastimeDuelIncludePlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Duel.IncludePlayers", false);
-
-    pastimeEatDrinkWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.EatDrink.Weight", 30);
-    pastimeEatDrinkDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.EatDrink.DwellMin", 15);
-    pastimeEatDrinkDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.EatDrink.DwellMax", 45);
-    if (pastimeEatDrinkDwellMax < pastimeEatDrinkDwellMin) std::swap(pastimeEatDrinkDwellMin, pastimeEatDrinkDwellMax);
-
-    pastimeRestEmoteWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RestEmote.Weight", 30);
-    pastimeRestEmoteDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RestEmote.DwellMin", 15);
-    pastimeRestEmoteDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RestEmote.DwellMax", 45);
-    if (pastimeRestEmoteDwellMax < pastimeRestEmoteDwellMin) std::swap(pastimeRestEmoteDwellMin, pastimeRestEmoteDwellMax);
 
     pastimeRepairSellWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RepairSell.Weight", 25);
     pastimeRepairSellDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.RepairSell.DwellMin", 5);
@@ -874,8 +852,8 @@ bool PlayerbotAIConfig::Initialize()
             catch (...) {}   // skip non-numeric tokens
         }
     }
-    LOG_INFO("playerbots", "[Pastime] +eat={} rest={} repairSell={} dummy={} (dummyEntries={})",
-             pastimeEatDrinkWeight, pastimeRestEmoteWeight, pastimeRepairSellWeight,
+    LOG_INFO("playerbots", "[Pastime] +repairSell={} dummy={} (dummyEntries={})",
+             pastimeRepairSellWeight,
              pastimeDummyWeight, uint32(pastimeDummyEntries.size()));
 
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);

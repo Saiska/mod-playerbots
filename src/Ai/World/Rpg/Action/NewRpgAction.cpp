@@ -123,9 +123,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
-            return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
+            return RandomChangeStatus({RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
                                        RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT,
-                                       RPG_EXPLORE_LANDMARK, RPG_GATHERING_CIRCUIT});
+                                       RPG_GATHERING_CIRCUIT});
 
         case RPG_GO_GRIND:
         {
@@ -136,19 +136,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             if (bot->GetExactDist(originalPos) < 10.0f)
             {
                 info.ChangeToWanderRandom();
-                return true;
-            }
-            break;
-        }
-        case RPG_GO_CAMP:
-        {
-            auto& data = std::get<NewRpgInfo::GoCamp>(info.data);
-            WorldPosition& originalPos = data.pos;
-            assert(data.pos != WorldPosition());
-            // GO_CAMP -> WANDER_NPC
-            if (bot->GetExactDist(originalPos) < 10.0f)
-            {
-                info.ChangeToWanderNpc();
                 return true;
             }
             break;
@@ -232,15 +219,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             }
             break;
         }
-        case RPG_EXPLORE_LANDMARK:
-        {
-            if (info.HasStatusPersisted(statusExploreDuration))
-            {
-                info.ChangeToIdle();
-                return true;
-            }
-            break;
-        }
         case RPG_GATHERING_CIRCUIT:
         {
             if (info.HasStatusPersisted(statusGatheringDuration))
@@ -267,21 +245,6 @@ bool NewRpgGoGrindAction::Execute(Event /*event*/)
         // Small nudge so the next tick's MoveFarTo starts from a
         // slightly different position. Kept small so it doesn't look
         // like the bot is abandoning its destination.
-        return MoveRandomNear(10.0f);
-    }
-
-    return false;
-}
-
-bool NewRpgGoCampAction::Execute(Event /*event*/)
-{
-    if (SearchQuestGiverAndAcceptOrReward())
-        return true;
-
-    if (auto* data = std::get_if<NewRpgInfo::GoCamp>(&botAI->rpgInfo.data))
-    {
-        if (MoveFarTo(data->pos))
-            return true;
         return MoveRandomNear(10.0f);
     }
 
@@ -480,47 +443,6 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return false;
     }
 
-    if (data.activityType == ACTIVITY_GATHER)
-    {
-        if (data.target.IsEmpty())
-        {
-            info.ChangeToIdle();
-            return true;
-        }
-        WorldObject* node = ObjectAccessor::GetWorldObject(*bot, data.target);
-        if (!node)
-        {
-            // harvested by someone else / despawned
-            info.ChangeToIdle();
-            return true;
-        }
-        if (!IsWithinInteractionDist(node))
-        {
-            if (MoveWorldObjectTo(data.target))
-                return true;
-            // can't reach -> give up
-            info.ChangeToIdle();
-            return true;
-        }
-        // Arrived: set the node as the loot target and delegate to the existing harvest action.
-        // Construct a LootObject for the GO guid and set "loot target", mirroring LootAction.cpp.
-        LootObject lootObj(bot, data.target);
-        // Skip nodes this bot can't actually harvest (e.g. a miner with no pickaxe). The normal loot
-        // pipeline filters these via IsLootPossible before reaching "open loot"; this delegating path
-        // bypasses that filter, so apply it here to avoid a wasted cast -> re-roll next cycle instead.
-        if (!lootObj.IsLootPossible(bot))
-        {
-            info.ChangeToIdle();
-            return true;
-        }
-        context->GetValue<LootObject>("loot target")->Set(lootObj);
-        // Fire-and-forget: the mining/herb gather cast completes independently of the RPG state, so
-        // transitioning to Idle this tick does not abort it. One node per activation; re-roll next cycle.
-        botAI->DoSpecificAction("open loot", Event(), true);
-        info.ChangeToIdle();
-        return true;
-    }
-
     if (data.activityType == ACTIVITY_CRAFT)
     {
         if (!data.lastReach)
@@ -556,53 +478,6 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             Event("rpg action", chat->FormatWorldobject(partner) + " 7266"), true);
         info.ChangeToIdle();
         return true;
-    }
-
-    if (data.activityType == ACTIVITY_EAT_DRINK)
-    {
-        if (!data.lastReach)
-        {
-            data.lastReach = getMSTime();
-            data.dwellMs = urand(sPlayerbotAIConfig.pastimeEatDrinkDwellMin,
-                                 sPlayerbotAIConfig.pastimeEatDrinkDwellMax) * IN_MILLISECONDS;
-            bot->SetStandState(UNIT_STAND_STATE_SIT);
-        }
-        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
-        {
-            bot->SetStandState(UNIT_STAND_STATE_STAND);
-            info.ChangeToIdle();
-            return true;
-        }
-        if (!data.lastEmote || GetMSTimeDiffToNow(data.lastEmote) >= 5 * IN_MILLISECONDS)
-        {
-            bot->HandleEmoteCommand(EMOTE_ONESHOT_EAT);   // flavor only; no consumable
-            data.lastEmote = getMSTime();
-        }
-        return false;
-    }
-
-    if (data.activityType == ACTIVITY_REST_EMOTE)
-    {
-        if (!data.lastReach)
-        {
-            data.lastReach = getMSTime();
-            data.dwellMs = urand(sPlayerbotAIConfig.pastimeRestEmoteDwellMin,
-                                 sPlayerbotAIConfig.pastimeRestEmoteDwellMax) * IN_MILLISECONDS;
-            bot->SetStandState(UNIT_STAND_STATE_SIT);
-        }
-        if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
-        {
-            bot->SetStandState(UNIT_STAND_STATE_STAND);
-            info.ChangeToIdle();
-            return true;
-        }
-        if (!data.lastEmote || GetMSTimeDiffToNow(data.lastEmote) >= 6 * IN_MILLISECONDS)
-        {
-            static const uint32 restEmotes[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION };
-            bot->HandleEmoteCommand(restEmotes[urand(0, 1)]);   // read/ponder flavor
-            data.lastEmote = getMSTime();
-        }
-        return false;
     }
 
     if (data.activityType == ACTIVITY_REPAIR_SELL)
@@ -982,38 +857,6 @@ bool NewRpgTravelMountAction::Execute(Event /*event*/)
     return false;
 }
 
-bool NewRpgExploreLandmarkAction::Execute(Event /*event*/)
-{
-    NewRpgInfo& info = botAI->rpgInfo;
-    auto* data = std::get_if<NewRpgInfo::ExploreLandmark>(&info.data);
-    if (!data)
-        return false;
-    if (bot->GetExactDist(data->pos) > 10.0f)
-    {
-        if (MoveFarTo(data->pos))
-            return true;
-        return MoveRandomNear(10.0f);
-    }
-    // arrived: linger and look around
-    if (!data->lastReach)
-    {
-        data->lastReach = getMSTime();
-        data->dwellMs = urand(sPlayerbotAIConfig.exploreLandmarkDwellMin,
-                              sPlayerbotAIConfig.exploreLandmarkDwellMax) * IN_MILLISECONDS;
-    }
-    if (GetMSTimeDiffToNow(data->lastReach) >= data->dwellMs)
-    {
-        info.ChangeToIdle();
-        return true;
-    }
-    if (urand(0, 100) < 5)   // occasional look-around emote
-    {
-        static const uint32 lookEmotes[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_POINT, EMOTE_ONESHOT_QUESTION };
-        bot->HandleEmoteCommand(lookEmotes[urand(0, 2)]);
-    }
-    return false;
-}
-
 bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
@@ -1047,7 +890,7 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
         data->node = ObjectGuid();   // unreachable -> try another
         return true;
     }
-    // arrived: harvest — mirrors the existing ACTIVITY_GATHER harvest delegation
+    // arrived: harvest — mirrors the loot-harvest delegation
     LootObject lootObj(bot, data->node);
     if (lootObj.IsLootPossible(bot))
     {

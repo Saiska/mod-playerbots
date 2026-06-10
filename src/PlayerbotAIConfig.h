@@ -47,7 +47,6 @@ enum NewRpgStatus : int
     //Initial Status
     RPG_IDLE = 0,
     RPG_GO_GRIND = 1,
-    RPG_GO_CAMP = 2,
     // Exploring nearby
     RPG_WANDER_RANDOM = 3,
     RPG_WANDER_NPC = 4,
@@ -61,7 +60,6 @@ enum NewRpgStatus : int
     RPG_OUTDOOR_PVP = 8,
     RPG_PASTIME,      // leisure/social activities (framework + social starter)
     RPG_TRAVEL_MOUNT,       // ride overland to a far hub
-    RPG_EXPLORE_LANDMARK,   // go to a hub/landmark and look around
     RPG_GATHERING_CIRCUIT,  // multi-node profession-gathering loop
     RPG_STATUS_END
 };
@@ -84,7 +82,6 @@ inline BotActivityCategory CategoryOf(NewRpgStatus s)
     switch (s)
     {
         case RPG_GO_GRIND:
-        case RPG_GO_CAMP:
         case RPG_WANDER_RANDOM:        return CAT_ADVENTURE;
         case RPG_DO_QUEST:
         case RPG_GATHERING_CIRCUIT:    return CAT_WORK;
@@ -92,8 +89,7 @@ inline BotActivityCategory CategoryOf(NewRpgStatus s)
         case RPG_WANDER_NPC:
         case RPG_PASTIME:              return CAT_SOCIAL;
         case RPG_TRAVEL_FLIGHT:
-        case RPG_TRAVEL_MOUNT:
-        case RPG_EXPLORE_LANDMARK:     return CAT_TRAVEL;
+        case RPG_TRAVEL_MOUNT:         return CAT_TRAVEL;
         case RPG_OUTDOOR_PVP:          return CAT_PVP;
         default:                       return CAT_COUNT;  // RPG_IDLE / none
     }
@@ -122,7 +118,20 @@ enum BotCityPoi : uint8
     POI_FORGE
 };
 
-enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER, ACTIVITY_FISH, ACTIVITY_GATHER, ACTIVITY_CRAFT, ACTIVITY_DUEL, ACTIVITY_EAT_DRINK, ACTIVITY_REST_EMOTE, ACTIVITY_REPAIR_SELL, ACTIVITY_DUMMY, ACTIVITY_NONE = 0xFF };
+enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER, ACTIVITY_FISH, ACTIVITY_CRAFT, ACTIVITY_DUEL, ACTIVITY_REPAIR_SELL, ACTIVITY_DUMMY, ACTIVITY_NONE = 0xFF };
+
+// Unified flat id over the 16 rationalized behaviors (9 top-level statuses + 7 pastimes).
+// The shared spine: emote palettes, cadence, and lifecycle chat all key off this.
+enum BotBehaviorId : uint8
+{
+    BEH_NONE = 0,
+    // top-level occupations (NewRpgStatus)
+    BEH_GO_GRIND, BEH_WANDER_RANDOM, BEH_DO_QUEST, BEH_GATHERING_CIRCUIT,
+    BEH_REST, BEH_WANDER_NPC, BEH_TRAVEL_FLIGHT, BEH_TRAVEL_MOUNT, BEH_OUTDOOR_PVP,
+    // pastimes (BotActivity, under RPG_PASTIME)
+    BEH_SOCIAL, BEH_LOITER, BEH_FISH, BEH_CRAFT, BEH_DUEL, BEH_REPAIR_SELL, BEH_DUMMY,
+    BEH_COUNT
+};
 
 #define MAX_SPECNO 20
 
@@ -452,10 +461,9 @@ public:
     // --- more-activities-occupations (pipe 2b) ---
     float  travelMountDistMin{300.0f};
     float  travelMountDistMax{2000.0f};
-    uint32 exploreLandmarkDwellMin{20};
-    uint32 exploreLandmarkDwellMax{60};
     uint32 gatheringCircuitMinNodes{3};
     uint32 gatheringCircuitMaxNodes{6};
+    float  gatheringCircuitRadius{60.0f};
     uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
@@ -473,10 +481,6 @@ public:
     uint32 pastimeFishWeight;
     uint32 pastimeFishDwellMin;
     uint32 pastimeFishDwellMax;
-    uint32 pastimeGatherWeight;
-    float  pastimeGatherRadius;
-    uint32 pastimeGatherDwellMin;
-    uint32 pastimeGatherDwellMax;
     uint32 pastimeCraftWeight;
     uint32 pastimeCraftDwellMin;
     uint32 pastimeCraftDwellMax;
@@ -484,12 +488,6 @@ public:
     float  pastimeDuelRadius;
     bool   pastimeDuelIncludePlayers;
     // --- more-activities-pastimes (pipe 2a) ---
-    uint32 pastimeEatDrinkWeight{30};
-    uint32 pastimeEatDrinkDwellMin{15};
-    uint32 pastimeEatDrinkDwellMax{45};
-    uint32 pastimeRestEmoteWeight{30};
-    uint32 pastimeRestEmoteDwellMin{15};
-    uint32 pastimeRestEmoteDwellMax{45};
     uint32 pastimeRepairSellWeight{25};
     uint32 pastimeRepairSellDwellMin{5};
     uint32 pastimeRepairSellDwellMax{15};

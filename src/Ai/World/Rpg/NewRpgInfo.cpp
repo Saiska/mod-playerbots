@@ -10,12 +10,6 @@ void NewRpgInfo::ChangeToGoGrind(WorldPosition pos)
     data = GoGrind{pos};
 }
 
-void NewRpgInfo::ChangeToGoCamp(WorldPosition pos)
-{
-    startT = getMSTime();
-    data = GoCamp{pos};
-}
-
 void NewRpgInfo::ChangeToWanderNpc()
 {
     startT = getMSTime();
@@ -76,12 +70,6 @@ void NewRpgInfo::ChangeToTravelMount(WorldPosition pos)
     data = TravelMount{pos};
 }
 
-void NewRpgInfo::ChangeToExploreLandmark(WorldPosition pos)
-{
-    startT = getMSTime();
-    data = ExploreLandmark{pos, 0, 0};
-}
-
 void NewRpgInfo::ChangeToGatheringCircuit(uint32 maxNodes)
 {
     startT = getMSTime();
@@ -130,7 +118,6 @@ NewRpgStatus NewRpgInfo::GetStatus()
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, Idle>) return RPG_IDLE;
         if constexpr (std::is_same_v<T, GoGrind>) return RPG_GO_GRIND;
-        if constexpr (std::is_same_v<T, GoCamp>) return RPG_GO_CAMP;
         if constexpr (std::is_same_v<T, WanderNpc>) return RPG_WANDER_NPC;
         if constexpr (std::is_same_v<T, Pastime>) return RPG_PASTIME;
         if constexpr (std::is_same_v<T, WanderRandom>) return RPG_WANDER_RANDOM;
@@ -139,7 +126,6 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, TravelFlight>) return RPG_TRAVEL_FLIGHT;
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
         if constexpr (std::is_same_v<T, TravelMount>) return RPG_TRAVEL_MOUNT;
-        if constexpr (std::is_same_v<T, ExploreLandmark>) return RPG_EXPLORE_LANDMARK;
         if constexpr (std::is_same_v<T, GatheringCircuit>) return RPG_GATHERING_CIRCUIT;
         return RPG_IDLE;
     }, data);
@@ -158,13 +144,6 @@ std::string NewRpgInfo::ToString()
             out << "\nGrindPos: " << arg.pos.GetMapId() << " " << arg.pos.GetPositionX() << " "
                 << arg.pos.GetPositionY() << " " << arg.pos.GetPositionZ();
             out << "\nlastGoGrind: " << startT;
-        }
-        else if constexpr (std::is_same_v<T, GoCamp>)
-        {
-            out << "GO_CAMP";
-            out << "\nCampPos: " << arg.pos.GetMapId() << " " << arg.pos.GetPositionX() << " "
-                << arg.pos.GetPositionY() << " " << arg.pos.GetPositionZ();
-            out << "\nlastGoCamp: " << startT;
         }
         else if constexpr (std::is_same_v<T, WanderNpc>)
         {
@@ -224,10 +203,6 @@ std::string NewRpgInfo::ToString()
         else if constexpr (std::is_same_v<T, TravelMount>)
         {
             out << "TRAVEL_MOUNT";
-        }
-        else if constexpr (std::is_same_v<T, ExploreLandmark>)
-        {
-            out << "EXPLORE_LANDMARK";
         }
         else if constexpr (std::is_same_v<T, GatheringCircuit>)
         {
