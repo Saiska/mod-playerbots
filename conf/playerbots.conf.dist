@@ -1088,7 +1088,6 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 # WanderRandom  (Default: 15  Move randomly nearby to find and kill mobs)
 # WanderNpc     (Default: 20  Randomly interact with nearby NPCs​)
 # GoGrind       (Default: 15  Go to nearby level-appropriate locations to grind for killing mobs)
-# GoCamp        (Default: 10  Return to a nearby camp depending on innkeeper/flightmaster)​
 # DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion​)
 # TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
 # Rest          (Default: 5   Take a break for a while and do nothing)
@@ -1097,14 +1096,12 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
 AiPlayerbot.RpgStatusProbWeight.WanderNpc = 20
 AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
-AiPlayerbot.RpgStatusProbWeight.GoCamp = 10
 AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.Pastime = 24
 AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
-AiPlayerbot.RpgStatusProbWeight.ExploreLandmark = 10
 AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
 
 # --- Occupation satiation (variety) -------------------------------------------
@@ -1112,7 +1109,7 @@ AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
 # bot keeps a per-category meter that rises while doing that category and decays
 # otherwise; a high meter suppresses that category's weight in the pick.
 # Categories:
-#   ADVENTURE = GoGrind, GoCamp, WanderRandom, DoQuest
+#   ADVENTURE = GoGrind, WanderRandom, DoQuest
 #   SOCIAL    = WanderNpc, Pastime
 #   REST      = Rest
 #   TRAVEL    = TravelFlight
@@ -1129,14 +1126,11 @@ AiPlayerbot.RpgSatiation.SuppressExponent = 1.5
 AiPlayerbot.RpgSatiation.MinAppealFrac = 0.05
 
 # --- More occupations (pipe 2b) -----------------------------------------------
-# travel_mount / explore_landmark pick a taxi-node position on the bot's current
-# map within [DistMin,DistMax] yards. explore_landmark lingers DwellMin..Max secs
-# playing look-around emotes. gathering_circuit harvests MinNodes..MaxNodes nodes
-# (bot needs a mining/herbalism skill). Dwell/node ranges auto-swap if inverted.
+# travel_mount picks a taxi-node position on the bot's current map within
+# [DistMin,DistMax] yards. gathering_circuit harvests MinNodes..MaxNodes nodes
+# (bot needs a mining/herbalism skill). Node ranges auto-swap if inverted.
 AiPlayerbot.TravelMount.DistMin = 300.0
 AiPlayerbot.TravelMount.DistMax = 2000.0
-AiPlayerbot.ExploreLandmark.DwellMin = 20
-AiPlayerbot.ExploreLandmark.DwellMax = 60
 AiPlayerbot.GatheringCircuit.MinNodes = 3
 AiPlayerbot.GatheringCircuit.MaxNodes = 6
 

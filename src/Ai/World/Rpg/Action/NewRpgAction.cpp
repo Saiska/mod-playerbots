@@ -123,9 +123,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
-            return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
+            return RandomChangeStatus({RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_PASTIME,
                                        RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT,
-                                       RPG_EXPLORE_LANDMARK, RPG_GATHERING_CIRCUIT});
+                                       RPG_GATHERING_CIRCUIT});
 
         case RPG_GO_GRIND:
         {
@@ -136,19 +136,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             if (bot->GetExactDist(originalPos) < 10.0f)
             {
                 info.ChangeToWanderRandom();
-                return true;
-            }
-            break;
-        }
-        case RPG_GO_CAMP:
-        {
-            auto& data = std::get<NewRpgInfo::GoCamp>(info.data);
-            WorldPosition& originalPos = data.pos;
-            assert(data.pos != WorldPosition());
-            // GO_CAMP -> WANDER_NPC
-            if (bot->GetExactDist(originalPos) < 10.0f)
-            {
-                info.ChangeToWanderNpc();
                 return true;
             }
             break;
@@ -232,15 +219,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             }
             break;
         }
-        case RPG_EXPLORE_LANDMARK:
-        {
-            if (info.HasStatusPersisted(statusExploreDuration))
-            {
-                info.ChangeToIdle();
-                return true;
-            }
-            break;
-        }
         case RPG_GATHERING_CIRCUIT:
         {
             if (info.HasStatusPersisted(statusGatheringDuration))
@@ -267,21 +245,6 @@ bool NewRpgGoGrindAction::Execute(Event /*event*/)
         // Small nudge so the next tick's MoveFarTo starts from a
         // slightly different position. Kept small so it doesn't look
         // like the bot is abandoning its destination.
-        return MoveRandomNear(10.0f);
-    }
-
-    return false;
-}
-
-bool NewRpgGoCampAction::Execute(Event /*event*/)
-{
-    if (SearchQuestGiverAndAcceptOrReward())
-        return true;
-
-    if (auto* data = std::get_if<NewRpgInfo::GoCamp>(&botAI->rpgInfo.data))
-    {
-        if (MoveFarTo(data->pos))
-            return true;
         return MoveRandomNear(10.0f);
     }
 
@@ -978,38 +941,6 @@ bool NewRpgTravelMountAction::Execute(Event /*event*/)
         if (MoveFarTo(data->pos))
             return true;
         return MoveRandomNear(10.0f);
-    }
-    return false;
-}
-
-bool NewRpgExploreLandmarkAction::Execute(Event /*event*/)
-{
-    NewRpgInfo& info = botAI->rpgInfo;
-    auto* data = std::get_if<NewRpgInfo::ExploreLandmark>(&info.data);
-    if (!data)
-        return false;
-    if (bot->GetExactDist(data->pos) > 10.0f)
-    {
-        if (MoveFarTo(data->pos))
-            return true;
-        return MoveRandomNear(10.0f);
-    }
-    // arrived: linger and look around
-    if (!data->lastReach)
-    {
-        data->lastReach = getMSTime();
-        data->dwellMs = urand(sPlayerbotAIConfig.exploreLandmarkDwellMin,
-                              sPlayerbotAIConfig.exploreLandmarkDwellMax) * IN_MILLISECONDS;
-    }
-    if (GetMSTimeDiffToNow(data->lastReach) >= data->dwellMs)
-    {
-        info.ChangeToIdle();
-        return true;
-    }
-    if (urand(0, 100) < 5)   // occasional look-around emote
-    {
-        static const uint32 lookEmotes[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_POINT, EMOTE_ONESHOT_QUESTION };
-        bot->HandleEmoteCommand(lookEmotes[urand(0, 2)]);
     }
     return false;
 }

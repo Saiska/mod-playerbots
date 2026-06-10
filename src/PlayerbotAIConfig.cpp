@@ -715,28 +715,23 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_WANDER_RANDOM] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.WanderRandom", 15);
     RpgStatusProbWeight[RPG_WANDER_NPC] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.WanderNpc", 20);
     RpgStatusProbWeight[RPG_GO_GRIND] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoGrind", 15);
-    RpgStatusProbWeight[RPG_GO_CAMP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoCamp", 10);
     RpgStatusProbWeight[RPG_DO_QUEST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoQuest", 60);
     RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 5);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 12);
     RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);
-    RpgStatusProbWeight[RPG_EXPLORE_LANDMARK] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.ExploreLandmark", 10);
     RpgStatusProbWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GatheringCircuit", 15);
 
     travelMountDistMin = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMin", 300.0f);
     travelMountDistMax = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMax", 2000.0f);
     if (travelMountDistMax < travelMountDistMin) std::swap(travelMountDistMin, travelMountDistMax);
-    exploreLandmarkDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.ExploreLandmark.DwellMin", 20);
-    exploreLandmarkDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.ExploreLandmark.DwellMax", 60);
-    if (exploreLandmarkDwellMax < exploreLandmarkDwellMin) std::swap(exploreLandmarkDwellMin, exploreLandmarkDwellMax);
     gatheringCircuitMinNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MinNodes", 3);
     gatheringCircuitMaxNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MaxNodes", 6);
     if (gatheringCircuitMaxNodes < gatheringCircuitMinNodes) std::swap(gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
-    LOG_INFO("playerbots", "[MoreOccupations] travelMount={} exploreLandmark={} gatheringCircuit={} (mountDist={}-{} exploreDwell={}-{} circuitNodes={}-{})",
-             RpgStatusProbWeight[RPG_TRAVEL_MOUNT], RpgStatusProbWeight[RPG_EXPLORE_LANDMARK], RpgStatusProbWeight[RPG_GATHERING_CIRCUIT],
-             travelMountDistMin, travelMountDistMax, exploreLandmarkDwellMin, exploreLandmarkDwellMax,
+    LOG_INFO("playerbots", "[MoreOccupations] travelMount={} gatheringCircuit={} (mountDist={}-{} circuitNodes={}-{})",
+             RpgStatusProbWeight[RPG_TRAVEL_MOUNT], RpgStatusProbWeight[RPG_GATHERING_CIRCUIT],
+             travelMountDistMin, travelMountDistMax,
              gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
 
     rpgSatiationEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSatiation.Enable", true);

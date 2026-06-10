@@ -47,7 +47,6 @@ enum NewRpgStatus : int
     //Initial Status
     RPG_IDLE = 0,
     RPG_GO_GRIND = 1,
-    RPG_GO_CAMP = 2,
     // Exploring nearby
     RPG_WANDER_RANDOM = 3,
     RPG_WANDER_NPC = 4,
@@ -61,7 +60,6 @@ enum NewRpgStatus : int
     RPG_OUTDOOR_PVP = 8,
     RPG_PASTIME,      // leisure/social activities (framework + social starter)
     RPG_TRAVEL_MOUNT,       // ride overland to a far hub
-    RPG_EXPLORE_LANDMARK,   // go to a hub/landmark and look around
     RPG_GATHERING_CIRCUIT,  // multi-node profession-gathering loop
     RPG_STATUS_END
 };
@@ -84,7 +82,6 @@ inline BotActivityCategory CategoryOf(NewRpgStatus s)
     switch (s)
     {
         case RPG_GO_GRIND:
-        case RPG_GO_CAMP:
         case RPG_WANDER_RANDOM:        return CAT_ADVENTURE;
         case RPG_DO_QUEST:
         case RPG_GATHERING_CIRCUIT:    return CAT_WORK;
@@ -92,8 +89,7 @@ inline BotActivityCategory CategoryOf(NewRpgStatus s)
         case RPG_WANDER_NPC:
         case RPG_PASTIME:              return CAT_SOCIAL;
         case RPG_TRAVEL_FLIGHT:
-        case RPG_TRAVEL_MOUNT:
-        case RPG_EXPLORE_LANDMARK:     return CAT_TRAVEL;
+        case RPG_TRAVEL_MOUNT:         return CAT_TRAVEL;
         case RPG_OUTDOOR_PVP:          return CAT_PVP;
         default:                       return CAT_COUNT;  // RPG_IDLE / none
     }
@@ -452,8 +448,6 @@ public:
     // --- more-activities-occupations (pipe 2b) ---
     float  travelMountDistMin{300.0f};
     float  travelMountDistMax{2000.0f};
-    uint32 exploreLandmarkDwellMin{20};
-    uint32 exploreLandmarkDwellMax{60};
     uint32 gatheringCircuitMinNodes{3};
     uint32 gatheringCircuitMaxNodes{6};
     uint32 pastimeSocialWeight;

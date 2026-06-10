@@ -39,7 +39,6 @@ public:
         // transitionMat.resize(statusCount, std::vector<int>(statusCount, 0));
 
         // transitionMat[RPG_IDLE][RPG_GO_GRIND] = 20;
-        // transitionMat[RPG_IDLE][RPG_GO_CAMP] = 15;
         // transitionMat[RPG_IDLE][RPG_WANDER_NPC] = 30;
         // transitionMat[RPG_IDLE][RPG_DO_QUEST] = 35;
     }
@@ -54,7 +53,6 @@ protected:
     const int32 statusDoQuestDuration = 30 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusOutDoorPvPDuration = HOUR * IN_MILLISECONDS ;
     const int32 statusTravelMountDuration = 15 * MINUTE * IN_MILLISECONDS;
-    const int32 statusExploreDuration = 10 * MINUTE * IN_MILLISECONDS;
     const int32 statusGatheringDuration = 20 * MINUTE * IN_MILLISECONDS;
 };
 
@@ -62,13 +60,6 @@ class NewRpgGoGrindAction : public NewRpgBaseAction
 {
 public:
     NewRpgGoGrindAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg go grind") {}
-    bool Execute(Event event) override;
-};
-
-class NewRpgGoCampAction : public NewRpgBaseAction
-{
-public:
-    NewRpgGoCampAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg go camp") {}
     bool Execute(Event event) override;
 };
 
@@ -119,13 +110,6 @@ class NewRpgTravelMountAction : public NewRpgBaseAction
 {
 public:
     NewRpgTravelMountAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg travel mount") {}
-    bool Execute(Event event) override;
-};
-
-class NewRpgExploreLandmarkAction : public NewRpgBaseAction
-{
-public:
-    NewRpgExploreLandmarkAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg explore landmark") {}
     bool Execute(Event event) override;
 };
 

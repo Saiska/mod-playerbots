@@ -1642,16 +1642,6 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             }
             return false;
         }
-        case RPG_GO_CAMP:
-        {
-            WorldPosition pos = SelectRandomCampPos(bot);
-            if (pos != WorldPosition())
-            {
-                botAI->rpgInfo.ChangeToGoCamp(pos);
-                return true;
-            }
-            return false;
-        }
         case RPG_DO_QUEST:
         {
             std::vector<uint32> availableQuests;
@@ -1717,16 +1707,6 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             }
             return false;
         }
-        case RPG_EXPLORE_LANDMARK:
-        {
-            WorldPosition pos;
-            if (SelectFarTaxiDest(pos))
-            {
-                botAI->rpgInfo.ChangeToExploreLandmark(pos);
-                return true;
-            }
-            return false;
-        }
         case RPG_GATHERING_CIRCUIT:
         {
             uint32 maxNodes = urand(sPlayerbotAIConfig.gatheringCircuitMinNodes,
@@ -1759,11 +1739,6 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         case RPG_GO_GRIND:
         {
             WorldPosition pos = SelectRandomGrindPos(bot);
-            return pos != WorldPosition();
-        }
-        case RPG_GO_CAMP:
-        {
-            WorldPosition pos = SelectRandomCampPos(bot);
             return pos != WorldPosition();
         }
         case RPG_PASTIME:
@@ -1808,11 +1783,6 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             return outdoorPvP != nullptr;
         }
         case RPG_TRAVEL_MOUNT:
-        {
-            WorldPosition pos;
-            return SelectFarTaxiDest(pos);
-        }
-        case RPG_EXPLORE_LANDMARK:
         {
             WorldPosition pos;
             return SelectFarTaxiDest(pos);

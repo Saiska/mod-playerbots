@@ -22,11 +22,6 @@ struct NewRpgInfo
     {
         WorldPosition pos{};
     };
-    // RPG_GO_CAMP
-    struct GoCamp
-    {
-        WorldPosition pos{};
-    };
     // RPG_WANDER_NPC
     struct WanderNpc
     {
@@ -81,13 +76,6 @@ struct NewRpgInfo
     {
         WorldPosition pos{};
     };
-    // RPG_EXPLORE_LANDMARK
-    struct ExploreLandmark
-    {
-        WorldPosition pos{};
-        uint32 lastReach{0};
-        uint32 dwellMs{0};
-    };
     // RPG_GATHERING_CIRCUIT
     struct GatheringCircuit
     {
@@ -115,7 +103,6 @@ struct NewRpgInfo
     using RpgData = std::variant<
         Idle,
         GoGrind,
-        GoCamp,
         WanderNpc,
         Pastime,
         WanderRandom,
@@ -124,7 +111,6 @@ struct NewRpgInfo
         TravelFlight,
         OutdoorPvP,
         TravelMount,
-        ExploreLandmark,
         GatheringCircuit
     >;
     RpgData data;
@@ -132,7 +118,6 @@ struct NewRpgInfo
     NewRpgStatus GetStatus();
     bool HasStatusPersisted(uint32 maxDuration) { return GetMSTimeDiffToNow(startT) > maxDuration; }
     void ChangeToGoGrind(WorldPosition pos);
-    void ChangeToGoCamp(WorldPosition pos);
     void ChangeToWanderNpc();
     void ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos = {}, uint8 poiType = POI_NONE);
     void ChangeToWanderRandom();
@@ -140,7 +125,6 @@ struct NewRpgInfo
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
     void ChangeToTravelMount(WorldPosition pos);
-    void ChangeToExploreLandmark(WorldPosition pos);
     void ChangeToGatheringCircuit(uint32 maxNodes);
     void ChangeToRest();
     void ChangeToIdle();
