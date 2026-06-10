@@ -83,8 +83,9 @@ protected:
 
 // ---------------------------------------------------------------------------
 // Pastime eligibility probe accessor (Task 2 census log calls this).
-// Arrays must be size 10 (one slot per BotActivity index 0..9).
+// Caller must pass arrays of size >= PASTIME_ACT_COUNT (one slot per
+// BotActivity index 0..ACTIVITY_DUMMY; currently 10 entries).
 // ---------------------------------------------------------------------------
-void GetPastimeProbeCounts(uint32 elig[10], uint32 chosen[10], uint32 saw[10], uint32& duelAreaBlocked);
+void GetPastimeProbeCounts(uint32 elig[], uint32 chosen[], uint32 saw[], uint32& duelAreaBlocked);
 
 #endif

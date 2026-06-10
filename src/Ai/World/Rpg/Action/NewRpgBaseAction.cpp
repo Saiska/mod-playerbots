@@ -41,13 +41,16 @@ WorldPosition FindFishingHole(PlayerbotAI* botAI);
 
 // ---------------------------------------------------------------------------
 // Pastime eligibility probe counters (Task 1: measure-only, no behavior change)
-// Indexed by BotActivity (0..9); ACTIVITY_NONE (0xFF) is never used as an index.
+// Indexed by BotActivity (0..ACTIVITY_DUMMY); ACTIVITY_NONE (0xFF) is never
+// used as an index.  PASTIME_ACT_COUNT derives from the enum so it stays in
+// sync automatically if new activities are appended before ACTIVITY_NONE.
 // ---------------------------------------------------------------------------
 namespace
 {
-    std::atomic<uint32> g_pastimeEligible[10]{};
-    std::atomic<uint32> g_pastimeChosen[10]{};
-    std::atomic<uint32> g_pastimeSawTarget[10]{};
+    constexpr uint32 PASTIME_ACT_COUNT = ACTIVITY_DUMMY + 1;  // 10 real activities, 0..ACTIVITY_DUMMY
+    std::atomic<uint32> g_pastimeEligible[PASTIME_ACT_COUNT]{};
+    std::atomic<uint32> g_pastimeChosen[PASTIME_ACT_COUNT]{};
+    std::atomic<uint32> g_pastimeSawTarget[PASTIME_ACT_COUNT]{};
     std::atomic<uint32> g_pastimeDuelAreaBlocked{};
 } // anonymous namespace
 
@@ -822,7 +825,7 @@ ObjectGuid NewRpgBaseAction::SelectVendorNpc()
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {
-            if (!sawTarget) { sawTarget = true; ++g_pastimeSawTarget[ACTIVITY_REPAIR_SELL]; }
+            if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_REPAIR_SELL].fetch_add(1, std::memory_order_relaxed); }
             bestDist = d;
             best = c;
         }
@@ -851,7 +854,7 @@ ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {
-            if (!sawTarget) { sawTarget = true; ++g_pastimeSawTarget[ACTIVITY_DUMMY]; }
+            if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_DUMMY].fetch_add(1, std::memory_order_relaxed); }
             bestDist = d;
             best = c;
         }
@@ -876,7 +879,7 @@ ObjectGuid NewRpgBaseAction::SelectSocialPartner()
             continue;
 
         // In-radius base candidate confirmed — count once regardless of downstream filters.
-        if (!sawTarget) { sawTarget = true; ++g_pastimeSawTarget[ACTIVITY_SOCIAL]; }
+        if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_SOCIAL].fetch_add(1, std::memory_order_relaxed); }
 
         bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
         if (!isBot)
@@ -929,12 +932,12 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
         if (!lockInfo)
             continue;
 
+        // Compute distance once; reuse for both the sawTarget probe and the best-update.
+        float dist = bot->GetExactDist(go);
+
         // In-radius base candidate of the right type (spawned chest with lock) — count once.
         // The `eligible` skill check below is the downstream filter.
-        {
-            float distCheck = bot->GetExactDist(go);
-            if (distCheck < bestDist && !sawTarget) { sawTarget = true; ++g_pastimeSawTarget[ACTIVITY_GATHER]; }
-        }
+        if (dist < bestDist && !sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_GATHER].fetch_add(1, std::memory_order_relaxed); }
 
         bool eligible = false;
         for (uint8 i = 0; i < 8; ++i)
@@ -954,7 +957,6 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
         if (!eligible)
             continue;
 
-        float dist = bot->GetExactDist(go);
         if (dist < bestDist)
         {
             bestDist = dist;
@@ -1034,7 +1036,7 @@ static ObjectGuid SelectDuelPartner(PlayerbotAI* botAI)
             continue;
 
         // In-radius base candidate confirmed — count once regardless of downstream filters.
-        if (!sawTarget) { sawTarget = true; ++g_pastimeSawTarget[ACTIVITY_DUEL]; }
+        if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_DUEL].fetch_add(1, std::memory_order_relaxed); }
 
         bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
         if (!isBot)
@@ -1077,7 +1079,7 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
     if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
         if (ObjectGuid t = SelectSocialPartner())
         {
-            ++g_pastimeEligible[ACTIVITY_SOCIAL];
+            g_pastimeEligible[ACTIVITY_SOCIAL].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_SOCIAL), t, sPlayerbotAIConfig.pastimeSocialWeight });
         }
 
@@ -1086,7 +1088,7 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
         uint8 poiType = POI_NONE;
         if (ObjectGuid poi = SelectLoiterPoi(poiType))
         {
-            ++g_pastimeEligible[ACTIVITY_LOITER];
+            g_pastimeEligible[ACTIVITY_LOITER].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_LOITER), poi, sPlayerbotAIConfig.pastimeLoiterWeight });
         }
     }
@@ -1097,7 +1099,7 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
     if (sPlayerbotAIConfig.pastimeFishWeight > 0 && AI_VALUE(bool, "can fish"))
     {
         WorldPosition hole = FindFishingHole(botAI);   // empty if no fishing-hole GO nearby; that's fine
-        ++g_pastimeEligible[ACTIVITY_FISH];
+        g_pastimeEligible[ACTIVITY_FISH].fetch_add(1, std::memory_order_relaxed);
         cands.push_back({ uint8(ACTIVITY_FISH), ObjectGuid(), sPlayerbotAIConfig.pastimeFishWeight, hole });
     }
 
@@ -1105,54 +1107,53 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
     {
         if (ObjectGuid node = SelectGatherNode())
         {
-            ++g_pastimeEligible[ACTIVITY_GATHER];
+            g_pastimeEligible[ACTIVITY_GATHER].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_GATHER), node, sPlayerbotAIConfig.pastimeGatherWeight });
         }
     }
 
     if (sPlayerbotAIConfig.pastimeCraftWeight > 0 && BotHasCraftingProfession(bot))
     {
-        ++g_pastimeEligible[ACTIVITY_CRAFT];
+        g_pastimeEligible[ACTIVITY_CRAFT].fetch_add(1, std::memory_order_relaxed);
         cands.push_back({ uint8(ACTIVITY_CRAFT), ObjectGuid(), sPlayerbotAIConfig.pastimeCraftWeight });
     }
 
-    // Hoist the area check into a bool so the existing if-guard is preserved byte-for-byte
-    // while we can also observe when weight>0 but area blocks duel eligibility.
-    bool duelAreaOk = (sPlayerbotAIConfig.pastimeDuelWeight > 0) ? BotInDuelAllowedArea(bot) : false;
-    if (sPlayerbotAIConfig.pastimeDuelWeight > 0 && !duelAreaOk)
-        ++g_pastimeDuelAreaBlocked;
-    if (sPlayerbotAIConfig.pastimeDuelWeight > 0 && duelAreaOk)
+    // Single outer weight guard; area check only evaluated when weight > 0.
+    if (sPlayerbotAIConfig.pastimeDuelWeight > 0)
     {
-        if (ObjectGuid partner = SelectDuelPartner(botAI))
+        bool duelAreaOk = BotInDuelAllowedArea(bot);
+        if (!duelAreaOk)
+            g_pastimeDuelAreaBlocked.fetch_add(1, std::memory_order_relaxed);
+        else if (ObjectGuid partner = SelectDuelPartner(botAI))
         {
-            ++g_pastimeEligible[ACTIVITY_DUEL];
+            g_pastimeEligible[ACTIVITY_DUEL].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_DUEL), partner, sPlayerbotAIConfig.pastimeDuelWeight });
         }
     }
 
     if (sPlayerbotAIConfig.pastimeEatDrinkWeight > 0)
     {
-        ++g_pastimeEligible[ACTIVITY_EAT_DRINK];
+        g_pastimeEligible[ACTIVITY_EAT_DRINK].fetch_add(1, std::memory_order_relaxed);
         cands.push_back({ uint8(ACTIVITY_EAT_DRINK), ObjectGuid(), sPlayerbotAIConfig.pastimeEatDrinkWeight });
     }
 
     if (sPlayerbotAIConfig.pastimeRestEmoteWeight > 0)
     {
-        ++g_pastimeEligible[ACTIVITY_REST_EMOTE];
+        g_pastimeEligible[ACTIVITY_REST_EMOTE].fetch_add(1, std::memory_order_relaxed);
         cands.push_back({ uint8(ACTIVITY_REST_EMOTE), ObjectGuid(), sPlayerbotAIConfig.pastimeRestEmoteWeight });
     }
 
     if (sPlayerbotAIConfig.pastimeRepairSellWeight > 0)
         if (ObjectGuid v = SelectVendorNpc())
         {
-            ++g_pastimeEligible[ACTIVITY_REPAIR_SELL];
+            g_pastimeEligible[ACTIVITY_REPAIR_SELL].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_REPAIR_SELL), v, sPlayerbotAIConfig.pastimeRepairSellWeight });
         }
 
     if (sPlayerbotAIConfig.pastimeDummyWeight > 0)
         if (ObjectGuid d = SelectTrainingDummy())
         {
-            ++g_pastimeEligible[ACTIVITY_DUMMY];
+            g_pastimeEligible[ACTIVITY_DUMMY].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_DUMMY), d, sPlayerbotAIConfig.pastimeDummyWeight });
         }
 
@@ -1167,12 +1168,12 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
         acc += c.weight;
         if (acc >= r)
         {
-            ++g_pastimeChosen[c.activity];
+            g_pastimeChosen[c.activity].fetch_add(1, std::memory_order_relaxed);
             outActivity = c.activity; outTarget = c.target; outTargetPos = c.pos;
             return true;
         }
     }
-    ++g_pastimeChosen[cands.back().activity];
+    g_pastimeChosen[cands.back().activity].fetch_add(1, std::memory_order_relaxed);
     outActivity = cands.back().activity; outTarget = cands.back().target; outTargetPos = cands.back().pos;
     return true;
 }
@@ -1180,15 +1181,15 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
 // ---------------------------------------------------------------------------
 // Pastime probe accessor — copies counters out for the census log (Task 2).
 // ---------------------------------------------------------------------------
-void GetPastimeProbeCounts(uint32 elig[10], uint32 chosen[10], uint32 saw[10], uint32& duelAreaBlocked)
+void GetPastimeProbeCounts(uint32 elig[], uint32 chosen[], uint32 saw[], uint32& duelAreaBlocked)
 {
-    for (int i = 0; i < 10; ++i)
+    for (uint32 i = 0; i < PASTIME_ACT_COUNT; ++i)
     {
-        elig[i]   = g_pastimeEligible[i].load();
-        chosen[i] = g_pastimeChosen[i].load();
-        saw[i]    = g_pastimeSawTarget[i].load();
+        elig[i]   = g_pastimeEligible[i].load(std::memory_order_relaxed);
+        chosen[i] = g_pastimeChosen[i].load(std::memory_order_relaxed);
+        saw[i]    = g_pastimeSawTarget[i].load(std::memory_order_relaxed);
     }
-    duelAreaBlocked = g_pastimeDuelAreaBlocked.load();
+    duelAreaBlocked = g_pastimeDuelAreaBlocked.load(std::memory_order_relaxed);
 }
 
 bool NewRpgBaseAction::HasQuestToAcceptOrReward(WorldObject* object)
