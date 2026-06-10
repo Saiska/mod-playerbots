@@ -408,6 +408,19 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             {
                 if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
                 {
+                    // Maintain the sustained pose every tick — the bot's idle/movement AI resets stand state otherwise.
+                    switch (static_cast<BotCityPoi>(data.poiType))
+                    {
+                        case POI_INNKEEPER:
+                            if (bot->getStandState() != UNIT_STAND_STATE_SIT)
+                                bot->SetStandState(UNIT_STAND_STATE_SIT);
+                            break;
+                        case POI_FORGE:
+                            bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
+                            break;
+                        default:
+                            break;
+                    }
                     // Themed cadence: POI-specific one-shot emote on the existing 5% tick.
                     if (urand(0, 100) < 5)
                     {
@@ -445,7 +458,10 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                     if (urand(0, 100) < 5)
                         bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
                 }
-                return false;
+                // Hold the bot in place for the dwell. Returning false here let the lower-priority
+                // movement AI walk it off the POI within a tick or two, so it never actually lingered
+                // (bots arrived but never dwelt — the pose flashed for one tick and was gone).
+                return true;
             }
             EndSocialPastime(bot);
             info.ChangeToIdle();
