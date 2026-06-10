@@ -967,8 +967,7 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
 {
     GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
     ObjectGuid best;
-    float bestDist = sPlayerbotAIConfig.pastimeGatherRadius;
-    bool sawTarget = false;
+    float bestDist = sPlayerbotAIConfig.gatheringCircuitRadius;
 
     for (ObjectGuid const& guid : gos)
     {
@@ -983,12 +982,7 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
         if (!lockInfo)
             continue;
 
-        // Compute distance once; reuse for both the sawTarget probe and the best-update.
         float dist = bot->GetExactDist(go);
-
-        // In-radius base candidate of the right type (spawned chest with lock) — count once.
-        // The `eligible` skill check below is the downstream filter.
-        if (dist < bestDist && !sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_GATHER].fetch_add(1, std::memory_order_relaxed); }
 
         bool eligible = false;
         for (uint8 i = 0; i < 8; ++i)
@@ -1154,15 +1148,6 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
         cands.push_back({ uint8(ACTIVITY_FISH), ObjectGuid(), sPlayerbotAIConfig.pastimeFishWeight, hole });
     }
 
-    if (sPlayerbotAIConfig.pastimeGatherWeight > 0)
-    {
-        if (ObjectGuid node = SelectGatherNode())
-        {
-            g_pastimeEligible[ACTIVITY_GATHER].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_GATHER), node, sPlayerbotAIConfig.pastimeGatherWeight });
-        }
-    }
-
     if (sPlayerbotAIConfig.pastimeCraftWeight > 0 && BotHasCraftingProfession(bot))
     {
         g_pastimeEligible[ACTIVITY_CRAFT].fetch_add(1, std::memory_order_relaxed);
@@ -1180,18 +1165,6 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
             g_pastimeEligible[ACTIVITY_DUEL].fetch_add(1, std::memory_order_relaxed);
             cands.push_back({ uint8(ACTIVITY_DUEL), partner, sPlayerbotAIConfig.pastimeDuelWeight });
         }
-    }
-
-    if (sPlayerbotAIConfig.pastimeEatDrinkWeight > 0)
-    {
-        g_pastimeEligible[ACTIVITY_EAT_DRINK].fetch_add(1, std::memory_order_relaxed);
-        cands.push_back({ uint8(ACTIVITY_EAT_DRINK), ObjectGuid(), sPlayerbotAIConfig.pastimeEatDrinkWeight });
-    }
-
-    if (sPlayerbotAIConfig.pastimeRestEmoteWeight > 0)
-    {
-        g_pastimeEligible[ACTIVITY_REST_EMOTE].fetch_add(1, std::memory_order_relaxed);
-        cands.push_back({ uint8(ACTIVITY_REST_EMOTE), ObjectGuid(), sPlayerbotAIConfig.pastimeRestEmoteWeight });
     }
 
     if (sPlayerbotAIConfig.pastimeRepairSellWeight > 0)

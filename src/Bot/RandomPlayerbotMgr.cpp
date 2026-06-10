@@ -3038,7 +3038,7 @@ void RandomPlayerbotMgr::PrintStats()
             GetPastimeProbeCounts(pastimeElig, pastimeChosen, pastimeSaw, pastimeDuelAreaBlocked);
 
             static const char* const kPastimeNames[ACTIVITY_DUMMY + 1] =
-                { "Social", "Loiter", "Fish", "Gather", "Craft", "Duel", "EatDrink", "RestEmote", "RepairSell", "Dummy" };
+                { "Social", "Loiter", "Fish", "Craft", "Duel", "RepairSell", "Dummy" };
 
             std::ostringstream ssElig, ssChosen, ssSaw;
             for (uint32 i = 0; i <= ACTIVITY_DUMMY; ++i)
