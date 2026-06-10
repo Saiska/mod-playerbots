@@ -507,6 +507,10 @@ public:
     uint32 pastimeDummyDwellMax{90};
     float  pastimeDummyRadius{60.0f};
     std::vector<uint32> pastimeDummyEntries;  // training-dummy creature entries (CSV in conf)
+    // --- per-behavior emote cadence (occupation-emote-palettes) ---
+    bool   emoteCadenceEnable{true};
+    uint32 emoteCadenceMin[BEH_COUNT]{};   // seconds, per BotBehaviorId
+    uint32 emoteCadenceMax[BEH_COUNT]{};
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;
