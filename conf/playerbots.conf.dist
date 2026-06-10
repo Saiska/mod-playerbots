@@ -1190,6 +1190,7 @@ AiPlayerbot.Pastime.Dummy.Entries =
 # Loiter.ThemedScenes: enable themed clustered scene enactment at loiter POIs (1=on, 0=uniform emote).
 # Loiter.TypeWeights: space-separated name=weight pairs controlling relative POI selection probability.
 #   Valid names: auctioneer, banker, innkeeper, trainer, mailbox, forge.
+# A present TypeWeights replaces ALL defaults — list every type you want above 1.0 (the example below preserves the innkeeper=3/forge=2 defaults).
 #   Unlisted types default to 1.0. Example: "innkeeper=3 forge=2 banker=1 auctioneer=1 trainer=1 mailbox=1"
 AiPlayerbot.Pastime.Loiter.Weight = 100
 AiPlayerbot.Pastime.Loiter.DwellMin = 30

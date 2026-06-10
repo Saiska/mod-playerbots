@@ -798,7 +798,9 @@ bool PlayerbotAIConfig::Initialize()
                 if (eq == std::string::npos)
                     continue;
                 std::string name = tok.substr(0, eq);
-                float val = std::stof(tok.substr(eq + 1));
+                float val;
+                try { val = std::stof(tok.substr(eq + 1)); }
+                catch (...) { LOG_ERROR("playerbots", "[LoiterScenes] bad TypeWeights token '{}', skipping", tok); continue; }
                 if      (name == "auctioneer") pastimeLoiterTypeWeight[POI_AUCTIONEER] = val;
                 else if (name == "banker")     pastimeLoiterTypeWeight[POI_BANKER]     = val;
                 else if (name == "innkeeper")  pastimeLoiterTypeWeight[POI_INNKEEPER]  = val;
