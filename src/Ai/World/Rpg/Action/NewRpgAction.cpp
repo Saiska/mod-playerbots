@@ -369,6 +369,7 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
     {
         if (data.target.IsEmpty())
         {
+            EndSocialPastime(bot);
             info.ChangeToIdle();
             return true;
         }
@@ -382,15 +383,64 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                                         sPlayerbotAIConfig.pastimeLoiterDwellMax);
                 data.dwellMs = dwellSec * IN_MILLISECONDS;
                 bot->SetFacingToObject(object);
+                // Themed arrival: set sustained pose once on reaching the POI.
+                if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
+                {
+                    switch (static_cast<BotCityPoi>(data.poiType))
+                    {
+                        case POI_INNKEEPER:
+                            bot->SetStandState(UNIT_STAND_STATE_SIT);
+                            break;
+                        case POI_FORGE:
+                            // Sustained craft pose — mirrors ACTIVITY_CRAFT at ~:492.
+                            bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
+                            break;
+                        default:
+                            break;
+                    }
+                }
                 return true;
             }
             if (GetMSTimeDiffToNow(data.lastReach) < data.dwellMs)
             {
-                // dwelling: occasional idle emote keeps it lively
-                if (urand(0, 100) < 5)
-                    bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
+                if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
+                {
+                    // Themed cadence: POI-specific one-shot emote on the existing 5% tick.
+                    if (urand(0, 100) < 5)
+                    {
+                        switch (static_cast<BotCityPoi>(data.poiType))
+                        {
+                            case POI_INNKEEPER:
+                                bot->HandleEmoteCommand(EMOTE_ONESHOT_EAT);
+                                break;
+                            case POI_FORGE:
+                                // Re-assert the sustained pose in case it was cleared externally.
+                                bot->HandleEmoteCommand(EMOTE_STATE_USE_STANDING);
+                                break;
+                            case POI_BANKER:
+                            case POI_AUCTIONEER:
+                                bot->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
+                                break;
+                            case POI_TRAINER:
+                                bot->HandleEmoteCommand(EMOTE_ONESHOT_QUESTION);
+                                break;
+                            case POI_MAILBOX:
+                            case POI_NONE:
+                            default:
+                                bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
+                                break;
+                        }
+                    }
+                }
+                else
+                {
+                    // Legacy path — byte-for-byte unchanged.
+                    if (urand(0, 100) < 5)
+                        bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);
+                }
                 return false;
             }
+            EndSocialPastime(bot);
             info.ChangeToIdle();
             return true;
         }
