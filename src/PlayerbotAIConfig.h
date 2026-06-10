@@ -120,6 +120,19 @@ enum BotCityPoi : uint8
 
 enum BotActivity : uint8 { ACTIVITY_SOCIAL = 0, ACTIVITY_LOITER, ACTIVITY_FISH, ACTIVITY_CRAFT, ACTIVITY_DUEL, ACTIVITY_REPAIR_SELL, ACTIVITY_DUMMY, ACTIVITY_NONE = 0xFF };
 
+// Unified flat id over the 16 rationalized behaviors (9 top-level statuses + 7 pastimes).
+// The shared spine: emote palettes, cadence, and lifecycle chat all key off this.
+enum BotBehaviorId : uint8
+{
+    BEH_NONE = 0,
+    // top-level occupations (NewRpgStatus)
+    BEH_GO_GRIND, BEH_WANDER_RANDOM, BEH_DO_QUEST, BEH_GATHERING_CIRCUIT,
+    BEH_REST, BEH_WANDER_NPC, BEH_TRAVEL_FLIGHT, BEH_TRAVEL_MOUNT, BEH_OUTDOOR_PVP,
+    // pastimes (BotActivity, under RPG_PASTIME)
+    BEH_SOCIAL, BEH_LOITER, BEH_FISH, BEH_CRAFT, BEH_DUEL, BEH_REPAIR_SELL, BEH_DUMMY,
+    BEH_COUNT
+};
+
 #define MAX_SPECNO 20
 
 class PlayerbotAIConfig

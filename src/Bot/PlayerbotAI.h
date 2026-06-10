@@ -602,6 +602,9 @@ public:
     static SpellFamilyNames Class2SpellFamilyName(uint8 cls);
     BotCityPoi GetCurrentCityPoi();
     BotActivity GetCurrentActivity();
+    BotBehaviorId GetCurrentBehaviorId();
+    uint8 GetCurrentVariant();
+    static const char* BehaviorKey(BotBehaviorId id);
     NewRpgInfo rpgInfo;
     NewRpgStatistic rpgStatistic;
     std::unordered_set<uint32> lowPriorityQuest;

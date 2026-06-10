@@ -6828,6 +6828,69 @@ BotActivity PlayerbotAI::GetCurrentActivity()
     return (BotActivity)p->activityType;
 }
 
+BotBehaviorId PlayerbotAI::GetCurrentBehaviorId()
+{
+    switch (rpgInfo.GetStatus())
+    {
+        case RPG_GO_GRIND:          return BEH_GO_GRIND;
+        case RPG_WANDER_RANDOM:     return BEH_WANDER_RANDOM;
+        case RPG_DO_QUEST:          return BEH_DO_QUEST;
+        case RPG_GATHERING_CIRCUIT: return BEH_GATHERING_CIRCUIT;
+        case RPG_REST:              return BEH_REST;
+        case RPG_WANDER_NPC:        return BEH_WANDER_NPC;
+        case RPG_TRAVEL_FLIGHT:     return BEH_TRAVEL_FLIGHT;
+        case RPG_TRAVEL_MOUNT:      return BEH_TRAVEL_MOUNT;
+        case RPG_OUTDOOR_PVP:       return BEH_OUTDOOR_PVP;
+        case RPG_PASTIME:
+            switch (GetCurrentActivity())
+            {
+                case ACTIVITY_SOCIAL:      return BEH_SOCIAL;
+                case ACTIVITY_LOITER:      return BEH_LOITER;
+                case ACTIVITY_FISH:        return BEH_FISH;
+                case ACTIVITY_CRAFT:       return BEH_CRAFT;
+                case ACTIVITY_DUEL:        return BEH_DUEL;
+                case ACTIVITY_REPAIR_SELL: return BEH_REPAIR_SELL;
+                case ACTIVITY_DUMMY:       return BEH_DUMMY;
+                default:                   return BEH_NONE;  // converging / NONE
+            }
+        default: return BEH_NONE;  // RPG_IDLE
+    }
+}
+
+uint8 PlayerbotAI::GetCurrentVariant()
+{
+    if (rpgInfo.GetStatus() != RPG_PASTIME)
+        return 0;
+    auto const* p = std::get_if<NewRpgInfo::Pastime>(&rpgInfo.data);
+    if (!p || p->activityType != ACTIVITY_LOITER)
+        return 0;
+    return p->poiType;   // BotCityPoi; 0 = POI_NONE
+}
+
+const char* PlayerbotAI::BehaviorKey(BotBehaviorId id)
+{
+    switch (id)
+    {
+        case BEH_GO_GRIND:          return "go_grind";
+        case BEH_WANDER_RANDOM:     return "wander_random";
+        case BEH_DO_QUEST:          return "do_quest";
+        case BEH_GATHERING_CIRCUIT: return "gathering_circuit";
+        case BEH_REST:              return "rest";
+        case BEH_WANDER_NPC:        return "wander_npc";
+        case BEH_TRAVEL_FLIGHT:     return "travel_flight";
+        case BEH_TRAVEL_MOUNT:      return "travel_mount";
+        case BEH_OUTDOOR_PVP:       return "outdoor_pvp";
+        case BEH_SOCIAL:            return "social";
+        case BEH_LOITER:            return "loiter";
+        case BEH_FISH:              return "fish";
+        case BEH_CRAFT:             return "craft";
+        case BEH_DUEL:              return "duel";
+        case BEH_REPAIR_SELL:       return "repair_sell";
+        case BEH_DUMMY:             return "dummy";
+        default:                    return "";
+    }
+}
+
 void PlayerbotAI::AddTimedEvent(std::function<void()> callback, uint32 delayMs)
 {
     class LambdaEvent final : public BasicEvent
