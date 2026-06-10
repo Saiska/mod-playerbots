@@ -176,13 +176,64 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
         case RPG_REST:
         {
+            auto& rest = std::get<NewRpgInfo::Rest>(info.data);
             // REST -> IDLE
             if (info.HasStatusPersisted(statusRestDuration))
             {
+                // Leave REST in a neutral pose: the chair Use set a SIT_*_CHAIR stand-state
+                // and/or TickEmoteCadence held EMOTE_STATE_SIT — clear both so the bot stands.
+                if (bot->getStandState() != UNIT_STAND_STATE_STAND)
+                    bot->SetStandState(UNIT_STAND_STATE_STAND);
+                bot->ClearEmoteState();
+                rest.chair = ObjectGuid();
                 info.ChangeToIdle();
                 return true;
             }
-            break;
+
+            // Stationary REST hold. ChangeToRest() already sat the bot (UNIT_STAND_STATE_SIT)
+            // in place; there is no dedicated REST perform action, so this arm is the per-tick
+            // stationary point. On first reach, resolve a nearby inn chair once.
+            if (!rest.lastReach)
+            {
+                rest.lastReach = getMSTime();
+                rest.chair = SelectInnChair(15.0f);
+            }
+
+            bool chaired = false;
+            if (rest.chair)
+            {
+                GameObject* chair = ObjectAccessor::GetGameObject(*bot, rest.chair);
+                if (!chair || !chair->isSpawned())
+                {
+                    rest.chair = ObjectGuid();   // chair despawned -> floor fallback
+                }
+                else if (bot->GetExactDist(chair) > INTERACTION_DISTANCE)
+                {
+                    // Path into seating range; keep the bot moving toward the chair this tick.
+                    if (MoveWorldObjectTo(rest.chair))
+                        return true;
+                    // Pathing failed (offset in geometry); abandon the chair and floor-sit.
+                    rest.chair = ObjectGuid();
+                }
+                else
+                {
+                    // In range. Seat on a free slot if not already chair-seated. The bot starts
+                    // this status at UNIT_STAND_STATE_SIT(1); a successful chair Use teleports it
+                    // onto a slot and sets UNIT_STAND_STATE_SIT_LOW_CHAIR(4)..SIT_HIGH_CHAIR(6).
+                    if (bot->getStandState() < UNIT_STAND_STATE_SIT_LOW_CHAIR)
+                        chair->Use(bot);
+                    if (bot->getStandState() >= UNIT_STAND_STATE_SIT_LOW_CHAIR)
+                        chaired = true;
+                    else
+                        rest.chair = ObjectGuid();   // chair full / Use failed -> floor fallback
+                }
+            }
+
+            // Chaired: the chair already provides the seated pose, so do one-shots ONLY (skip the
+            // EMOTE_STATE_SIT re-assert that would fight the SIT_*_CHAIR stand-state). Floor fallback:
+            // the BEH_REST palette pose (EMOTE_STATE_SIT) is the held seated baseline.
+            TickEmoteCadence(BEH_REST, 0, chaired);
+            return true;   // HOLD so movement AI doesn't walk the resting bot off
         }
         case RPG_OUTDOOR_PVP:
         {

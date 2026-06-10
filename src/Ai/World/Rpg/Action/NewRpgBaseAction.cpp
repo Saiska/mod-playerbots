@@ -133,13 +133,15 @@ namespace
     }
 } // anonymous namespace
 
-void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant)
+void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose)
 {
     const EmotePalette& pal = LookupPalette(beh, variant);
     NewRpgInfo& info = botAI->rpgInfo;
 
-    // 1. sustained pose (held, replicated) — re-assert each tick; dismount first (a mount hides the pose)
-    if (pal.sustainedPose)
+    // 1. sustained pose (held, replicated) — re-assert each tick; dismount first (a mount hides the pose).
+    // skipSustainedPose: caller already holds a real pose (e.g. RPG_REST seated on a chair, which sets a
+    // SIT_*_CHAIR stand-state) — re-asserting UNIT_NPC_EMOTESTATE would fight it, so do one-shots only.
+    if (pal.sustainedPose && !skipSustainedPose)
     {
         if (bot->IsMounted())
             bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
@@ -1119,6 +1121,32 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
         if (!eligible)
             continue;
 
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = guid;
+        }
+    }
+    return best;
+}
+
+ObjectGuid NewRpgBaseAction::SelectInnChair(float radius)
+{
+    // Mirror SelectGatherNode's GO scan, filtered to GAMEOBJECT_TYPE_CHAIR (type 7).
+    GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
+    ObjectGuid best;
+    float bestDist = radius;
+
+    for (ObjectGuid const& guid : gos)
+    {
+        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+        if (!go || !go->isSpawned())
+            continue;
+
+        if (go->GetGoType() != GAMEOBJECT_TYPE_CHAIR)
+            continue;
+
+        float dist = bot->GetExactDist(go);
         if (dist < bestDist)
         {
             bestDist = dist;
