@@ -410,10 +410,6 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                     uint32 es = LoiterEmoteState(data.poiType);
                     if (es)
                         bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
-                    // [LoiterProbe] TEMP diagnostic: poiType + held emote state + mount, right after the arrival pose.
-                    LOG_INFO("playerbots", "[LoiterProbe] arrive {} area={} poiType={} emoteState={} wasMounted={} mountedNow={}",
-                             bot->GetName(), bot->GetAreaId(), uint32(data.poiType), es,
-                             uint32(wasMounted), uint32(bot->IsMounted()));
                 }
                 return true;
             }
@@ -427,10 +423,6 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                     uint32 es = LoiterEmoteState(data.poiType);
                     if (es && bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != es)
                         bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, es);
-                    // [LoiterProbe] TEMP diagnostic: sample the held emote state mid-dwell.
-                    if (urand(0, 50) == 0)
-                        LOG_INFO("playerbots", "[LoiterProbe] dwell {} poiType={} emoteState={}",
-                                 bot->GetName(), uint32(data.poiType), bot->GetUInt32Value(UNIT_NPC_EMOTESTATE));
                 }
                 else
                 {

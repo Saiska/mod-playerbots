@@ -1102,7 +1102,7 @@ AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
-AiPlayerbot.RpgStatusProbWeight.Pastime = 12
+AiPlayerbot.RpgStatusProbWeight.Pastime = 24
 AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
 AiPlayerbot.RpgStatusProbWeight.ExploreLandmark = 10
 AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
@@ -1192,7 +1192,7 @@ AiPlayerbot.Pastime.Dummy.Entries =
 #   Valid names: auctioneer, banker, innkeeper, trainer, mailbox, forge.
 # A present TypeWeights replaces ALL defaults — list every type you want above 1.0 (the example below preserves the innkeeper=3/forge=2 defaults).
 #   Unlisted types default to 1.0. Example: "innkeeper=3 forge=2 banker=1 auctioneer=1 trainer=1 mailbox=1"
-AiPlayerbot.Pastime.Loiter.Weight = 100
+AiPlayerbot.Pastime.Loiter.Weight = 150
 AiPlayerbot.Pastime.Loiter.DwellMin = 30
 AiPlayerbot.Pastime.Loiter.DwellMax = 120
 AiPlayerbot.Pastime.Loiter.PoiTypeMask = 63
