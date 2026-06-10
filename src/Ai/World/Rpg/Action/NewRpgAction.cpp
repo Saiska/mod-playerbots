@@ -386,6 +386,10 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                 // Themed arrival: set sustained pose once on reaching the POI.
                 if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
                 {
+                    // A mounted bot can't visibly sit/pose (the mount model overrides it) — dismount on arrival.
+                    bool wasMounted = bot->IsMounted();
+                    if (wasMounted)
+                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
                     switch (static_cast<BotCityPoi>(data.poiType))
                     {
                         case POI_INNKEEPER:
@@ -398,9 +402,10 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                         default:
                             break;
                     }
-                    // [LoiterProbe] TEMP diagnostic: resolved poiType + stand-state right after the arrival pose.
-                    LOG_INFO("playerbots", "[LoiterProbe] arrive {} area={} poiType={} standState={}",
-                             bot->GetName(), bot->GetAreaId(), uint32(data.poiType), uint32(bot->getStandState()));
+                    // [LoiterProbe] TEMP diagnostic: resolved poiType + stand-state + mount right after the arrival pose.
+                    LOG_INFO("playerbots", "[LoiterProbe] arrive {} area={} poiType={} standState={} wasMounted={} mountedNow={}",
+                             bot->GetName(), bot->GetAreaId(), uint32(data.poiType), uint32(bot->getStandState()),
+                             uint32(wasMounted), uint32(bot->IsMounted()));
                 }
                 return true;
             }
@@ -408,6 +413,9 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
             {
                 if (sPlayerbotAIConfig.pastimeLoiterThemedScenes)
                 {
+                    // Stay dismounted while dwelling (movement/idle AI may re-mount) so the pose stays visible.
+                    if (bot->IsMounted())
+                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
                     // Maintain the sustained pose every tick — the bot's idle/movement AI resets stand state otherwise.
                     switch (static_cast<BotCityPoi>(data.poiType))
                     {
