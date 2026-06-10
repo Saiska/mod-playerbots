@@ -769,20 +769,25 @@ ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
     outPoiType = POI_NONE;
     uint32 mask = sPlayerbotAIConfig.pastimeLoiterPoiTypeMask;
 
-    GuidVector targets = AI_VALUE(GuidVector, "possible new rpg targets");
-    WorldObject* best = nullptr;
-    uint8 bestType = POI_NONE;
+    // Weighted candidate list: each eligible POI gets weight = typeWeight / (1 + distanceFactor),
+    // where distanceFactor = dist / scanRange.  When all type weights are equal this approximates
+    // proximity-preference (legacy ordering), but allows clustering at preferred POI types.
+    static constexpr float kScanRange = 150.0f;  // matches PossibleNewRpgTargetsValue default range
 
-    auto consider = [&](WorldObject* object, uint8 type) {
+    struct PoiCand { WorldObject* object; uint8 type; float weight; };
+    std::vector<PoiCand> cands;
+
+    auto consider = [&](WorldObject* object, uint8 type)
+    {
         if (!(mask & (1u << (type - 1))))
             return;
-        if (!best || bot->GetExactDist(best) > bot->GetExactDist(object))
-        {
-            best = object;
-            bestType = type;
-        }
+        float dist = bot->GetExactDist(object);
+        float typeW = sPlayerbotAIConfig.pastimeLoiterTypeWeight[type];
+        float w = typeW / (1.0f + dist / kScanRange);   // strictly positive, finite
+        cands.push_back({ object, type, w });
     };
 
+    GuidVector targets = AI_VALUE(GuidVector, "possible new rpg targets");
     for (ObjectGuid& guid : targets)
     {
         Creature* c = ObjectAccessor::GetCreature(*bot, guid);
@@ -803,10 +808,49 @@ ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
         if (go->GetGoType() == GAMEOBJECT_TYPE_MAILBOX)   consider(go, POI_MAILBOX);
     }
 
-    if (!best)
+    // Forge/Anvil detection: GAMEOBJECT_TYPE_SPELL_FOCUS (= 8) with focusId == 1 (Anvil, SpellFocusObject.dbc)
+    // or focusId == 3 (Forge).  Only considered when bot has a crafting profession.
+    // Source: acore/src/server/game/Entities/GameObject/GameObjectData.h:140-150 (spellFocus.focusId field)
+    //         SpellFocusObject.dbc ID=1 "Anvil", ID=3 "Forge"
+    if (mask & (1u << (POI_FORGE - 1)) && BotHasCraftingProfession(bot))
+    {
+        GuidVector nearGos = context->GetValue<GuidVector>("nearest game objects")->Get();
+        for (ObjectGuid const& guid : nearGos)
+        {
+            GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+            if (!go || !go->isSpawned())
+                continue;
+            if (go->GetGoType() != GAMEOBJECT_TYPE_SPELL_FOCUS)
+                continue;
+            uint32 fid = go->GetGOInfo()->spellFocus.focusId;
+            if (fid != 1 && fid != 3)   // 1 = Anvil, 3 = Forge
+                continue;
+            consider(go, POI_FORGE);
+        }
+    }
+
+    if (cands.empty())
         return ObjectGuid();
-    outPoiType = bestType;
-    return best->GetGUID();
+
+    // Weighted random draw over float weights using frand.
+    float totalW = 0.0f;
+    for (auto const& c : cands)
+        totalW += c.weight;
+
+    float r = frand(0.0f, totalW);
+    float acc = 0.0f;
+    for (auto const& c : cands)
+    {
+        acc += c.weight;
+        if (acc >= r)
+        {
+            outPoiType = c.type;
+            return c.object->GetGUID();
+        }
+    }
+    // Floating-point rounding fallback: return last candidate.
+    outPoiType = cands.back().type;
+    return cands.back().object->GetGUID();
 }
 
 ObjectGuid NewRpgBaseAction::SelectVendorNpc()
@@ -1069,11 +1113,11 @@ static ObjectGuid SelectDuelPartner(PlayerbotAI* botAI)
     return best ? best->GetGUID() : ObjectGuid();
 }
 
-bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos)
+bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos, uint8& outPoiType)
 {
     // Activity registry: social (player), loiter (POI), fish (water), gather (node), craft (in-place).
     // Add more weighted branches here.
-    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; WorldPosition pos; };
+    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; WorldPosition pos; uint8 poiType; };
     std::vector<Cand> cands;
 
     if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
@@ -1089,7 +1133,7 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
         if (ObjectGuid poi = SelectLoiterPoi(poiType))
         {
             g_pastimeEligible[ACTIVITY_LOITER].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_LOITER), poi, sPlayerbotAIConfig.pastimeLoiterWeight });
+            cands.push_back({ uint8(ACTIVITY_LOITER), poi, sPlayerbotAIConfig.pastimeLoiterWeight, WorldPosition{}, poiType });
         }
     }
 
@@ -1169,12 +1213,12 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
         if (acc >= r)
         {
             g_pastimeChosen[c.activity].fetch_add(1, std::memory_order_relaxed);
-            outActivity = c.activity; outTarget = c.target; outTargetPos = c.pos;
+            outActivity = c.activity; outTarget = c.target; outTargetPos = c.pos; outPoiType = c.poiType;
             return true;
         }
     }
     g_pastimeChosen[cands.back().activity].fetch_add(1, std::memory_order_relaxed);
-    outActivity = cands.back().activity; outTarget = cands.back().target; outTargetPos = cands.back().pos;
+    outActivity = cands.back().activity; outTarget = cands.back().target; outTargetPos = cands.back().pos; outPoiType = cands.back().poiType;
     return true;
 }
 
@@ -1575,9 +1619,10 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             uint8 activity = 0;
             ObjectGuid target;
             WorldPosition targetPos;
-            if (!SelectPastime(activity, target, targetPos))
+            uint8 poiType = POI_NONE;
+            if (!SelectPastime(activity, target, targetPos, poiType))
                 return false;   // nothing eligible -> pick another status
-            botAI->rpgInfo.ChangeToPastime(activity, target, targetPos);
+            botAI->rpgInfo.ChangeToPastime(activity, target, targetPos, poiType);
             return true;
         }
         case RPG_GO_GRIND:
