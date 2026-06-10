@@ -783,7 +783,8 @@ ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
             return;
         float dist = bot->GetExactDist(object);
         float typeW = sPlayerbotAIConfig.pastimeLoiterTypeWeight[type];
-        float w = typeW / (1.0f + dist / kScanRange);   // strictly positive, finite
+        if (typeW <= 0.0f) return;  // zero-weight type: not a candidate (weight-zero = effectively disabled)
+        float w = typeW / (1.0f + dist / kScanRange);
         cands.push_back({ object, type, w });
     };
 
@@ -814,6 +815,8 @@ ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
     //         SpellFocusObject.dbc ID=1 "Anvil", ID=3 "Forge"
     if (mask & (1u << (POI_FORGE - 1)) && BotHasCraftingProfession(bot))
     {
+        constexpr uint32 FOCUS_ID_ANVIL = 1;  // SpellFocusObject.dbc ID=1 "Anvil"
+        constexpr uint32 FOCUS_ID_FORGE = 3;  // SpellFocusObject.dbc ID=3 "Forge"
         GuidVector nearGos = context->GetValue<GuidVector>("nearest game objects")->Get();
         for (ObjectGuid const& guid : nearGos)
         {
@@ -823,7 +826,7 @@ ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
             if (go->GetGoType() != GAMEOBJECT_TYPE_SPELL_FOCUS)
                 continue;
             uint32 fid = go->GetGOInfo()->spellFocus.focusId;
-            if (fid != 1 && fid != 3)   // 1 = Anvil, 3 = Forge
+            if (fid != FOCUS_ID_ANVIL && fid != FOCUS_ID_FORGE)
                 continue;
             consider(go, POI_FORGE);
         }
@@ -1117,7 +1120,7 @@ bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, 
 {
     // Activity registry: social (player), loiter (POI), fish (water), gather (node), craft (in-place).
     // Add more weighted branches here.
-    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; WorldPosition pos; uint8 poiType; };
+    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; WorldPosition pos; uint8 poiType = POI_NONE; };
     std::vector<Cand> cands;
 
     if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
