@@ -133,6 +133,16 @@ enum BotBehaviorId : uint8
     BEH_COUNT
 };
 
+// Curated emote set for a behavior (or a behavior+variant). Held pose + a pool
+// of one-shots picked from at random by the cadence tick. See the kPalette table
+// in NewRpgBaseAction.cpp (data-driven, one row per BotBehaviorId).
+struct EmotePalette
+{
+    uint32        sustainedPose;   // UNIT_NPC_EMOTESTATE value; 0 = none/stand
+    const uint32* oneShots;        // static pool; nullptr/0 count = no one-shots
+    uint8         oneShotCount;
+};
+
 #define MAX_SPECNO 20
 
 class PlayerbotAIConfig
