@@ -398,6 +398,9 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                         default:
                             break;
                     }
+                    // [LoiterProbe] TEMP diagnostic: resolved poiType + stand-state right after the arrival pose.
+                    LOG_INFO("playerbots", "[LoiterProbe] arrive {} area={} poiType={} standState={}",
+                             bot->GetName(), bot->GetAreaId(), uint32(data.poiType), uint32(bot->getStandState()));
                 }
                 return true;
             }
@@ -431,6 +434,10 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                                 break;
                         }
                     }
+                    // [LoiterProbe] TEMP diagnostic: sample stand-state mid-dwell to catch SIT being overridden.
+                    if (urand(0, 50) == 0)
+                        LOG_INFO("playerbots", "[LoiterProbe] dwell {} poiType={} standState={}",
+                                 bot->GetName(), uint32(data.poiType), uint32(bot->getStandState()));
                 }
                 else
                 {
