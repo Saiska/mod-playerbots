@@ -1807,7 +1807,19 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         case RPG_REST:
         {
             botAI->rpgInfo.ChangeToRest();
-            bot->SetStandState(UNIT_STAND_STATE_SIT);
+            // InnPull: pick a nearby innkeeper hub (range+zone capped by the helper; a bot IN a capital
+            // pulls from the whole city map -> capitals saturate emergently). Empty in the wilderness ->
+            // rest in place. The REST tick walks there and sits the bot on arrival.
+            if (sPlayerbotAIConfig.restInnPullEnable)
+            {
+                WorldPosition inn = SelectRandomCampPos(bot);
+                if (inn != WorldPosition())
+                {
+                    std::get<NewRpgInfo::Rest>(botAI->rpgInfo.data).pos = inn;
+                    return true;   // travel standing; the tick sits the bot on arrival
+                }
+            }
+            bot->SetStandState(UNIT_STAND_STATE_SIT);   // no pull / no inn in range -> legacy sit-in-place
             return true;
         }
         case RPG_OUTDOOR_PVP:
