@@ -723,6 +723,10 @@ bool PlayerbotAIConfig::Initialize()
     restDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMax", 300);
     if (restDwellMax < restDwellMin)
         std::swap(restDwellMin, restDwellMax);
+    if (restDwellMin == 0)   // never instant-expire: a resting bot must dwell >= 1s
+        restDwellMin = 1;
+    if (restDwellMax < restDwellMin)
+        restDwellMax = restDwellMin;
     LOG_INFO("server.loading", "[HubSaturation] Rest.InnPull={} DwellMin={}s DwellMax={}s",
              restInnPullEnable, restDwellMin, restDwellMax);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
