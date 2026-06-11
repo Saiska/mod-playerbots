@@ -105,6 +105,7 @@ void NewRpgInfo::Reset()
     lastEmoteMs = 0;
     nextEmoteGapMs = 0;
     lastEmoteIdx = 0xFF;
+    lastEmittedBehaviorId = BEH_NONE;
 }
 
 void NewRpgInfo::SetMoveFarTo(WorldPosition pos)
