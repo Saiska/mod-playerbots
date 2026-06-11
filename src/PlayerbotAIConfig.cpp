@@ -922,6 +922,17 @@ bool PlayerbotAIConfig::Initialize()
     }
     LOG_INFO("server.loading", "[EmoteCadence] enabled={} (per-behavior min/max loaded)", emoteCadenceEnable);
 
+    wanderMicroHaltEnable      = sConfigMgr->GetOption<bool>("AiPlayerbot.WanderMicroHalt.Enable", true);
+    wanderMicroHaltGapMin      = sConfigMgr->GetOption<uint32>("AiPlayerbot.WanderMicroHalt.GapMin", 25);
+    wanderMicroHaltGapMax      = sConfigMgr->GetOption<uint32>("AiPlayerbot.WanderMicroHalt.GapMax", 60);
+    wanderMicroHaltDurationMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.WanderMicroHalt.DurationMin", 2);
+    wanderMicroHaltDurationMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.WanderMicroHalt.DurationMax", 4);
+    if (wanderMicroHaltGapMax < wanderMicroHaltGapMin) std::swap(wanderMicroHaltGapMin, wanderMicroHaltGapMax);
+    if (wanderMicroHaltDurationMax < wanderMicroHaltDurationMin) std::swap(wanderMicroHaltDurationMin, wanderMicroHaltDurationMax);
+    LOG_INFO("server.loading", "[WanderMicroHalt] enabled={} Gap={}-{}s Duration={}-{}s",
+             wanderMicroHaltEnable, wanderMicroHaltGapMin, wanderMicroHaltGapMax,
+             wanderMicroHaltDurationMin, wanderMicroHaltDurationMax);
+
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotGroupNearby = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotGroupNearby", false);
 
