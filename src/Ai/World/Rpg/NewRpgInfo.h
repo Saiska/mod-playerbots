@@ -65,8 +65,10 @@ struct NewRpgInfo
     struct Rest
     {
         Rest() = default;
+        WorldPosition pos{};    // innkeeper-hub destination (InnPull); empty = rest in place
         ObjectGuid chair{};     // seated chair GO (empty = floor-sit / not yet resolved)
-        uint32 lastReach{0};    // 0 = en route / not yet resolved; set once on arrival at the rest pos
+        uint32 lastReach{0};    // 0 = en route / not yet resolved; set once on ARRIVAL at the rest pos
+        uint32 dwellMs{0};      // jittered dwell duration in ms (set on arrival; elapsed measured vs lastReach)
     };
     // RPG_OUTDOOR_PVP
     struct OutdoorPvP
