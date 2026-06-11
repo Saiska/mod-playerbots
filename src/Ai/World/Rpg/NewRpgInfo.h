@@ -38,7 +38,6 @@ struct NewRpgInfo
         uint32 lastEmote{0};      // last social-emote timestamp
         uint32 dwellMs{0};        // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
         uint8  poiType{POI_NONE}; // BotCityPoi — set by SelectLoiterPoi; used by themed-scene enactment
-        bool started{false};   // fishing lifecycle: true once a fishing session has actually begun (for activity-chat hooks)
     };
     // RPG_WANDER_RANDOM
     struct WanderRandom
@@ -93,6 +92,8 @@ struct NewRpgInfo
     };
 
     uint32 startT{0};  // start timestamp of the current status
+
+    BotBehaviorId lastEmittedBehaviorId{BEH_NONE};  // last behaviorId we emitted a lifecycle event for (central emitter)
 
     // --- emote cadence state (occupation-emote-palettes) — restarts each status change ---
     uint32 lastEmoteMs{0};

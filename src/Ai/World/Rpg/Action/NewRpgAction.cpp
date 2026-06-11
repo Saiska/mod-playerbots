@@ -104,6 +104,21 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
     }
 
+    // --- occupation lifecycle events: emit on any behaviorId edge (once-only by construction) ---
+    // GetCurrentBehaviorId() is BEH_NONE while a pastime is still converging (start-only-when-real)
+    // and the real BEH_* only once engaged; statuses report at intent. One diff per tick catches every edge.
+    {
+        BotBehaviorId curBeh = botAI->GetCurrentBehaviorId();
+        if (curBeh != info.lastEmittedBehaviorId)
+        {
+            if (info.lastEmittedBehaviorId != BEH_NONE)
+                sScriptMgr->OnPlayerbotActivityFinish(bot, static_cast<uint32>(info.lastEmittedBehaviorId));
+            if (curBeh != BEH_NONE)
+                sScriptMgr->OnPlayerbotActivityStart(bot, static_cast<uint32>(curBeh));
+            info.lastEmittedBehaviorId = curBeh;
+        }
+    }
+
     NewRpgStatus status = info.GetStatus();
     switch (status)
     {
@@ -148,12 +163,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             if (info.HasStatusPersisted(statusPastimeDuration))
             {
-                if (auto* pp = std::get_if<NewRpgInfo::Pastime>(&info.data))
-                    if (pp->activityType == ACTIVITY_FISH && pp->started)
-                    {
-                        sScriptMgr->OnPlayerbotActivityFinish(bot, static_cast<uint32>(ACTIVITY_FISH));
-                        pp->started = false;
-                    }
                 EndSocialPastime(bot);
                 info.ChangeToIdle();
                 return true;
@@ -424,11 +433,6 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         // Dwell window elapsed (timer starts on the first successful cast) -> stop fishing.
         if (data.lastReach && GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
         {
-            if (data.started)
-            {
-                sScriptMgr->OnPlayerbotActivityFinish(bot, static_cast<uint32>(ACTIVITY_FISH));
-                data.started = false;
-            }
             info.ChangeToIdle();
             return true;
         }
@@ -446,8 +450,6 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                 data.lastReach = getMSTime();
                 data.dwellMs = urand(sPlayerbotAIConfig.pastimeFishDwellMin,
                                      sPlayerbotAIConfig.pastimeFishDwellMax) * IN_MILLISECONDS;
-                data.started = true;
-                sScriptMgr->OnPlayerbotActivityStart(bot, static_cast<uint32>(ACTIVITY_FISH));
             }
             return true;
         }
