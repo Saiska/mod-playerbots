@@ -6,12 +6,15 @@
 
 #include "AiObjectContext.h"
 #include "BroadcastHelper.h"
+#include "CellImpl.h"
 #include "ChatHelper.h"
 #include "Creature.h"
 #include "DBCStores.h"
 #include "G3D/Vector2.h"
 #include "GameObject.h"
 #include "GossipDef.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "GridTerrainData.h"
 #include "IVMapMgr.h"
 #include "NewRpgInfo.h"
@@ -1008,13 +1011,23 @@ ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
     auto const& entries = sPlayerbotAIConfig.pastimeDummyEntries;
     if (entries.empty())
         return ObjectGuid();
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+
+    float const radius = sPlayerbotAIConfig.pastimeDummyRadius;
+
+    // Direct creature grid scan at the dummy radius (the real reach), instead of the
+    // SightDistance(75y)-bounded "nearest npcs" value — capital dummies sit outside 75y.
+    // Mirrors the searcher idiom in Ai/Base/Value/NearestNpcsValue.cpp.
+    std::list<Unit*> targets;
+    Acore::AnyUnitInObjectRangeCheck u_check(bot, radius);
+    Acore::UnitListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(bot, targets, u_check);
+    Cell::VisitObjects(bot, searcher, radius);
+
     Creature* best = nullptr;
-    float bestDist = sPlayerbotAIConfig.pastimeDummyRadius;
+    float bestDist = radius;
     bool sawTarget = false;
-    for (ObjectGuid& guid : npcs)
+    for (Unit* u : targets)
     {
-        Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+        Creature* c = u ? u->ToCreature() : nullptr;
         if (!c || !c->IsInWorld())
             continue;
         if (std::find(entries.begin(), entries.end(), c->GetEntry()) == entries.end())

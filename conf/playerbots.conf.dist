@@ -1178,10 +1178,10 @@ AiPlayerbot.Pastime.RepairSell.Weight = 25
 AiPlayerbot.Pastime.RepairSell.DwellMin = 5
 AiPlayerbot.Pastime.RepairSell.DwellMax = 15
 AiPlayerbot.Pastime.RepairSell.Radius = 60.0
-AiPlayerbot.Pastime.Dummy.Weight = 20
+AiPlayerbot.Pastime.Dummy.Weight = 100
 AiPlayerbot.Pastime.Dummy.DwellMin = 30
 AiPlayerbot.Pastime.Dummy.DwellMax = 90
-AiPlayerbot.Pastime.Dummy.Radius = 60.0
+AiPlayerbot.Pastime.Dummy.Radius = 150.0
 AiPlayerbot.Pastime.Dummy.Entries =
 
 # Per-behavior emote cadence (occupation-emote-palettes).
