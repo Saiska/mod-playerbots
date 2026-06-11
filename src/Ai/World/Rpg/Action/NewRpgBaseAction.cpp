@@ -176,6 +176,19 @@ void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool s
     info.nextEmoteGapMs = urand(mn, mx) * IN_MILLISECONDS;
 }
 
+void NewRpgBaseAction::FireOneShotEmote(BotBehaviorId beh, uint8 variant)
+{
+    const EmotePalette& pal = LookupPalette(beh, variant);
+    if (pal.oneShotCount == 0)
+        return;
+    NewRpgInfo& info = botAI->rpgInfo;
+    uint8 idx = (uint8)urand(0, pal.oneShotCount - 1);
+    if (pal.oneShotCount > 1 && idx == info.lastEmoteIdx)   // non-repeat
+        idx = (idx + 1) % pal.oneShotCount;
+    bot->HandleEmoteCommand(pal.oneShots[idx]);
+    info.lastEmoteIdx = idx;
+}
+
 bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
 {
     if (dest == WorldPosition())

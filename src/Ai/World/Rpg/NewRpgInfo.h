@@ -43,6 +43,7 @@ struct NewRpgInfo
     struct WanderRandom
     {
         WanderRandom() = default;
+        uint32 nextHaltMs{0};   // micro-halt schedule: 0 = seed on first tick; else next halt-eligible time
     };
     // RPG_DO_QUEST
     struct DoQuest

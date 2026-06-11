@@ -319,6 +319,32 @@ bool NewRpgWanderRandomAction::Execute(Event /*event*/)
     if (SearchQuestGiverAndAcceptOrReward())
         return true;
 
+    // Micro-halt: only at the arrival seam (not already moving) so we never force-stop a moving bot
+    // (bug #2). ForceToWait records a movement-wait state -> the bot holds; the stroll resumes when it
+    // expires. While ForceToWait is active, IsWaitingForLastMove() is true so we fall through to
+    // MoveRandomNear() which early-outs -> the bot stays put for the halt duration.
+    if (sPlayerbotAIConfig.wanderMicroHaltEnable && !IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL))
+    {
+        auto& data = std::get<NewRpgInfo::WanderRandom>(botAI->rpgInfo.data);
+        uint32 now = getMSTime();
+        if (data.nextHaltMs == 0)
+        {
+            // first arrival this wander spell: stroll first, schedule the first halt
+            data.nextHaltMs = now + urand(sPlayerbotAIConfig.wanderMicroHaltGapMin,
+                                          sPlayerbotAIConfig.wanderMicroHaltGapMax) * IN_MILLISECONDS;
+        }
+        else if (now >= data.nextHaltMs)
+        {
+            uint32 durMs = urand(sPlayerbotAIConfig.wanderMicroHaltDurationMin,
+                                 sPlayerbotAIConfig.wanderMicroHaltDurationMax) * IN_MILLISECONDS;
+            ForceToWait(durMs, MovementPriority::MOVEMENT_NORMAL);   // bug-#2-safe hold
+            FireOneShotEmote(BEH_WANDER_RANDOM, 0);                  // one immediate look-around emote
+            data.nextHaltMs = now + durMs + urand(sPlayerbotAIConfig.wanderMicroHaltGapMin,
+                                                  sPlayerbotAIConfig.wanderMicroHaltGapMax) * IN_MILLISECONDS;
+            return true;
+        }
+    }
+
     return MoveRandomNear();
 }
 

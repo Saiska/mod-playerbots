@@ -41,6 +41,7 @@ protected:
     // e.g. RPG_REST seated on a real chair, so re-asserting EMOTE_STATE_SIT would fight
     // the chair's SIT_*_CHAIR stand-state).
     void TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose = false);
+    void FireOneShotEmote(BotBehaviorId beh, uint8 variant);   // immediate, non-repeating one-shot pick
 
     /* QUEST RELATED CHECK */
     ObjectGuid ChooseNpcOrGameObjectToInteract(bool questgiverOnly = false, float distanceLimit = 0.0f);

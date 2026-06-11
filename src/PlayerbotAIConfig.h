@@ -515,6 +515,12 @@ public:
     bool   emoteCadenceEnable{true};
     uint32 emoteCadenceMin[BEH_COUNT]{};   // seconds, per BotBehaviorId
     uint32 emoteCadenceMax[BEH_COUNT]{};
+    // --- WANDER_RANDOM micro-halts (occupation-travel-micro-halts) ---
+    bool   wanderMicroHaltEnable{true};
+    uint32 wanderMicroHaltGapMin{25};       // seconds between halts
+    uint32 wanderMicroHaltGapMax{60};
+    uint32 wanderMicroHaltDurationMin{2};   // seconds held per halt
+    uint32 wanderMicroHaltDurationMax{4};
     bool syncLevelWithPlayers;
     bool autoLearnQuestSpells;
     bool autoTeleportForLevel;

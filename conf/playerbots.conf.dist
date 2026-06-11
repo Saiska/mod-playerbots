@@ -1207,6 +1207,20 @@ AiPlayerbot.EmoteCadence.rest.Max = 12
 AiPlayerbot.EmoteCadence.craft.Min = 6
 AiPlayerbot.EmoteCadence.craft.Max = 12
 
+#    AiPlayerbot.WanderMicroHalt.Enable
+#        When 1, a RPG_WANDER_RANDOM bot occasionally pauses, plays one emote, and walks on. Default: 1
+AiPlayerbot.WanderMicroHalt.Enable = 1
+
+#    AiPlayerbot.WanderMicroHalt.GapMin / .GapMax
+#        Seconds between micro-halts (per-bot jittered). Default: 25 / 60
+AiPlayerbot.WanderMicroHalt.GapMin = 25
+AiPlayerbot.WanderMicroHalt.GapMax = 60
+
+#    AiPlayerbot.WanderMicroHalt.DurationMin / .DurationMax
+#        Seconds held per micro-halt (per-bot jittered). Default: 2 / 4
+AiPlayerbot.WanderMicroHalt.DurationMin = 2
+AiPlayerbot.WanderMicroHalt.DurationMax = 4
+
 # Loiter activity tuning (the loiter activity within the pastime registry; replaces the old standalone CityLife status).
 # Loiter.Weight: relative weight of the loiter activity within the pastime registry.
 # Loiter.DwellMin/DwellMax: seconds a bot lingers at the chosen city service POI (random in range; auto-swapped if inverted).
