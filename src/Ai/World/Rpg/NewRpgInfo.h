@@ -38,6 +38,7 @@ struct NewRpgInfo
         uint32 lastEmote{0};      // last social-emote timestamp
         uint32 dwellMs{0};        // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
         uint8  poiType{POI_NONE}; // BotCityPoi — set by SelectLoiterPoi; used by themed-scene enactment
+        bool started{false};   // fishing lifecycle: true once a fishing session has actually begun (for activity-chat hooks)
     };
     // RPG_WANDER_RANDOM
     struct WanderRandom

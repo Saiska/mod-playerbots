@@ -25,6 +25,7 @@
 #include "PlayerbotAI.h"
 #include "QuestDef.h"
 #include "Random.h"
+#include "ScriptMgr.h"
 #include "SharedDefines.h"
 #include "Timer.h"
 #include "TravelMgr.h"
@@ -147,6 +148,12 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             if (info.HasStatusPersisted(statusPastimeDuration))
             {
+                if (auto* pp = std::get_if<NewRpgInfo::Pastime>(&info.data))
+                    if (pp->activityType == ACTIVITY_FISH && pp->started)
+                    {
+                        sScriptMgr->OnPlayerbotActivityFinish(bot, static_cast<uint32>(ACTIVITY_FISH));
+                        pp->started = false;
+                    }
                 EndSocialPastime(bot);
                 info.ChangeToIdle();
                 return true;
@@ -417,6 +424,11 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         // Dwell window elapsed (timer starts on the first successful cast) -> stop fishing.
         if (data.lastReach && GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
         {
+            if (data.started)
+            {
+                sScriptMgr->OnPlayerbotActivityFinish(bot, static_cast<uint32>(ACTIVITY_FISH));
+                data.started = false;
+            }
             info.ChangeToIdle();
             return true;
         }
@@ -434,6 +446,8 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
                 data.lastReach = getMSTime();
                 data.dwellMs = urand(sPlayerbotAIConfig.pastimeFishDwellMin,
                                      sPlayerbotAIConfig.pastimeFishDwellMax) * IN_MILLISECONDS;
+                data.started = true;
+                sScriptMgr->OnPlayerbotActivityStart(bot, static_cast<uint32>(ACTIVITY_FISH));
             }
             return true;
         }
