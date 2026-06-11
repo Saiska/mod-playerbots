@@ -847,11 +847,11 @@ bool PlayerbotAIConfig::Initialize()
     if (pastimeRepairSellDwellMax < pastimeRepairSellDwellMin) std::swap(pastimeRepairSellDwellMin, pastimeRepairSellDwellMax);
     pastimeRepairSellRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.RepairSell.Radius", 60.0f);
 
-    pastimeDummyWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Dummy.Weight", 20);
+    pastimeDummyWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Dummy.Weight", 100);
     pastimeDummyDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Dummy.DwellMin", 30);
     pastimeDummyDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Dummy.DwellMax", 90);
     if (pastimeDummyDwellMax < pastimeDummyDwellMin) std::swap(pastimeDummyDwellMin, pastimeDummyDwellMax);
-    pastimeDummyRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Dummy.Radius", 60.0f);
+    pastimeDummyRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Dummy.Radius", 150.0f);
     pastimeDummyEntries.clear();
     {
         std::string raw = sConfigMgr->GetOption<std::string>("AiPlayerbot.Pastime.Dummy.Entries", "");
