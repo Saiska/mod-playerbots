@@ -1090,19 +1090,32 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 # GoGrind       (Default: 15  Go to nearby level-appropriate locations to grind for killing mobs)
 # DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion​)
 # TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
-# Rest          (Default: 5   Take a break for a while and do nothing)
+# Rest          (Default: 20  Take a break for a while and do nothing)
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
-# Pastime       (Default: 12  Leisure/social activities: converge on a nearby idle bot to socialize, or loiter at a city service POI)
+# Pastime       (Default: 24  Leisure/social activities: converge on a nearby idle bot to socialize, or loiter at a city service POI)
 AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
 AiPlayerbot.RpgStatusProbWeight.WanderNpc = 20
 AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
 AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
-AiPlayerbot.RpgStatusProbWeight.Rest = 5
+AiPlayerbot.RpgStatusProbWeight.Rest = 20
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.Pastime = 24
 AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
 AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
+
+# --- Rest InnPull (hub saturation) --------------------------------------------
+#    AiPlayerbot.Rest.InnPull.Enable
+#        When 1, a resting bot travels to a nearby innkeeper hub and sits there (capitals fill
+#        emergently). When 0, it sits in place (legacy). Range/zone capped -> no long-haul travel.
+#        Default: 1
+AiPlayerbot.Rest.InnPull.Enable = 1
+
+#    AiPlayerbot.Rest.DwellMin / .DwellMax
+#        Seated dwell at the inn, in seconds (per-bot jittered, measured from arrival). Long dwell is
+#        what accumulates a visible crowd. Default: 120 / 300
+AiPlayerbot.Rest.DwellMin = 120
+AiPlayerbot.Rest.DwellMax = 300
 
 # --- Occupation satiation (variety) -------------------------------------------
 # Biases the RPG occupation pick above AWAY from recently-done activities. Each

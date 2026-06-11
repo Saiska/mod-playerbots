@@ -177,8 +177,28 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_REST:
         {
             auto& rest = std::get<NewRpgInfo::Rest>(info.data);
-            // REST -> IDLE
-            if (info.HasStatusPersisted(statusRestDuration))
+
+            // Phase 1 — travel to the inn, then arrive once. rest.lastReach==0 => en route / unresolved.
+            if (!rest.lastReach)
+            {
+                // InnPull: walk to the innkeeper hub chosen on REST entry. MoveFarTo returns true while
+                // still moving toward it (mirrors NewRpgGoGrindAction). No dest / pull off => arrive here.
+                if (sPlayerbotAIConfig.restInnPullEnable && rest.pos != WorldPosition() && MoveFarTo(rest.pos))
+                    return true;
+
+                // Arrived (or resting in place): sit, resolve a nearby chair once, set the dwell clock.
+                rest.lastReach = getMSTime();
+                if (bot->getStandState() == UNIT_STAND_STATE_STAND)
+                    bot->SetStandState(UNIT_STAND_STATE_SIT);
+                rest.chair = SelectInnChair(15.0f);
+                uint32 mn = sPlayerbotAIConfig.restDwellMin;
+                uint32 mx = sPlayerbotAIConfig.restDwellMax;
+                if (mx < mn) std::swap(mn, mx);
+                rest.dwellMs = urand(mn, mx) * IN_MILLISECONDS;
+            }
+
+            // Phase 2 — dwell expiry, measured FROM ARRIVAL (so travel time doesn't eat the dwell).
+            if (GetMSTimeDiffToNow(rest.lastReach) >= rest.dwellMs)
             {
                 // Leave REST in a neutral pose: the chair Use set a SIT_*_CHAIR stand-state
                 // and/or TickEmoteCadence held EMOTE_STATE_SIT — clear both so the bot stands.
@@ -190,15 +210,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             }
 
-            // Stationary REST hold. ChangeToRest() already sat the bot (UNIT_STAND_STATE_SIT)
-            // in place; there is no dedicated REST perform action, so this arm is the per-tick
-            // stationary point. On first reach, resolve a nearby inn chair once.
-            if (!rest.lastReach)
-            {
-                rest.lastReach = getMSTime();
-                rest.chair = SelectInnChair(15.0f);
-            }
-
+            // Phase 3 — seated hold (subject 2, UNCHANGED): chair Use / floor fallback + cadence.
             bool chaired = false;
             if (rest.chair)
             {
