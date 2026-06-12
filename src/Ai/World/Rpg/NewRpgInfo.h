@@ -68,6 +68,8 @@ struct NewRpgInfo
         Rest() = default;
         WorldPosition pos{};    // innkeeper-hub destination (InnPull); empty = rest in place
         ObjectGuid chair{};     // seated chair GO (empty = floor-sit / not yet resolved)
+        bool onChair{false};    // true once chair->Use() succeeded: gates against re-Use/re-teleport
+        uint8 seatState{0};     // captured UNIT_STAND_STATE_SIT_*_CHAIR value, re-asserted each tick to hold the pose
         uint32 lastReach{0};    // 0 = en route / not yet resolved; set once on ARRIVAL at the rest pos
         uint32 dwellMs{0};      // jittered dwell duration in ms (set on arrival; elapsed measured vs lastReach)
     };
