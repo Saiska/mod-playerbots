@@ -357,6 +357,18 @@ bool LfgTeleportRecoveryAction::Execute(Event /*event*/)
     Group* group = bot->GetGroup();
     uint32 dungeonMap = group ? sLFGMgr->GetDungeonMapId(group->GetGUID()) : 0;
 
+    // INSIDE the dungeon but still roaming under NewRpg -> engage dungeon mode now that the bot
+    // IS grouped: ResetStrategies drops "new rpg" for the non-leader and adds dps-assist/follow +
+    // the per-instance strategy. Self-terminating via the trigger's HasStrategy("new rpg") gate.
+    if (dungeonMap && bot->GetMapId() == dungeonMap)
+    {
+        botAI->ResetStrategies();
+        botAI->Reset();
+        LOG_INFO("playerbots", "lfg: engaged dungeon mode for {} (was roaming inside map {})",
+                 bot->GetName(), dungeonMap);
+        return true;
+    }
+
     // New episode (different assigned dungeon) -> reset per-episode state.
     if (dungeonMap != m_trackedMapId)
     {
