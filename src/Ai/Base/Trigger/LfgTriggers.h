@@ -18,6 +18,14 @@ public:
     bool IsActive() override;
 };
 
+class LfgTeleportRecoveryTrigger : public Trigger
+{
+public:
+    LfgTeleportRecoveryTrigger(PlayerbotAI* botAI) : Trigger(botAI, "lfg teleport recovery", 2000) {}
+
+    bool IsActive() override;
+};
+
 class UnknownDungeonTrigger : public Trigger
 {
 public:

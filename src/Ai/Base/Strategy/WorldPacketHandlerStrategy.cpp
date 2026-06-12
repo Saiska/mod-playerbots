@@ -49,6 +49,7 @@ void WorldPacketHandlerStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
     triggers.push_back(new TriggerNode("petition offer", { NextAction("petition sign", relevance) }));
     triggers.push_back(new TriggerNode("lfg proposal", { NextAction("lfg accept", relevance) }));
     triggers.push_back(new TriggerNode("lfg proposal active", { NextAction("lfg accept", relevance) }));
+    triggers.push_back(new TriggerNode("lfg teleport recovery", { NextAction("lfg teleport recovery", relevance) }));
     triggers.push_back(new TriggerNode("arena team invite", { NextAction("arena team accept", relevance) }));
     //triggers.push_back(new TriggerNode("no non bot players around", { NextAction("delay", relevance) }));
     triggers.push_back(new TriggerNode("bg status", { NextAction("bg status", relevance) }));
@@ -80,6 +81,7 @@ WorldPacketHandlerStrategy::WorldPacketHandlerStrategy(PlayerbotAI* botAI) : Pas
     supported.push_back("uninvite");
     supported.push_back("lfg role check");
     supported.push_back("lfg teleport");
+    supported.push_back("lfg teleport recovery");
     supported.push_back("random bot update");
     supported.push_back("inventory change failure");
     supported.push_back("bg status");

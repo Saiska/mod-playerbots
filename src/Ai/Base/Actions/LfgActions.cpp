@@ -350,3 +350,56 @@ bool LfgJoinAction::isUseful()
 
     return true;
 }
+
+bool LfgTeleportRecoveryAction::Execute(Event /*event*/)
+{
+    // GetDungeonMapId is keyed on the GROUP guid (GroupsStore), not the player guid.
+    Group* group = bot->GetGroup();
+    uint32 dungeonMap = group ? sLFGMgr->GetDungeonMapId(group->GetGUID()) : 0;
+
+    // New episode (different assigned dungeon) -> reset per-episode state.
+    if (dungeonMap != m_trackedMapId)
+    {
+        m_trackedMapId   = dungeonMap;
+        m_attempts       = 0;
+        m_firstAttemptMs = getMSTime();
+        m_didReset       = false;
+        m_gaveUp         = false;
+    }
+
+    if (m_gaveUp)
+        return true;                         // already gave up this episode
+
+    // One-shot: force the grouped-member strategy set (strips "new rpg" for a non-leader,
+    // engages dungeon-mode readiness, and stops NewRpg-initiated combat while we wait).
+    if (!m_didReset)
+    {
+        botAI->ResetStrategies();
+        botAI->Reset();
+        m_didReset = true;
+        LOG_INFO("playerbots", "lfg: recovery engaged for {} (dungeon map {}) - NewRpg suppressed",
+                 bot->GetName(), dungeonMap);
+    }
+
+    // Bounded budget so a genuinely-unteleportable bot stops spinning.
+    ++m_attempts;
+    if (m_attempts > MAX_ATTEMPTS || GetMSTimeDiffToNow(m_firstAttemptMs) > MAX_WINDOW_MS)
+    {
+        m_gaveUp = true;
+        LOG_INFO("playerbots", "lfg: recovery gave up for {} after {} attempts (dungeon map {})",
+                 bot->GetName(), m_attempts, dungeonMap);
+        return true;
+    }
+
+    bool inCombat = bot->IsInCombat();
+    if (inCombat)
+        bot->CombatStop(true);               // transient clear; mobs re-aggro next tick -> we retry
+
+    WorldPacket* packet = new WorldPacket(CMSG_LFG_TELEPORT);
+    *packet << false;                        // false = teleport IN (verified vs LFGMgr.cpp:2265)
+    bot->GetSession()->QueuePacket(packet);
+
+    LOG_INFO("playerbots", "lfg: teleport-in retry for {} (in combat={}, attempt {}/{})",
+             bot->GetName(), inCombat ? 1 : 0, m_attempts, MAX_ATTEMPTS);
+    return true;
+}
