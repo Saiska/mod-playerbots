@@ -58,4 +58,22 @@ public:
     bool Execute(Event event) override;
 };
 
+class LfgTeleportRecoveryAction : public Action
+{
+public:
+    LfgTeleportRecoveryAction(PlayerbotAI* botAI) : Action(botAI, "lfg teleport recovery") {}
+
+    bool Execute(Event event) override;
+
+private:
+    uint32 m_trackedMapId   = 0;     // dungeon map this episode is tracking
+    uint32 m_attempts       = 0;
+    uint32 m_firstAttemptMs = 0;
+    bool   m_didReset       = false; // one-shot ResetStrategies+Reset per episode
+    bool   m_gaveUp         = false; // logged give-up, stop retrying this episode
+
+    static constexpr uint32 MAX_ATTEMPTS  = 45;      // ~90s at the 2s trigger cadence
+    static constexpr uint32 MAX_WINDOW_MS = 120000;  // hard 2-min wall-clock cap
+};
+
 #endif
