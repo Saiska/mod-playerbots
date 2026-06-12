@@ -323,25 +323,31 @@ bool NewRpgWanderRandomAction::Execute(Event /*event*/)
     // (bug #2). ForceToWait records a movement-wait state -> the bot holds; the stroll resumes when it
     // expires. While ForceToWait is active, IsWaitingForLastMove() is true so we fall through to
     // MoveRandomNear() which early-outs -> the bot stays put for the halt duration.
+    // rpgInfo.data may not hold the WanderRandom alternative at execute time (a status/data
+    // transition window), so use the checked accessor like every other action in this file. A raw
+    // std::get<> here throws std::bad_variant_access, which is uncaught on the MapUpdater worker
+    // thread and terminates the process (crash 2026-06-11 18:32).
     if (sPlayerbotAIConfig.wanderMicroHaltEnable && !IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL))
     {
-        auto& data = std::get<NewRpgInfo::WanderRandom>(botAI->rpgInfo.data);
-        uint32 now = getMSTime();
-        if (data.nextHaltMs == 0)
+        if (auto* data = std::get_if<NewRpgInfo::WanderRandom>(&botAI->rpgInfo.data))
         {
-            // first arrival this wander spell: stroll first, schedule the first halt
-            data.nextHaltMs = now + urand(sPlayerbotAIConfig.wanderMicroHaltGapMin,
-                                          sPlayerbotAIConfig.wanderMicroHaltGapMax) * IN_MILLISECONDS;
-        }
-        else if (now >= data.nextHaltMs)
-        {
-            uint32 durMs = urand(sPlayerbotAIConfig.wanderMicroHaltDurationMin,
-                                 sPlayerbotAIConfig.wanderMicroHaltDurationMax) * IN_MILLISECONDS;
-            ForceToWait(durMs, MovementPriority::MOVEMENT_NORMAL);   // bug-#2-safe hold
-            FireOneShotEmote(BEH_WANDER_RANDOM, 0);                  // one immediate look-around emote
-            data.nextHaltMs = now + durMs + urand(sPlayerbotAIConfig.wanderMicroHaltGapMin,
-                                                  sPlayerbotAIConfig.wanderMicroHaltGapMax) * IN_MILLISECONDS;
-            return true;
+            uint32 now = getMSTime();
+            if (data->nextHaltMs == 0)
+            {
+                // first arrival this wander spell: stroll first, schedule the first halt
+                data->nextHaltMs = now + urand(sPlayerbotAIConfig.wanderMicroHaltGapMin,
+                                               sPlayerbotAIConfig.wanderMicroHaltGapMax) * IN_MILLISECONDS;
+            }
+            else if (now >= data->nextHaltMs)
+            {
+                uint32 durMs = urand(sPlayerbotAIConfig.wanderMicroHaltDurationMin,
+                                     sPlayerbotAIConfig.wanderMicroHaltDurationMax) * IN_MILLISECONDS;
+                ForceToWait(durMs, MovementPriority::MOVEMENT_NORMAL);   // bug-#2-safe hold
+                FireOneShotEmote(BEH_WANDER_RANDOM, 0);                  // one immediate look-around emote
+                data->nextHaltMs = now + durMs + urand(sPlayerbotAIConfig.wanderMicroHaltGapMin,
+                                                       sPlayerbotAIConfig.wanderMicroHaltGapMax) * IN_MILLISECONDS;
+                return true;
+            }
         }
     }
 
