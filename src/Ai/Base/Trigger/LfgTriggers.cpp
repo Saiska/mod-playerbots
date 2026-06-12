@@ -21,9 +21,14 @@ bool LfgTeleportRecoveryTrigger::IsActive()
     if (sLFGMgr->GetState(bot->GetGUID()) != lfg::LFG_STATE_DUNGEON)
         return false;
 
-    uint32 dungeonMap = sLFGMgr->GetDungeonMapId(bot->GetGUID());
-    if (!dungeonMap || dungeonMap == uint32(-1))
-        return false;                       // no assigned map yet
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;                       // LFG dungeon state implies a group; guard for GetGUID()
+
+    // GetDungeonMapId is keyed on the GROUP guid (GroupsStore), not the player guid.
+    uint32 dungeonMap = sLFGMgr->GetDungeonMapId(group->GetGUID());
+    if (!dungeonMap)
+        return false;                       // no assigned dungeon map yet
 
     if (bot->GetMapId() == dungeonMap)
         return false;                       // already inside

@@ -353,8 +353,9 @@ bool LfgJoinAction::isUseful()
 
 bool LfgTeleportRecoveryAction::Execute(Event /*event*/)
 {
-    ObjectGuid guid = bot->GetGUID();
-    uint32 dungeonMap = sLFGMgr->GetDungeonMapId(guid);
+    // GetDungeonMapId is keyed on the GROUP guid (GroupsStore), not the player guid.
+    Group* group = bot->GetGroup();
+    uint32 dungeonMap = group ? sLFGMgr->GetDungeonMapId(group->GetGUID()) : 0;
 
     // New episode (different assigned dungeon) -> reset per-episode state.
     if (dungeonMap != m_trackedMapId)
