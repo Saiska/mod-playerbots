@@ -115,6 +115,76 @@ namespace
             ") pool;";
     }
 
+    // Comma-joined entry list for an IN(...) clause. Entries come from our own DB table (uint32),
+    // never user input, so direct interpolation is safe. Empty -> "0" (matches nothing).
+    std::string JoinEntries(std::vector<uint32> const& entries)
+    {
+        if (entries.empty())
+            return "0";
+        std::string s;
+        for (uint32 e : entries)
+        {
+            if (!s.empty())
+                s += ",";
+            s += std::to_string(e);
+        }
+        return s;
+    }
+
+    // Curated-boss equivalent of BuildPoolQuery: resolve equippable items from explicit creature
+    // entries via creature_template.lootid (+ reference walk), with the same difficulty_entry_N
+    // indirection — but NO spawn join, so summoned bosses (0 static spawns) are reachable.
+    std::string BuildBossPoolQuery(std::vector<uint32> const& entries, uint8 d, uint8 minQuality,
+                                   uint16 ilvlCap)
+    {
+        std::string inList = JoinEntries(entries);
+        std::string entryExpr = (d == 0)
+            ? "b.entry"
+            : "IF(b.difficulty_entry_" + std::to_string(d) + " = 0, b.entry, b.difficulty_entry_" +
+                  std::to_string(d) + ")";
+        return
+            "SELECT DISTINCT it.entry FROM ("
+            "  SELECT clt.Item AS item FROM creature_template b"
+            "  JOIN creature_template e ON e.entry = " + entryExpr +
+            "  JOIN creature_loot_template clt ON clt.Entry = e.lootid"
+            "  WHERE b.entry IN (" + inList + ") AND clt.Reference = 0 AND clt.Item <> 0"
+            "  UNION"
+            "  SELECT rlt.Item FROM creature_template b"
+            "  JOIN creature_template e ON e.entry = " + entryExpr +
+            "  JOIN creature_loot_template clt ON clt.Entry = e.lootid"
+            "  JOIN reference_loot_template rlt ON rlt.Entry = clt.Reference"
+            "  WHERE b.entry IN (" + inList + ") AND clt.Reference <> 0 AND rlt.Item <> 0"
+            ") pool"
+            " JOIN item_template it ON it.entry = pool.item"
+            " WHERE it.class IN (2, 4)"
+            "   AND it.Quality >= " + std::to_string(uint32(minQuality)) +
+            "   AND it.ItemLevel <= " + std::to_string(uint32(ilvlCap)) + ";";
+    }
+
+    // Curated-boss equivalent of BuildRawLootQuery: all raw drop entries (no filter) for token/
+    // emblem currency expansion.
+    std::string BuildBossRawQuery(std::vector<uint32> const& entries, uint8 d)
+    {
+        std::string inList = JoinEntries(entries);
+        std::string entryExpr = (d == 0)
+            ? "b.entry"
+            : "IF(b.difficulty_entry_" + std::to_string(d) + " = 0, b.entry, b.difficulty_entry_" +
+                  std::to_string(d) + ")";
+        return
+            "SELECT DISTINCT pool.item FROM ("
+            "  SELECT clt.Item AS item FROM creature_template b"
+            "  JOIN creature_template e ON e.entry = " + entryExpr +
+            "  JOIN creature_loot_template clt ON clt.Entry = e.lootid"
+            "  WHERE b.entry IN (" + inList + ") AND clt.Reference = 0 AND clt.Item <> 0"
+            "  UNION"
+            "  SELECT rlt.Item FROM creature_template b"
+            "  JOIN creature_template e ON e.entry = " + entryExpr +
+            "  JOIN creature_loot_template clt ON clt.Entry = e.lootid"
+            "  JOIN reference_loot_template rlt ON rlt.Entry = clt.Reference"
+            "  WHERE b.entry IN (" + inList + ") AND clt.Reference <> 0 AND rlt.Item <> 0"
+            ") pool;";
+    }
+
     void ParkBot(Player* p)
     {
         PlayerbotAI* ai = GET_PLAYERBOT_AI(p);
@@ -354,6 +424,20 @@ void RaidSimulationMgr::LoadFromDB()
     }
     LOG_INFO("playerbots", "RaidSim: chest-loot mapping has {} (map,difficulty) keys.",
              uint32(_chestLoot.size()));
+
+    // --- Boss-loot mapping (summoned/scripted bosses; not static-joinable). ---
+    _bossLoot.clear();
+    if (QueryResult br = CharacterDatabase.Query(
+            "SELECT map_id, difficulty, creature_entry FROM playerbots_raid_boss_loot"))
+    {
+        do
+        {
+            Field* bf = br->Fetch();
+            _bossLoot[{bf[0].Get<uint32>(), bf[1].Get<uint8>()}].push_back(bf[2].Get<uint32>());
+        } while (br->NextRow());
+    }
+    LOG_INFO("playerbots", "RaidSim: boss-loot mapping has {} (map,difficulty) keys.",
+             uint32(_bossLoot.size()));
 
     if (QueryResult s = CharacterDatabase.Query("SELECT base_ilvl FROM playerbots_raid_server_state WHERE id = 1"))
         _baseIlvl = s->Fetch()[0].Get<uint16>();
@@ -891,7 +975,7 @@ void RaidSimulationMgr::Update(uint32 diff)
 std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
 {
     std::vector<uint32> pool;
-    uint32 baseCount = 0, currencyCount = 0, chestCount = 0;
+    uint32 baseCount = 0, bossCount = 0, currencyCount = 0, chestCount = 0;
 
     auto passesGate = [&](uint32 itemId) -> bool
     {
@@ -912,6 +996,22 @@ std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
     if (QueryResult pr = WorldDatabase.Query(
             BuildPoolQuery(inst.mapId, inst.difficulty, inst.minQuality, inst.ilvlCap).c_str()))
         do { pool.push_back(pr->Fetch()[0].Get<uint32>()); ++baseCount; } while (pr->NextRow());
+
+    // 1b. Curated boss entries — summoned/scripted bosses with no static spawn (resolved directly
+    //     by creature_entry, not by map). Same item gate as the creature base; raw drops also feed
+    //     currency expansion so summoned-boss tokens/emblems expand too.
+    auto bossIt = _bossLoot.find({inst.mapId, inst.difficulty});
+    if (bossIt != _bossLoot.end())
+    {
+        if (QueryResult bpr = WorldDatabase.Query(
+                BuildBossPoolQuery(bossIt->second, inst.difficulty, inst.minQuality,
+                                   inst.ilvlCap).c_str()))
+            do { pool.push_back(bpr->Fetch()[0].Get<uint32>()); ++bossCount; } while (bpr->NextRow());
+
+        if (QueryResult brr = WorldDatabase.Query(
+                BuildBossRawQuery(bossIt->second, inst.difficulty).c_str()))
+            do { expandCurrency(brr->Fetch()[0].Get<uint32>()); } while (brr->NextRow());
+    }
 
     // 2. Currency/token expansion over every boss-drop entry on the map.
     if (QueryResult rr = WorldDatabase.Query(BuildRawLootQuery(inst.mapId, inst.difficulty).c_str()))
@@ -937,8 +1037,8 @@ std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
         LOG_WARN("playerbots", "RaidSim: instance {} '{}' (map {} diff {}) has EMPTY loot pool.",
                  inst.id, inst.label, inst.mapId, uint32(inst.difficulty));
     // base/currency/chest are pre-dedup push counts; their sum may exceed pool.size() (step 4 dedup).
-    LOG_INFO("playerbots", "RaidSim: instance {} '{}' pool={} (base {}, currency {}, chest {}).",
-             inst.id, inst.label, uint32(pool.size()), baseCount, currencyCount, chestCount);
+    LOG_INFO("playerbots", "RaidSim: instance {} '{}' pool={} (base {}, boss {}, currency {}, chest {}).",
+             inst.id, inst.label, uint32(pool.size()), baseCount, bossCount, currencyCount, chestCount);
     return pool;
 }
 

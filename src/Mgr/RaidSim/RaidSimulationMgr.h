@@ -107,6 +107,9 @@ private:
     std::unordered_map<uint32, std::vector<uint32>> _currencyExpansion;
     // (mapId, difficulty) -> summoned cache GO entries for chest-loot instances (616/649/650).
     std::map<std::pair<uint32, uint8>, std::vector<uint32>> _chestLoot;
+    // (map,difficulty) -> curated boss creature entries resolved DIRECTLY (bypasses the spawn join;
+    // captures summoned/scripted bosses with 0 static spawns). Loaded from playerbots_raid_boss_loot.
+    std::map<std::pair<uint32, uint8>, std::vector<uint32>> _bossLoot;
     std::unordered_map<uint32, ActiveRun> _runs;            // by guildId
     std::unordered_map<uint32, uint32> _cooldownMs;         // guildId -> remaining cooldown ms
     std::unordered_set<ObjectGuid> _raiding;
