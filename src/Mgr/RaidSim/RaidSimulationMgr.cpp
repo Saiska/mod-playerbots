@@ -134,6 +134,9 @@ namespace
     // Curated-boss equivalent of BuildPoolQuery: resolve equippable items from explicit creature
     // entries via creature_template.lootid (+ reference walk), with the same difficulty_entry_N
     // indirection — but NO spawn join, so summoned bosses (0 static spawns) are reachable.
+    // NOTE: stored entries MUST be BASE (normal-mode) creature_template.entry values, not
+    // difficulty_entry_N variants — the IF() expression applies the difficulty redirect from the
+    // base row, so a variant entry would double-redirect and resolve the wrong loot.
     std::string BuildBossPoolQuery(std::vector<uint32> const& entries, uint8 d, uint8 minQuality,
                                    uint16 ilvlCap)
     {
@@ -999,7 +1002,8 @@ std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
 
     // 1b. Curated boss entries — summoned/scripted bosses with no static spawn (resolved directly
     //     by creature_entry, not by map). Same item gate as the creature base; raw drops also feed
-    //     currency expansion so summoned-boss tokens/emblems expand too.
+    //     currency expansion so summoned-boss tokens/emblems expand too. (A curated boss that also
+    //     has static spawns would double-feed expandCurrency, but step-4 dedup makes that harmless.)
     auto bossIt = _bossLoot.find({inst.mapId, inst.difficulty});
     if (bossIt != _bossLoot.end())
     {
