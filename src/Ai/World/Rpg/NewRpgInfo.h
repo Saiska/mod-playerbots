@@ -102,6 +102,9 @@ struct NewRpgInfo
     uint32 lastEmoteMs{0};
     uint32 nextEmoteGapMs{0};
     uint8  lastEmoteIdx{0xFF};
+    uint32 heldSocialEmote{0};   // comedy-hold-dance: social pastime held EMOTE_STATE_* (0=none). Lives on
+                                 // NewRpgInfo (not the Social variant) so it survives ChangeToIdle's variant
+                                 // reset and the Execute-head sweep can clear it after an external yank.
 
     // --- occupation satiation (pipe 1) — in-memory only, no DB ---
     float  satiation[CAT_COUNT] = {0.0f};  // [0,1] per BotActivityCategory

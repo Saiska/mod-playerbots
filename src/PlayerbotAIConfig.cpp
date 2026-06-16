@@ -775,6 +775,10 @@ bool PlayerbotAIConfig::Initialize()
         std::swap(pastimeSocialDwellMin, pastimeSocialDwellMax);
     pastimeSocialEmoteInterval = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.EmoteInterval", 6);
     pastimeSocialIncludePlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Social.IncludePlayers", false);
+    pastimeSocialDancePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DancePct", 25);
+    if (pastimeSocialDancePct > 100)
+        pastimeSocialDancePct = 100;
+    LOG_INFO("playerbots", "[SocialDance] dancePct={}", pastimeSocialDancePct);
     pastimeSocialEmotes.clear();
     {
         std::string raw = sConfigMgr->GetOption<std::string>("AiPlayerbot.Pastime.Social.Emotes",
