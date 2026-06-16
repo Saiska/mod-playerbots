@@ -755,6 +755,16 @@ bool PlayerbotAIConfig::Initialize()
              rpgSatiationEnable, rpgSatiationRiseRatePerSec, rpgSatiationDecayRatePerSec,
              rpgSatiationSuppressExponent, rpgSatiationMinAppealFrac);
 
+    rpgSuppressWhenBusy = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenBusy", true);
+    rpgSuppressInstance = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Instance", true);
+    rpgSuppressGroupedWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.GroupedWithPlayer", true);
+    rpgSuppressVehicle = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Vehicle", true);
+    rpgSuppressRaidSim = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.RaidSim", true);
+    rpgSuppressCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Combat", true);
+    LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={}",
+             rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,
+             rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat);
+
     pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
     pastimeSocialClusterDist = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.ClusterDist", 5.0f);
