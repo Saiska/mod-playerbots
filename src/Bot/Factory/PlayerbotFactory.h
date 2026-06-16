@@ -155,6 +155,7 @@ private:
     // void InitEquipmentNew(bool incremental);
     bool CanEquipItem(ItemTemplate const* proto);
     bool CanEquipUnseenItem(uint8 slot, uint16& dest, uint32 item);
+    uint32 SelectBestItemForSlot(uint8 slot, uint32 qualityCap);
     static bool IsPrimaryTradeSkill(uint16 skillId);
     static bool IsGatheringTradeSkill(uint16 skillId);
     static bool IsCraftingTradeSkill(uint16 skillId);
