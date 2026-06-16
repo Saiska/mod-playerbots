@@ -74,6 +74,19 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
 
+    // comedy-hold-dance: stale held-pose sweep. ANY exit from the social pastime (dwell end, partner
+    // lost, OR an external yank — the bot-rpg-bleed-suppression guard below calls ChangeToIdle, which
+    // does NOT clear emote-state) leaves status != RPG_PASTIME with our social emote-state still on the
+    // unit. Clear it so a suppressed bot doesn't keep dancing/talking while it idles/follows. Sits ABOVE
+    // the bleed guard so it still fires while the bot stays suppressed (status == RPG_IDLE). heldSocialEmote
+    // lives on NewRpgInfo (not the Social variant) so it survives ChangeToIdle's reset and we can clean up.
+    if (info.heldSocialEmote && info.GetStatus() != RPG_PASTIME)
+    {
+        if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) == info.heldSocialEmote)
+            bot->ClearEmoteState();
+        info.heldSocialEmote = 0;
+    }
+
     // --- occupation satiation: integrate meters (dt-based; runs every tick) ---
     // Current category rises; all others decay. IDLE -> CategoryOf == CAT_COUNT,
     // so no category matches and everything decays.
