@@ -266,6 +266,16 @@ bool MaintenanceAction::Execute(Event /*event*/)
     bot->DurabilityRepairAll(false, 1.0f, false);
     bot->SendTalentsInfoData(false);
 
+    if (sPlayerbotAIConfig.maintenanceGearFloor)
+    {
+        uint32 gs = sPlayerbotAIConfig.autoGearScoreLimit == 0
+                        ? 0
+                        : PlayerbotFactory::CalcMixedGearScore(sPlayerbotAIConfig.autoGearScoreLimit,
+                                                               sPlayerbotAIConfig.autoGearQualityLimit);
+        PlayerbotFactory floorFactory(bot, bot->GetLevel(), sPlayerbotAIConfig.autoGearQualityLimit, gs);
+        floorFactory.TopUpGear();
+    }
+
     return true;
 }
 

@@ -527,6 +527,25 @@ AiPlayerbot.RPWarningCooldown = 30
 # Default: 1 (enabled)
 AiPlayerbot.MaintenanceCommand = 1
 
+#
+#    AiPlayerbot.MaintenanceGearFloor
+#        Description: During the maintenance pass, fill empty or under-leveled (RequiredLevel
+#                     more than LevelGap below the bot) equipment slots with the best available
+#                     green/blue item. Never selects epics (RaidSim stays the sole epic source)
+#                     and never downgrades an adequate slot.
+#        Default:     1 - enabled
+#                     0 - disabled
+#
+AiPlayerbot.MaintenanceGearFloor = 1
+
+#
+#    AiPlayerbot.MaintenanceGearFloorLevelGap
+#        Description: A slot counts as "lacking" if its item's RequiredLevel is more than this
+#                     many levels below the bot's level. Empty slots are always topped up.
+#        Default:     9
+#
+AiPlayerbot.MaintenanceGearFloorLevelGap = 9
+
 # Enable/Disable specific maintenance command functionality for alt bots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their alt bots
 # Default: 1 (enabled)
