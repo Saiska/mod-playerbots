@@ -611,6 +611,9 @@ bool PlayerbotAIConfig::Initialize()
     downgradeMaxLevelBot = sConfigMgr->GetOption<bool>("AiPlayerbot.DowngradeMaxLevelBot", true);
     equipmentPersistence = sConfigMgr->GetOption<bool>("AiPlayerbot.EquipmentPersistence", false);
     equipmentPersistenceLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.EquipmentPersistenceLevel", 80);
+    maintenanceGearFloor = sConfigMgr->GetOption<bool>("AiPlayerbot.MaintenanceGearFloor", true);
+    maintenanceGearFloorLevelGap = sConfigMgr->GetOption<int32>("AiPlayerbot.MaintenanceGearFloorLevelGap", 9);
+    LOG_INFO("server.loading", "GearFloor: config loaded — enabled=%d levelGap=%d", maintenanceGearFloor, maintenanceGearFloorLevelGap);
     groupInvitationPermission = sConfigMgr->GetOption<int32>("AiPlayerbot.GroupInvitationPermission", 1);
     keepAltsInGroup = sConfigMgr->GetOption<bool>("AiPlayerbot.KeepAltsInGroup", false);
     allowSummonInCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowSummonInCombat", true);

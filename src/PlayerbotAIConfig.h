@@ -550,6 +550,8 @@ public:
     bool downgradeMaxLevelBot;
     bool equipmentPersistence;
     int32 equipmentPersistenceLevel;
+    bool maintenanceGearFloor;
+    int32 maintenanceGearFloorLevelGap;
     int32 groupInvitationPermission;
     bool keepAltsInGroup = false;
     bool KeepAltsInGroup() const { return keepAltsInGroup; }
