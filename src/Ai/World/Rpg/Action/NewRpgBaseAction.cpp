@@ -13,10 +13,12 @@
 #include "G3D/Vector2.h"
 #include "GameObject.h"
 #include "GossipDef.h"
+#include "Group.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "GridTerrainData.h"
 #include "IVMapMgr.h"
+#include "Map.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "Object.h"
@@ -34,6 +36,7 @@
 #include "QuestDef.h"
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
+#include "RaidSimulationMgr.h"
 #include "SharedDefines.h"
 #include "StatsWeightCalculator.h"
 #include "Timer.h"
@@ -1690,6 +1693,59 @@ bool NewRpgBaseAction::SelectRandomFlightTaxiNode(uint32& flightMasterEntry, Wor
     LOG_DEBUG("playerbots", "[New RPG] Bot {} select random flight taxi node from:{} (node {}) to:{} ({} available)",
               bot->GetName(), flightMasterEntry, path[0], path[path.size() - 1], availablePaths.size());
     return true;
+}
+
+// A bot may run autonomous NewRpg behavior ONLY when ALL of these hold (allowlist — anything not
+// provably "free" suppresses by default). Each axis is individually gated by its config toggle; an
+// off toggle makes that axis non-constraining. Combat/dead are redundant with the COMBAT/DEAD engine
+// switches but kept as cheap belt-and-suspenders against idle-window edges.
+bool NewRpgBaseAction::IsFreeToIdle()
+{
+    PlayerbotAIConfig const& cfg = sPlayerbotAIConfig;
+
+    // Always: a dead or mid-teleport bot is never free to idle.
+    if (!bot->IsAlive() || bot->IsBeingTeleported())
+        return false;
+
+    if (cfg.rpgSuppressCombat && bot->IsInCombat())
+        return false;
+
+    // Instanced content: dungeon / raid / battleground / arena.
+    if (cfg.rpgSuppressInstance)
+    {
+        Map* map = bot->GetMap();
+        if (map && (map->IsDungeon() || map->IsRaid() || map->IsBattlegroundOrArena()))
+            return false;
+    }
+
+    // On a moving platform or in a vehicle -> don't wander off it.
+    if (cfg.rpgSuppressVehicle && (bot->GetTransport() || bot->GetVehicle()))
+        return false;
+
+    // Grouped with a human: a real player has no PlayerbotAI.
+    if (cfg.rpgSuppressGroupedWithPlayer)
+    {
+        if (Group* group = bot->GetGroup())
+        {
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (member && member != bot && !GET_PLAYERBOT_AI(member))
+                    return false;
+            }
+        }
+    }
+
+    // In a RaidSim run (the simulated-instance gear loop).
+    if (cfg.rpgSuppressRaidSim && sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
+        return false;
+
+    return true;
+}
+
+bool NewRpgBaseAction::ShouldSuppressRpg()
+{
+    return !IsFreeToIdle();
 }
 
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
