@@ -2522,6 +2522,113 @@ uint32 PlayerbotFactory::SelectBestItemForSlot(uint8 slot, uint32 qualityCap)
     return bestItemForSlot;
 }
 
+void PlayerbotFactory::TopUpGear()
+{
+    uint8 botLevel = bot->GetLevel();
+    int32 gap = sPlayerbotAIConfig.maintenanceGearFloorLevelGap;
+
+    bool isPvp = sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass());
+
+    StatsWeightCalculator calculator(bot);
+    if (isPvp)
+        calculator.SetPvpSpec(true);
+
+    uint32 count = 0;
+    std::string slotsStr;
+
+    for (int32 slot : initSlotsOrder)
+    {
+        // Same level gates as InitEquipment.
+        if (slot == EQUIPMENT_SLOT_TABARD || slot == EQUIPMENT_SLOT_BODY)
+            continue;
+
+        if (botLevel < 50 && (slot == EQUIPMENT_SLOT_TRINKET1 || slot == EQUIPMENT_SLOT_TRINKET2))
+            continue;
+
+        if (botLevel < 30 && (slot == EQUIPMENT_SLOT_NECK || slot == EQUIPMENT_SLOT_HEAD))
+            continue;
+
+        if (botLevel < 20 && (slot == EQUIPMENT_SLOT_FINGER1 || slot == EQUIPMENT_SLOT_FINGER2))
+            continue;
+
+        if (botLevel < 5 && (slot != EQUIPMENT_SLOT_MAINHAND) && (slot != EQUIPMENT_SLOT_OFFHAND) &&
+            (slot != EQUIPMENT_SLOT_FEET) && (slot != EQUIPMENT_SLOT_LEGS) && (slot != EQUIPMENT_SLOT_CHEST) &&
+            (slot != EQUIPMENT_SLOT_RANGED))
+            continue;
+
+        // Mirror InitEquipment's per-slot calculator setup so curScore/bestScore
+        // are comparable to how SelectBestItemForSlot scores candidates.
+        bool isTrinketSlot = (slot == EQUIPMENT_SLOT_TRINKET1 || slot == EQUIPMENT_SLOT_TRINKET2);
+        calculator.SetExcludeResilience(isTrinketSlot);
+
+        Item* cur = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+
+        // Determine whether this slot is lacking.
+        float curScore = 0.0f;
+        if (cur)
+        {
+            ItemTemplate const* proto = cur->GetTemplate();
+            // Heirlooms scale with level; never treat them as lacking.
+            // An item is only lacking if its required level lags the bot by more than the gap.
+            if (proto->Quality != ITEM_QUALITY_HEIRLOOM &&
+                (int32)proto->RequiredLevel < (int32)botLevel - gap)
+            {
+                curScore = calculator.CalculateItem(cur->GetEntry(), cur->GetItemRandomPropertyId(), slot);
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        // Cap at Rare quality (helper rejects Quality > ITEM_QUALITY_RARE).
+        uint32 best = SelectBestItemForSlot(slot, ITEM_QUALITY_RARE);
+        if (!best)
+            continue;
+
+        float bestScore = calculator.CalculateItem(best, 0, slot);
+        // Never downgrade. Empty slot has curScore 0, so any real item fills it.
+        if (bestScore <= curScore)
+            continue;
+
+        uint16 dest;
+        if (!CanEquipUnseenItem(slot, dest, best))
+            continue;
+
+        // Unequip the current item into a bag first.
+        if (cur)
+        {
+            uint8 bagIndex = cur->GetBagSlot();
+            uint8 curSlot = cur->GetSlot();
+            uint8 dstBag = NULL_BAG;
+            WorldPacket packet(CMSG_AUTOSTORE_BAG_ITEM, 3);
+            packet << bagIndex << curSlot << dstBag;
+            WorldPackets::Item::AutoStoreBagItem nicePacket(std::move(packet));
+            nicePacket.Read();
+            bot->GetSession()->HandleAutoStoreBagItemOpcode(nicePacket);
+        }
+
+        // Fail-to-store guard: the slot must be free before equipping.
+        cur = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (cur)
+            continue;
+
+        bot->EquipNewItem(dest, best, true);
+        bot->AutoUnequipOffhandIfNeed();
+
+        ++count;
+        if (!slotsStr.empty())
+            slotsStr += ", ";
+        slotsStr += std::to_string(slot);
+    }
+
+    if (count > 0)
+    {
+        LOG_INFO("server.loading", "[GearFloor] Bot #{} {} lvl{}: filled {} slot(s) ({})",
+            bot->GetGUID().GetCounter(), bot->GetName().c_str(), botLevel, count, slotsStr.c_str());
+    }
+}
+
 bool PlayerbotFactory::IsDesiredReplacement(Item* item)
 {
     if (!item)
