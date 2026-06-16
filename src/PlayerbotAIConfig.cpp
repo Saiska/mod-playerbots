@@ -412,6 +412,8 @@ bool PlayerbotAIConfig::Initialize()
     randomChangeMultiplier = sConfigMgr->GetOption<float>("AiPlayerbot.RandomChangeMultiplier", 1.0);
 
     randomBotCombatStrategies = sConfigMgr->GetOption<std::string>("AiPlayerbot.RandomBotCombatStrategies", "");
+    randomBotCombatStrategiesHealer = sConfigMgr->GetOption<std::string>("AiPlayerbot.RandomBotCombatStrategiesHealer", "");
+    randomBotCombatStrategiesTank = sConfigMgr->GetOption<std::string>("AiPlayerbot.RandomBotCombatStrategiesTank", "");
     randomBotNonCombatStrategies = sConfigMgr->GetOption<std::string>("AiPlayerbot.RandomBotNonCombatStrategies", "");
     combatStrategies = sConfigMgr->GetOption<std::string>("AiPlayerbot.CombatStrategies", "");
     nonCombatStrategies = sConfigMgr->GetOption<std::string>("AiPlayerbot.NonCombatStrategies", "");

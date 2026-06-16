@@ -1047,10 +1047,15 @@ AiPlayerbot.OpenGoSpell = 6477
 #
 
 # Additional randombot strategies
-# Strategies added here are applied to all randombots, in addition (or subtraction) to spec/role-based default strategies.
+# RandomBotCombatStrategies is applied to DPS-role randombots only; healer- and
+# tank-role randombots use the role-specific keys below instead (default empty =
+# no forced delta, so healers/tanks keep their spec/class default strategies).
+# RandomBotNonCombatStrategies still applies to all randombots.
 # These rules are processed after the defaults.
 # Example: "+threat,-potions"
 AiPlayerbot.RandomBotCombatStrategies = ""
+AiPlayerbot.RandomBotCombatStrategiesHealer = ""
+AiPlayerbot.RandomBotCombatStrategiesTank = ""
 AiPlayerbot.RandomBotNonCombatStrategies = ""
 
 # Additional altbot strategies
