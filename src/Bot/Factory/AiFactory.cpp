@@ -449,7 +449,14 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
         }
     }
     if (sRandomPlayerbotMgr.IsRandomBot(player))
-        engine->ChangeStrategy(sPlayerbotAIConfig.randomBotCombatStrategies);
+    {
+        if (PlayerbotAI::IsTank(player, true))
+            engine->ChangeStrategy(sPlayerbotAIConfig.randomBotCombatStrategiesTank);
+        else if (PlayerbotAI::IsHeal(player, true))
+            engine->ChangeStrategy(sPlayerbotAIConfig.randomBotCombatStrategiesHealer);
+        else
+            engine->ChangeStrategy(sPlayerbotAIConfig.randomBotCombatStrategies);
+    }
     else
         engine->ChangeStrategy(sPlayerbotAIConfig.combatStrategies);
 
