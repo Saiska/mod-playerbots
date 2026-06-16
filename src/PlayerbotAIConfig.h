@@ -488,6 +488,7 @@ public:
     uint32 pastimeSocialDwellMax;
     uint32 pastimeSocialEmoteInterval;
     bool   pastimeSocialIncludePlayers;
+    uint32 pastimeSocialDancePct{25};
     std::vector<std::string> pastimeSocialEmotes;
     uint32 pastimeLoiterWeight;
     uint32 pastimeLoiterDwellMin;
