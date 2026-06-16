@@ -71,6 +71,7 @@ public:
     void InitClassSpells();
     void InitSpecialSpells();
     void InitEquipment(bool incremental, bool second_chance = false);
+    void TopUpGear();  // maintenance gear-floor: fill lacking slots with best green/blue
     void InitPet();
     void InitAmmo();
     static uint32 CalcMixedGearScore(uint32 gs, uint32 quality);
@@ -156,7 +157,6 @@ private:
     bool CanEquipItem(ItemTemplate const* proto);
     bool CanEquipUnseenItem(uint8 slot, uint16& dest, uint32 item);
     uint32 SelectBestItemForSlot(uint8 slot, uint32 qualityCap);
-    void TopUpGear();
     static bool IsPrimaryTradeSkill(uint16 skillId);
     static bool IsGatheringTradeSkill(uint16 skillId);
     static bool IsCraftingTradeSkill(uint16 skillId);
