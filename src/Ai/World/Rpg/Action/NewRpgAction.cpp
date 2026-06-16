@@ -687,6 +687,9 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         data.lastReach = getMSTime();
         data.dwellMs = urand(sPlayerbotAIConfig.pastimeSocialDwellMin,
                              sPlayerbotAIConfig.pastimeSocialDwellMax) * IN_MILLISECONDS;
+        // comedy-hold-dance: roll this session's held pose once — mostly converse, sometimes dance.
+        info.heldSocialEmote = (urand(0, 99) < sPlayerbotAIConfig.pastimeSocialDancePct)
+                               ? EMOTE_STATE_DANCE : EMOTE_STATE_TALK;
     }
     if (GetMSTimeDiffToNow(data.lastReach) >= data.dwellMs)
     {
@@ -695,12 +698,17 @@ bool NewRpgPastimeAction::Execute(Event /*event*/)
         return true;
     }
     bot->SetFacingToObject(target);
-    // Route the social emote through the shared cadence helper (self-gating timer +
-    // non-repeating pick from the BEH_SOCIAL one-shot pool). This replaces the old
-    // PerformSocialEmote one-shot + the pastimeSocialEmoteInterval gate (the helper
-    // owns the timing now).
-    TickEmoteCadence(BEH_SOCIAL, 0);
-    return false;
+    // comedy-hold-dance: HOLD a sustained social pose so the bot reads as socializing for the whole
+    // dwell. The old return-false + no held pose let the movement AI fidget the bot between the 3-6s
+    // one-shots ("doesn't stick"). A mount hides the pose, so dismount first (mirrors TickEmoteCadence).
+    // Re-assert the held emote-state every tick; skipSustainedPose=true => the cadence helper does
+    // one-shots ONLY (we own the pose), exactly like RPG_REST's chaired case.
+    if (bot->IsMounted())
+        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+    if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != info.heldSocialEmote)
+        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, info.heldSocialEmote);
+    TickEmoteCadence(BEH_SOCIAL, 0, /*skipSustainedPose=*/true);
+    return true;   // HOLD: block the movement AI from walking the socializing bot off its pose
 }
 
 bool NewRpgDoQuestAction::Execute(Event /*event*/)
