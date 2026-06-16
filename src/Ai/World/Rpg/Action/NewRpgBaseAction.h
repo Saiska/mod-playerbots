@@ -79,6 +79,9 @@ protected:
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);
     bool RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus);
     bool CheckRpgStatusAvailable(NewRpgStatus status);
+    // bot-rpg-bleed-suppression: allowlist guard — a bot may run autonomous NewRpg ONLY when free.
+    bool IsFreeToIdle();
+    bool ShouldSuppressRpg();
 
 protected:
     /* FOR MOVE FAR */

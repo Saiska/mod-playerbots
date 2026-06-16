@@ -119,6 +119,24 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
     }
 
+    // bot-rpg-bleed-suppression: on-task guard. Suppress autonomous NewRpg when the bot is not free
+    // to idle (dungeon/raid/BG, transport/vehicle, grouped-with-human, RaidSim, combat, dead, mid-port).
+    // This sits HERE, at the machine head — NOT inside CheckRpgStatusAvailable: vetoing every status
+    // there hits RandomChangeStatus's "nothing available" branch, which falls back to ChangeToRest()
+    // (sit) — i.e. a busy bot would sit down. Forcing RPG_IDLE is the correct suppression.
+    if (sPlayerbotAIConfig.rpgSuppressWhenBusy && ShouldSuppressRpg())
+    {
+        NewRpgStatus cur = info.GetStatus();
+        // In-progress travel legs (taxi flight / mount travel) are allowed to FINISH — yanking a
+        // flight mid-air can strand the bot; on arrival it returns to IDLE and is held below.
+        if (cur != RPG_TRAVEL_FLIGHT && cur != RPG_TRAVEL_MOUNT)
+        {
+            if (cur != RPG_IDLE)
+                info.ChangeToIdle();   // interrupt ground comedy/idle/errand cleanly
+            return true;               // never enter a new status while on-task
+        }
+    }
+
     NewRpgStatus status = info.GetStatus();
     switch (status)
     {

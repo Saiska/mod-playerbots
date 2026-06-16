@@ -1138,6 +1138,22 @@ AiPlayerbot.RpgSatiation.DecayRatePerSec = 0.0015
 AiPlayerbot.RpgSatiation.SuppressExponent = 1.5
 AiPlayerbot.RpgSatiation.MinAppealFrac = 0.05
 
+# --- RPG busy-suppression (NewRpg bleed suppression) --------------------------
+#
+#    AiPlayerbot.RpgSuppressWhenBusy
+#        Master switch: suppress autonomous NewRpg (comedy/idle/errand) when a bot is on-task.
+#        Default: 1
+#
+AiPlayerbot.RpgSuppressWhenBusy = 1
+#
+#    Per-axis toggles (only consulted when RpgSuppressWhenBusy = 1):
+#
+AiPlayerbot.RpgSuppress.Instance = 1
+AiPlayerbot.RpgSuppress.GroupedWithPlayer = 1
+AiPlayerbot.RpgSuppress.Vehicle = 1
+AiPlayerbot.RpgSuppress.RaidSim = 1
+AiPlayerbot.RpgSuppress.Combat = 1
+
 # --- More occupations (pipe 2b) -----------------------------------------------
 # travel_mount picks a taxi-node position on the bot's current map within
 # [DistMin,DistMax] yards. gathering_circuit harvests MinNodes..MaxNodes nodes

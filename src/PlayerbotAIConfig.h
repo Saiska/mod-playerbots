@@ -468,6 +468,13 @@ public:
     float rpgSatiationDecayRatePerSec{0.0015f};  // meter loss/sec otherwise (~670s to empty)
     float rpgSatiationSuppressExponent{1.5f};    // steepness of (1-meter)^k
     float rpgSatiationMinAppealFrac{0.05f};      // floor as fraction of base weight
+    // bot-rpg-bleed-suppression: gate autonomous NewRpg off when a bot is on-task
+    bool rpgSuppressWhenBusy{true};
+    bool rpgSuppressInstance{true};
+    bool rpgSuppressGroupedWithPlayer{true};
+    bool rpgSuppressVehicle{true};
+    bool rpgSuppressRaidSim{true};
+    bool rpgSuppressCombat{true};
     // --- more-activities-occupations (pipe 2b) ---
     float  travelMountDistMin{300.0f};
     float  travelMountDistMax{2000.0f};
