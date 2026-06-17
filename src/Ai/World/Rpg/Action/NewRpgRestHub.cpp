@@ -364,10 +364,13 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
             return false;
         }
     }
-    else if (d.target == TK_IN_PLACE || d.target == TK_WATER || d.target == TK_STROLL)
+    else if (d.target == TK_IN_PLACE || d.target == TK_WATER || d.target == TK_STROLL || d.target == TK_INN_CHAIR)
     {
-        // No single object to approach (FIELD_REST / FISH / STROLL): engage in place.
-        // STROLL's per-POI walking is driven by TickStroll during the hold phase.
+        // No single object to approach via rest.target: engage in place.
+        //  - FIELD_REST / FISH: rest where standing.
+        //  - STROLL: per-POI walking driven by TickStroll during the hold phase.
+        //  - TAVERN (TK_INN_CHAIR): the chair lives in rest.chair, not rest.target; HoldSeat
+        //    (P3 hold phase) moves the bot to the chair and sits it. So engage in place here.
     }
     else
     {

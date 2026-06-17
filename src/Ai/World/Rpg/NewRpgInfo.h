@@ -47,6 +47,7 @@ struct NewRpgInfo
         Rest() = default;
         RestSubtype   subtype{RS_NONE};   // resolved on arrival (or pre-resolved for anywhere subtypes)
         WorldPosition hubPos{};           // chosen curated hub destination (empty = field-rest)
+        uint32        hubArriveT{0};       // ms ts the bot reached the hub (0=en route); gates a settle before P2 acquire
         ObjectGuid    target{};           // resolved subtype target (NPC/GO); empty for in-place/social-cluster
         WorldPosition targetPos{};        // for social cluster / stroll waypoints
         ObjectGuid    chair{};            // TAVERN/FIELD_REST chair GO (empty = floor-sit)
