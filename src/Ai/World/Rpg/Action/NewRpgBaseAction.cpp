@@ -93,6 +93,7 @@ namespace
     const uint32 kOneShots_Craft[]     = { EMOTE_ONESHOT_TALK };  // USE_STANDING is the held pose
     const uint32 kOneShots_RepairSell[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_BOW, EMOTE_ONESHOT_YES,
                                             EMOTE_ONESHOT_WAVE };
+    static const uint32 kCheerPool[]   = { EMOTE_ONESHOT_CHEER, EMOTE_ONESHOT_APPLAUD, EMOTE_ONESHOT_LAUGH };
 
     #define POOL(a) (a), (uint8)(sizeof(a)/sizeof((a)[0]))
     // default rows, indexed by BotBehaviorId
@@ -114,6 +115,8 @@ namespace
         /*BEH_DUEL*/             { 0, nullptr, 0 },                                  // combat is the action
         /*BEH_REPAIR_SELL*/      { 0, POOL(kOneShots_RepairSell) },
         /*BEH_DUMMY*/            { 0, nullptr, 0 },                                  // melee is the action
+        /*BEH_FLIGHT*/           { 0, POOL(kOneShots_LoiterTalk) },                 // chatting up the flight master (reuse talk one-shots)
+        /*BEH_SPECTATE*/         { 0, POOL(kCheerPool) },                           // watching a duel/dancer
     };
     // Loiter per-POI sustained poses — PARITY with loiter-themed-scenes 528bc948.
     // Values copied verbatim from LoiterEmoteState (NewRpgAction.cpp): auctioneer/

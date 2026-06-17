@@ -130,6 +130,8 @@ enum BotBehaviorId : uint8
     BEH_REST, BEH_WANDER_NPC, BEH_TRAVEL_FLIGHT, BEH_TRAVEL_MOUNT, BEH_OUTDOOR_PVP,
     // pastimes (BotActivity, under RPG_PASTIME)
     BEH_SOCIAL, BEH_LOITER, BEH_FISH, BEH_CRAFT, BEH_DUEL, BEH_REPAIR_SELL, BEH_DUMMY,
+    BEH_FLIGHT,
+    BEH_SPECTATE,
     BEH_COUNT
 };
 
@@ -512,6 +514,20 @@ public:
     uint32 restDwellMax{300};         // seconds — max seated dwell
     bool   restSeatRebroadcast{true};  // RPG_REST: re-broadcast the seat stand-state each tick so a
                                        // one-shot emote can't leave the bot rendering standing
+    // --- rest-hub-unification config ---
+    // Note: restHubWeight is sized by RS_COUNT (RestSubtype enum in NewRpgRestHub.h).
+    // NewRpgRestHub.h includes PlayerbotAIConfig.h, so we cannot include it here (circular).
+    // RS_COUNT = 16 (RS_TAVERN..RS_FIELD_REST); update literal if enum grows.
+    bool     restHubEnable{true};
+    uint16   restHubWeight[16]{};          // per-subtype base weight (indexed by RestSubtype / RS_COUNT)
+    uint16   restHubDwellMinSec{300};
+    uint16   restHubDwellMaxSec{600};
+    float    restHubHubRange{2500.0f};         // curated-hub in-range radius
+    float    restHubWitnessRange{120.0f};      // real-player witness radius for TP gate
+    float    restHubTravelBudget{4000.0f};     // max foot/mount distance before field-rest (witnessed)
+    uint8    restHubStrollPoiCount{3};
+    uint16   restHubStrollPausePerPoiSec{45};
+    bool     restHubTrainerTypeFidelity{true};
     // --- more-activities-pastimes (pipe 2a) ---
     uint32 pastimeRepairSellWeight{25};
     uint32 pastimeRepairSellDwellMin{5};
