@@ -188,7 +188,13 @@ bool NewRpgStatusUpdateAction::BuildStrollRoute()
 // file-static free function (internal linkage) and so is NOT linkable from this TU. Rather
 // than touch NewRpgBaseAction.{h,cpp} (out of scope for this task / would risk a merge
 // conflict), we mirror its selection logic here, minus the file-static g_pastimeSawTarget
-// census counters (also internal to that TU). Behavior is otherwise identical.
+// census counters (also internal to that TU).
+// Two intentional changes vs the original, both consequences of this rewrite:
+//   1) the original ALSO accepted a partner in RPG_PASTIME+ACTIVITY_SOCIAL; that branch is
+//      dropped because RPG_PASTIME / NewRpgInfo::Pastime no longer exist (deleted in Task 5),
+//      so std::get_if<Pastime> would not even compile.
+//   2) socializing bots now live under the RPG_REST umbrella (RS_SOCIAL), and RPG_REST is
+//      already in the `idleish` set below — so the old socializing case is COVERED, not lost.
 static ObjectGuid RestHubSelectDuelPartner(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
