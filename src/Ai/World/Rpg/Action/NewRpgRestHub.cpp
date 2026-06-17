@@ -294,7 +294,12 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
     {
         WorldObject* targetObj = ObjectAccessor::GetWorldObject(*bot, rest.target);
         if (!targetObj)
-            return false;   // target gone; caller's next pass re-acquires / re-rolls
+        {
+            // Target despawned mid-approach. Do NOT spin (lastReach is still 0, so the caller
+            // would re-enter forever and never reach P4): end the episode and re-roll.
+            botAI->rpgInfo.ChangeToIdle();   // R2: return now, touch no `rest` after this
+            return false;
+        }
         if (bot->GetExactDist(targetObj) > INTERACTION_DISTANCE)
         {
             MoveWorldObjectTo(rest.target);   // R1: issue movement, do NOT treat as arrival
@@ -307,14 +312,15 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
     }
     else
     {
-        // Subtype expected a target but none is held (e.g. SOCIAL cluster pos not yet wired,
-        // or STROLL): nothing to engage this tick.
+        // Subtype expected a target but none is held. P2 already falls back to FIELD_REST when
+        // AcquireSubtypeTarget fails, so this is defensive — but never spin here: end + re-roll.
+        botAI->rpgInfo.ChangeToIdle();   // R2: return now, touch no `rest` after this
         return false;
     }
 
     // ── Engage phase — runs once, on the tick we first arrive (lastReach unset) ──
     if (rest.lastReach != 0)
-        return false;   // already engaged; the RPG_REST tick (Task 7) holds the dwell pose
+        return true;   // already engaged on a prior tick — let the RPG_REST hold phase proceed
 
     WorldObject* targetObj = (rest.target && !rest.target.IsEmpty())
                                  ? ObjectAccessor::GetWorldObject(*bot, rest.target)
