@@ -508,8 +508,7 @@ public:
     uint32 pastimeDuelWeight;
     float  pastimeDuelRadius;
     bool   pastimeDuelIncludePlayers;
-    // --- occupation-hub-saturation (pipe 3: Rest InnPull) ---
-    bool   restInnPullEnable{true};   // RPG_REST routes to a nearby innkeeper hub, then sits
+    // --- occupation-hub-saturation (InnPull retired: hub selection now in RestHub state machine) ---
     uint32 restDwellMin{120};         // seconds — min seated dwell at the inn (measured from arrival)
     uint32 restDwellMax{300};         // seconds — max seated dwell
     bool   restSeatRebroadcast{true};  // RPG_REST: re-broadcast the seat stand-state each tick so a

@@ -10,32 +10,6 @@ void NewRpgInfo::ChangeToGoGrind(WorldPosition pos)
     data = GoGrind{pos};
 }
 
-void NewRpgInfo::ChangeToWanderNpc()
-{
-    startT = getMSTime();
-    data = WanderNpc{};
-}
-
-void NewRpgInfo::ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos, uint8 poiType)
-{
-    startT = getMSTime();
-    Pastime p;
-    p.activityType = activityType;
-    p.target = target;
-    p.targetPos = targetPos;
-    p.lastReach = 0;
-    p.lastEmote = 0;
-    p.dwellMs = 0;
-    p.poiType = poiType;
-    data = p;
-}
-
-void NewRpgInfo::ChangeToWanderRandom()
-{
-    startT = getMSTime();
-    data = WanderRandom{};
-}
-
 void NewRpgInfo::ChangeToDoQuest(uint32 questId, const Quest* quest)
 {
     startT = getMSTime();
@@ -122,9 +96,6 @@ NewRpgStatus NewRpgInfo::GetStatus()
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, Idle>) return RPG_IDLE;
         if constexpr (std::is_same_v<T, GoGrind>) return RPG_GO_GRIND;
-        if constexpr (std::is_same_v<T, WanderNpc>) return RPG_WANDER_NPC;
-        if constexpr (std::is_same_v<T, Pastime>) return RPG_PASTIME;
-        if constexpr (std::is_same_v<T, WanderRandom>) return RPG_WANDER_RANDOM;
         if constexpr (std::is_same_v<T, Rest>) return RPG_REST;
         if constexpr (std::is_same_v<T, DoQuest>) return RPG_DO_QUEST;
         if constexpr (std::is_same_v<T, TravelFlight>) return RPG_TRAVEL_FLIGHT;
@@ -148,27 +119,6 @@ std::string NewRpgInfo::ToString()
             out << "\nGrindPos: " << arg.pos.GetMapId() << " " << arg.pos.GetPositionX() << " "
                 << arg.pos.GetPositionY() << " " << arg.pos.GetPositionZ();
             out << "\nlastGoGrind: " << startT;
-        }
-        else if constexpr (std::is_same_v<T, WanderNpc>)
-        {
-            out << "WANDER_NPC";
-            out << "\nnpcOrGoEntry: " << arg.npcOrGo.GetCounter();
-            out << "\nlastWanderNpc: " << startT;
-            out << "\nlastReachNpcOrGo: " << arg.lastReach;
-        }
-        else if constexpr (std::is_same_v<T, Pastime>)
-        {
-            out << "PASTIME";
-            out << "\nactivity: " << uint32(arg.activityType);
-            out << "\ntarget: " << arg.target.GetCounter();
-            out << "\nlastReach: " << arg.lastReach;
-            out << "\ndwellMs: " << arg.dwellMs;
-            out << "\npoiType: " << uint32(arg.poiType);
-        }
-        else if constexpr (std::is_same_v<T, WanderRandom>)
-        {
-            out << "WANDER_RANDOM";
-            out << "\nlastWanderRandom: " << startT;
         }
         else if constexpr (std::is_same_v<T, Idle>)
         {

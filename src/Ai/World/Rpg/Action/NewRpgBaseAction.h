@@ -56,8 +56,6 @@ protected:
     // Nearest random bot within Pastime.Social.Radius that is idle-ish OR already socializing
     // (or a player if Pastime.Social.IncludePlayers). Empty if none.
     ObjectGuid SelectSocialPartner();
-    // Activity registry: choose an eligible activity (weighted) + its target. False if none eligible.
-    bool SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos, uint8& outPoiType);
     bool HasQuestToAcceptOrReward(WorldObject* object);
     bool InteractWithNpcOrGameObjectForQuest(ObjectGuid guid);
     bool CanInteractWithQuestGiver(Object* questGiver);
@@ -95,13 +93,6 @@ protected:
     // walk that is slowly making progress never triggers it.
     const uint32 stuckTime = 90 * 1000;
 };
-
-// ---------------------------------------------------------------------------
-// Pastime eligibility probe accessor (Task 2 census log calls this).
-// Caller must pass arrays of size >= PASTIME_ACT_COUNT (one slot per
-// BotActivity index 0..ACTIVITY_DUMMY; currently 10 entries).
-// ---------------------------------------------------------------------------
-void GetPastimeProbeCounts(uint32 elig[], uint32 chosen[], uint32 saw[], uint32& duelAreaBlocked);
 
 // rest-hub-unification: (behaviorId, variant) -> curated EmotePalette row. Defined in
 // NewRpgBaseAction.cpp over the file-static kPalette/kLoiterByPoi tables (single source of

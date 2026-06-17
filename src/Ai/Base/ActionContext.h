@@ -269,9 +269,7 @@ public:
 
         creators["new rpg status update"] = &ActionContext::new_rpg_status_update;
         creators["new rpg go grind"] = &ActionContext::new_rpg_go_grind;
-        creators["new rpg wander random"] = &ActionContext::new_rpg_wander_random;
-        creators["new rpg wander npc"] = &ActionContext::new_rpg_wander_npc;
-        creators["new rpg pastime"] = &ActionContext::new_rpg_pastime;
+
         creators["new rpg travel mount"] = &ActionContext::new_rpg_travel_mount;
         creators["new rpg gathering circuit"] = &ActionContext::new_rpg_gathering_circuit;
         creators["new rpg do quest"] = &ActionContext::new_rpg_do_quest;
@@ -476,9 +474,7 @@ private:
 
     static Action* new_rpg_status_update(PlayerbotAI* ai) { return new NewRpgStatusUpdateAction(ai); }
     static Action* new_rpg_go_grind(PlayerbotAI* ai) { return new NewRpgGoGrindAction(ai); }
-    static Action* new_rpg_wander_random(PlayerbotAI* ai) { return new NewRpgWanderRandomAction(ai); }
-    static Action* new_rpg_wander_npc(PlayerbotAI* ai) { return new NewRpgWanderNpcAction(ai); }
-    static Action* new_rpg_pastime(PlayerbotAI* ai) { return new NewRpgPastimeAction(ai); }
+
     static Action* new_rpg_travel_mount(PlayerbotAI* ai) { return new NewRpgTravelMountAction(ai); }
     static Action* new_rpg_gathering_circuit(PlayerbotAI* ai) { return new NewRpgGatheringCircuitAction(ai); }
     static Action* new_rpg_do_quest(PlayerbotAI* ai) { return new NewRpgDoQuestAction(ai); }

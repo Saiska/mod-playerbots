@@ -911,8 +911,7 @@ ObjectGuid NewRpgBaseAction::ChooseNpcOrGameObjectToInteract(bool questgiverOnly
     return ObjectGuid();
 }
 
-// Defined below (after SelectPastime); forward-declared here because SelectLoiterPoi
-// uses it for the forge crafting-profession gate.
+// Forward-declared here because SelectLoiterPoi uses it for the forge crafting-profession gate.
 static bool BotHasCraftingProfession(Player* bot);
 
 ObjectGuid NewRpgBaseAction::SelectLoiterPoi(uint8& outPoiType)
@@ -1102,14 +1101,10 @@ ObjectGuid NewRpgBaseAction::SelectSocialPartner()
             if (oai)
             {
                 NewRpgStatus st = oai->rpgInfo.GetStatus();
-                bool socializing = false;
-                if (st == RPG_PASTIME)
-                {
-                    auto const* p = std::get_if<NewRpgInfo::Pastime>(&oai->rpgInfo.data);
-                    socializing = p && p->activityType == ACTIVITY_SOCIAL;
-                }
+                // RPG_PASTIME/NewRpgInfo::Pastime removed (rest-hub-unification Task 9);
+                // socializing arm deleted. Check idleish only.
                 bool idleish = (st == RPG_IDLE || st == RPG_REST || st == RPG_WANDER_RANDOM);
-                if (!socializing && !idleish)
+                if (!idleish)
                     continue;
             }
         }
@@ -1274,19 +1269,14 @@ static ObjectGuid SelectDuelPartner(PlayerbotAI* botAI)
         }
         else
         {
-            // bot must be idle-ish OR already socializing (don't pester busy bots)
+            // bot must be idle-ish (don't pester busy bots)
+            // RPG_PASTIME/NewRpgInfo::Pastime removed (rest-hub-unification Task 9).
             PlayerbotAI* oai = GET_PLAYERBOT_AI(other);
             if (oai)
             {
                 NewRpgStatus st = oai->rpgInfo.GetStatus();
-                bool socializing = false;
-                if (st == RPG_PASTIME)
-                {
-                    auto const* p = std::get_if<NewRpgInfo::Pastime>(&oai->rpgInfo.data);
-                    socializing = p && p->activityType == ACTIVITY_SOCIAL;
-                }
                 bool idleish = (st == RPG_IDLE || st == RPG_REST || st == RPG_WANDER_RANDOM);
-                if (!socializing && !idleish)
+                if (!idleish)
                     continue;
             }
         }
@@ -1295,108 +1285,6 @@ static ObjectGuid SelectDuelPartner(PlayerbotAI* botAI)
         if (d < bestDist) { bestDist = d; best = other; }
     }
     return best ? best->GetGUID() : ObjectGuid();
-}
-
-bool NewRpgBaseAction::SelectPastime(uint8& outActivity, ObjectGuid& outTarget, WorldPosition& outTargetPos, uint8& outPoiType)
-{
-    // Activity registry: social (player), loiter (POI), fish (water), gather (node), craft (in-place).
-    // Add more weighted branches here.
-    struct Cand { uint8 activity; ObjectGuid target; uint32 weight; WorldPosition pos; uint8 poiType = POI_NONE; };
-    std::vector<Cand> cands;
-
-    if (sPlayerbotAIConfig.pastimeSocialWeight > 0)
-        if (ObjectGuid t = SelectSocialPartner())
-        {
-            g_pastimeEligible[ACTIVITY_SOCIAL].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_SOCIAL), t, sPlayerbotAIConfig.pastimeSocialWeight });
-        }
-
-    if (sPlayerbotAIConfig.pastimeLoiterWeight > 0)
-    {
-        uint8 poiType = POI_NONE;
-        if (ObjectGuid poi = SelectLoiterPoi(poiType))
-        {
-            g_pastimeEligible[ACTIVITY_LOITER].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_LOITER), poi, sPlayerbotAIConfig.pastimeLoiterWeight, WorldPosition{}, poiType });
-        }
-    }
-
-    // Fishing: skilled bots only. The position hint (nearest fishing-hole GO, if any) exercises the
-    // target-union; the perform branch delegates all water-finding to the existing "move near water" action,
-    // so open water works even when this hint is empty.
-    if (sPlayerbotAIConfig.pastimeFishWeight > 0 && AI_VALUE(bool, "can fish"))
-    {
-        WorldPosition hole = FindFishingHole(botAI);   // empty if no fishing-hole GO nearby; that's fine
-        g_pastimeEligible[ACTIVITY_FISH].fetch_add(1, std::memory_order_relaxed);
-        cands.push_back({ uint8(ACTIVITY_FISH), ObjectGuid(), sPlayerbotAIConfig.pastimeFishWeight, hole });
-    }
-
-    if (sPlayerbotAIConfig.pastimeCraftWeight > 0 && BotHasCraftingProfession(bot))
-    {
-        g_pastimeEligible[ACTIVITY_CRAFT].fetch_add(1, std::memory_order_relaxed);
-        cands.push_back({ uint8(ACTIVITY_CRAFT), ObjectGuid(), sPlayerbotAIConfig.pastimeCraftWeight });
-    }
-
-    // Single outer weight guard; area check only evaluated when weight > 0.
-    if (sPlayerbotAIConfig.pastimeDuelWeight > 0)
-    {
-        bool duelAreaOk = BotInDuelAllowedArea(bot);
-        if (!duelAreaOk)
-            g_pastimeDuelAreaBlocked.fetch_add(1, std::memory_order_relaxed);
-        else if (ObjectGuid partner = SelectDuelPartner(botAI))
-        {
-            g_pastimeEligible[ACTIVITY_DUEL].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_DUEL), partner, sPlayerbotAIConfig.pastimeDuelWeight });
-        }
-    }
-
-    if (sPlayerbotAIConfig.pastimeRepairSellWeight > 0)
-        if (ObjectGuid v = SelectVendorNpc())
-        {
-            g_pastimeEligible[ACTIVITY_REPAIR_SELL].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_REPAIR_SELL), v, sPlayerbotAIConfig.pastimeRepairSellWeight });
-        }
-
-    if (sPlayerbotAIConfig.pastimeDummyWeight > 0)
-        if (ObjectGuid d = SelectTrainingDummy())
-        {
-            g_pastimeEligible[ACTIVITY_DUMMY].fetch_add(1, std::memory_order_relaxed);
-            cands.push_back({ uint8(ACTIVITY_DUMMY), d, sPlayerbotAIConfig.pastimeDummyWeight });
-        }
-
-    if (cands.empty())
-        return false;
-
-    uint32 total = 0;
-    for (auto const& c : cands) total += c.weight;
-    uint32 r = urand(1, total), acc = 0;
-    for (auto const& c : cands)
-    {
-        acc += c.weight;
-        if (acc >= r)
-        {
-            g_pastimeChosen[c.activity].fetch_add(1, std::memory_order_relaxed);
-            outActivity = c.activity; outTarget = c.target; outTargetPos = c.pos; outPoiType = c.poiType;
-            return true;
-        }
-    }
-    g_pastimeChosen[cands.back().activity].fetch_add(1, std::memory_order_relaxed);
-    outActivity = cands.back().activity; outTarget = cands.back().target; outTargetPos = cands.back().pos; outPoiType = cands.back().poiType;
-    return true;
-}
-
-// ---------------------------------------------------------------------------
-// Pastime probe accessor — copies counters out for the census log (Task 2).
-// ---------------------------------------------------------------------------
-void GetPastimeProbeCounts(uint32 elig[], uint32 chosen[], uint32 saw[], uint32& duelAreaBlocked)
-{
-    for (uint32 i = 0; i < PASTIME_ACT_COUNT; ++i)
-    {
-        elig[i]   = g_pastimeEligible[i].load(std::memory_order_relaxed);
-        chosen[i] = g_pastimeChosen[i].load(std::memory_order_relaxed);
-        saw[i]    = g_pastimeSawTarget[i].load(std::memory_order_relaxed);
-    }
-    duelAreaBlocked = g_pastimeDuelAreaBlocked.load(std::memory_order_relaxed);
 }
 
 bool NewRpgBaseAction::HasQuestToAcceptOrReward(WorldObject* object)
@@ -1821,26 +1709,12 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     switch (chosenStatus)
     {
         case RPG_WANDER_RANDOM:
-        {
-            botAI->rpgInfo.ChangeToWanderRandom();
-            return true;
-        }
         case RPG_WANDER_NPC:
-        {
-            botAI->rpgInfo.ChangeToWanderNpc();
-            return true;
-        }
         case RPG_PASTIME:
-        {
-            uint8 activity = 0;
-            ObjectGuid target;
-            WorldPosition targetPos;
-            uint8 poiType = POI_NONE;
-            if (!SelectPastime(activity, target, targetPos, poiType))
-                return false;   // nothing eligible -> pick another status
-            botAI->rpgInfo.ChangeToPastime(activity, target, targetPos, poiType);
-            return true;
-        }
+            // Deleted statuses (rest-hub-unification Task 9): types/ChangeTo* removed.
+            // These enum values remain so the weight-load lines compile; roulette will
+            // never pick them once the IDLE candidate list is pruned in Task 10.
+            return false;
         case RPG_GO_GRIND:
         {
             WorldPosition pos = SelectRandomGrindPos(bot);
@@ -1897,20 +1771,9 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         }
         case RPG_REST:
         {
+            // InnPull retired (rest-hub-unification Task 9): hub selection + travel now handled
+            // by the five-phase state machine (P0/P1 in NewRpgStatusUpdateAction::Execute).
             botAI->rpgInfo.ChangeToRest();
-            // InnPull: pick a nearby innkeeper hub (range+zone capped by the helper; a bot IN a capital
-            // pulls from the whole city map -> capitals saturate emergently). Empty in the wilderness ->
-            // rest in place. The REST tick walks there and sits the bot on arrival.
-            if (sPlayerbotAIConfig.restInnPullEnable)
-            {
-                WorldPosition inn = SelectRandomCampPos(bot);
-                if (inn != WorldPosition())
-                {
-                    std::get<NewRpgInfo::Rest>(botAI->rpgInfo.data).pos = inn;
-                    return true;   // travel standing; the tick sits the bot on arrival
-                }
-            }
-            bot->SetStandState(UNIT_STAND_STATE_SIT);   // no pull / no inn in range -> legacy sit-in-place
             return true;
         }
         case RPG_OUTDOOR_PVP:

@@ -724,7 +724,6 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_DO_QUEST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoQuest", 60);
     RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 20);
-    restInnPullEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.InnPull.Enable", true);
     restDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMin", 120);
     restDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMax", 300);
     restSeatRebroadcast = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.SeatRebroadcast", true);
@@ -763,8 +762,8 @@ bool PlayerbotAIConfig::Initialize()
         restDwellMin = 1;
     if (restDwellMax < restDwellMin)
         restDwellMax = restDwellMin;
-    LOG_INFO("server.loading", "[HubSaturation] Rest.InnPull={} DwellMin={}s DwellMax={}s SeatRebroadcast={}",
-             restInnPullEnable, restDwellMin, restDwellMax, restSeatRebroadcast);
+    LOG_INFO("server.loading", "[HubSaturation] DwellMin={}s DwellMax={}s SeatRebroadcast={}",
+             restDwellMin, restDwellMax, restSeatRebroadcast);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 24);
     RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);

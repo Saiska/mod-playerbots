@@ -6800,32 +6800,15 @@ SpellFamilyNames PlayerbotAI::Class2SpellFamilyName(uint8 cls)
 
 BotCityPoi PlayerbotAI::GetCurrentCityPoi()
 {
-    if (rpgInfo.GetStatus() != RPG_PASTIME)
-        return POI_NONE;
-    auto const* p = std::get_if<NewRpgInfo::Pastime>(&rpgInfo.data);
-    if (!p || p->activityType != ACTIVITY_LOITER || p->lastReach == 0)
-        return POI_NONE;   // only while actually dwelling at the POI
-    WorldObject* o = ObjectAccessor::GetWorldObject(*bot, p->target);
-    if (Creature* c = o ? o->ToCreature() : nullptr)
-    {
-        if (c->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER)) return POI_AUCTIONEER;
-        if (c->HasNpcFlag(UNIT_NPC_FLAG_BANKER))     return POI_BANKER;
-        if (c->HasNpcFlag(UNIT_NPC_FLAG_INNKEEPER))  return POI_INNKEEPER;
-        if (c->HasNpcFlag(UNIT_NPC_FLAG_TRAINER))    return POI_TRAINER;
-    }
-    if (GameObject* g = o ? o->ToGameObject() : nullptr)
-        if (g->GetGoType() == GAMEOBJECT_TYPE_MAILBOX) return POI_MAILBOX;
+    // RPG_PASTIME/NewRpgInfo::Pastime removed (rest-hub-unification Task 9).
+    // City POI tracking via RPG_REST loiter subtype is a Task 10/11 follow-up.
     return POI_NONE;
 }
 
 BotActivity PlayerbotAI::GetCurrentActivity()
 {
-    if (rpgInfo.GetStatus() != RPG_PASTIME)
-        return ACTIVITY_NONE;
-    auto const* p = std::get_if<NewRpgInfo::Pastime>(&rpgInfo.data);
-    if (!p || p->lastReach == 0)
-        return ACTIVITY_NONE;   // only while actually performing, not while still converging
-    return (BotActivity)p->activityType;
+    // RPG_PASTIME/NewRpgInfo::Pastime removed (rest-hub-unification Task 9).
+    return ACTIVITY_NONE;
 }
 
 BotBehaviorId PlayerbotAI::GetCurrentBehaviorId()
@@ -6859,12 +6842,8 @@ BotBehaviorId PlayerbotAI::GetCurrentBehaviorId()
 
 uint8 PlayerbotAI::GetCurrentVariant()
 {
-    if (rpgInfo.GetStatus() != RPG_PASTIME)
-        return 0;
-    auto const* p = std::get_if<NewRpgInfo::Pastime>(&rpgInfo.data);
-    if (!p || p->activityType != ACTIVITY_LOITER)
-        return 0;
-    return p->poiType;   // BotCityPoi; 0 = POI_NONE
+    // RPG_PASTIME/NewRpgInfo::Pastime removed (rest-hub-unification Task 9).
+    return 0;
 }
 
 const char* PlayerbotAI::BehaviorKey(BotBehaviorId id)

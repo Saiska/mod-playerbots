@@ -3030,30 +3030,9 @@ void RandomPlayerbotMgr::PrintStats()
         LOG_INFO("playerbots", "    Accepted: {}, Rewarded: {}, Dropped: {}", rpgStasticTotal.questAccepted,
                  rpgStasticTotal.questRewarded, rpgStasticTotal.questDropped);
 
-        {
-            uint32 pastimeElig[ACTIVITY_DUMMY + 1] = {};
-            uint32 pastimeChosen[ACTIVITY_DUMMY + 1] = {};
-            uint32 pastimeSaw[ACTIVITY_DUMMY + 1] = {};
-            uint32 pastimeDuelAreaBlocked = 0;
-            GetPastimeProbeCounts(pastimeElig, pastimeChosen, pastimeSaw, pastimeDuelAreaBlocked);
-
-            static const char* const kPastimeNames[ACTIVITY_DUMMY + 1] =
-                { "Social", "Loiter", "Fish", "Craft", "Duel", "RepairSell", "Dummy" };
-
-            std::ostringstream ssElig, ssChosen, ssSaw;
-            for (uint32 i = 0; i <= ACTIVITY_DUMMY; ++i)
-            {
-                if (i > 0) { ssElig << " "; ssChosen << " "; ssSaw << " "; }
-                ssElig   << kPastimeNames[i] << "=" << pastimeElig[i];
-                ssChosen << kPastimeNames[i] << "=" << pastimeChosen[i];
-                ssSaw    << kPastimeNames[i] << "=" << pastimeSaw[i];
-            }
-            ssSaw << "  (DuelAreaBlocked=" << pastimeDuelAreaBlocked << ")";
-
-            LOG_INFO("playerbots", "Bots pastime eligible:  {}", ssElig.str());
-            LOG_INFO("playerbots", "Bots pastime chosen:    {}", ssChosen.str());
-            LOG_INFO("playerbots", "Bots pastime sawTarget: {}", ssSaw.str());
-        }
+        // rest-hub-unification Task 9: GetPastimeProbeCounts + g_pastime* counters removed
+        // along with SelectPastime/NewRpgInfo::Pastime. Census rework (Task 11) will replace
+        // this block with RPG_REST subtype breakdown columns.
     }
 
     LOG_INFO("playerbots", "Bots engine:", dead);

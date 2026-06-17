@@ -88,28 +88,6 @@ public:
     bool Execute(Event event) override;
 };
 
-class NewRpgWanderRandomAction : public NewRpgBaseAction
-{
-public:
-    NewRpgWanderRandomAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg wander random") {}
-    bool Execute(Event event) override;
-};
-
-class NewRpgWanderNpcAction : public NewRpgBaseAction
-{
-public:
-    NewRpgWanderNpcAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg move npcs") {}
-    bool Execute(Event event) override;
-
-    const uint32 npcStayTime = 8 * 1000;
-};
-
-class NewRpgPastimeAction : public NewRpgBaseAction
-{
-public:
-    NewRpgPastimeAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg pastime") {}
-    bool Execute(Event event) override;
-};
 
 class NewRpgDoQuestAction : public NewRpgBaseAction
 {

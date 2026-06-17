@@ -35,30 +35,6 @@ void NewRpgStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
     triggers.push_back(
         new TriggerNode(
-            "wander random status",
-            {
-                NextAction("new rpg wander random", 3.0f)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "wander npc status",
-            {
-                NextAction("new rpg wander npc", 3.0f)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "pastime status",
-            {
-                NextAction("new rpg pastime", 3.0f)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
             "do quest status",
             {
                 NextAction("new rpg do quest", 3.0f)
