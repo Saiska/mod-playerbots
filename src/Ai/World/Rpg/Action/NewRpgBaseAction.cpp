@@ -1,7 +1,6 @@
 #include "NewRpgBaseAction.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 
 #include "AiObjectContext.h"
@@ -45,22 +44,10 @@
 // Defined in FishingAction.cpp (only FindWaterRadial is header-declared).
 WorldPosition FindFishingHole(PlayerbotAI* botAI);
 
-// ---------------------------------------------------------------------------
-// Pastime eligibility probe counters (Task 1: measure-only, no behavior change)
-// Indexed by BotActivity (0..ACTIVITY_DUMMY); ACTIVITY_NONE (0xFF) is never
-// used as an index.  PASTIME_ACT_COUNT derives from the enum so it stays in
-// sync automatically if new activities are appended before ACTIVITY_NONE.
-// ---------------------------------------------------------------------------
 namespace
 {
-    constexpr uint32 PASTIME_ACT_COUNT = ACTIVITY_DUMMY + 1;  // 10 real activities, 0..ACTIVITY_DUMMY
-    std::atomic<uint32> g_pastimeEligible[PASTIME_ACT_COUNT]{};
-    std::atomic<uint32> g_pastimeChosen[PASTIME_ACT_COUNT]{};
-    std::atomic<uint32> g_pastimeSawTarget[PASTIME_ACT_COUNT]{};
-    std::atomic<uint32> g_pastimeDuelAreaBlocked{};
-
     // -----------------------------------------------------------------------
-    // Emote palettes (Task 1: data only — no behavior wired yet).
+    // Emote palettes.
     //
     // One curated EmotePalette per BotBehaviorId (kPalette), plus per-POI loiter
     // rows (kLoiterByPoi) folding loiter-themed-scenes' 528bc948 pose switch into
@@ -1022,7 +1009,7 @@ ObjectGuid NewRpgBaseAction::SelectVendorNpc()
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {
-            if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_REPAIR_SELL].fetch_add(1, std::memory_order_relaxed); }
+            if (!sawTarget) { sawTarget = true; }
             bestDist = d;
             best = c;
         }
@@ -1061,7 +1048,7 @@ ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {
-            if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_DUMMY].fetch_add(1, std::memory_order_relaxed); }
+            if (!sawTarget) { sawTarget = true; }
             bestDist = d;
             best = c;
         }
@@ -1086,7 +1073,7 @@ ObjectGuid NewRpgBaseAction::SelectSocialPartner()
             continue;
 
         // In-radius base candidate confirmed — count once regardless of downstream filters.
-        if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_SOCIAL].fetch_add(1, std::memory_order_relaxed); }
+        if (!sawTarget) { sawTarget = true; }
 
         bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
         if (!isBot)
@@ -1259,7 +1246,7 @@ static ObjectGuid SelectDuelPartner(PlayerbotAI* botAI)
             continue;
 
         // In-radius base candidate confirmed — count once regardless of downstream filters.
-        if (!sawTarget) { sawTarget = true; g_pastimeSawTarget[ACTIVITY_DUEL].fetch_add(1, std::memory_order_relaxed); }
+        if (!sawTarget) { sawTarget = true; }
 
         bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
         if (!isBot)

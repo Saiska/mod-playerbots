@@ -2854,6 +2854,7 @@ void RandomPlayerbotMgr::PrintStats()
     uint32 engine_combat = 0;
     uint32 engine_dead = 0;
     std::unordered_map<NewRpgStatus, int> rpgStatusCount;
+    uint32 restSubCount[RS_COUNT] = {};
     // static NewRpgStatistic rpgStasticTotal;
     std::unordered_map<uint32, int> zoneCount;
     uint8 maxBotLevel = 0;
@@ -2941,7 +2942,14 @@ void RandomPlayerbotMgr::PrintStats()
 
         if (sPlayerbotAIConfig.enableNewRpgStrategy)
         {
-            rpgStatusCount[botAI->rpgInfo.GetStatus()]++;
+            NewRpgStatus status = botAI->rpgInfo.GetStatus();
+            rpgStatusCount[status]++;
+            if (status == RPG_REST)
+            {
+                auto* rp = std::get_if<NewRpgInfo::Rest>(&botAI->rpgInfo.data);
+                if (rp && rp->subtype < RS_COUNT)
+                    restSubCount[rp->subtype]++;
+            }
             rpgStasticTotal += botAI->rpgStatistic;
             botAI->rpgStatistic = NewRpgStatistic();
         }
@@ -3017,22 +3025,26 @@ void RandomPlayerbotMgr::PrintStats()
     {
         LOG_INFO("playerbots", "Bots rpg status:");
         LOG_INFO("playerbots",
-                 "    Idle: {}, Rest: {}, GoGrind: {}, MoveRandom: {}, MoveNpc: {}, "
-                 "Pastime: {}, DoQuest: {}, TravelFlight: {}, OutdoorPvP: {}, "
-                 "TravelMount: {}, GatheringCircuit: {}",
+                 "    Idle: {}, Rest: {}, GoGrind: {}, DoQuest: {}, TravelFlight: {}, "
+                 "OutdoorPvP: {}, TravelMount: {}, GatheringCircuit: {}",
                  rpgStatusCount[RPG_IDLE], rpgStatusCount[RPG_REST], rpgStatusCount[RPG_GO_GRIND],
-                 rpgStatusCount[RPG_WANDER_RANDOM], rpgStatusCount[RPG_WANDER_NPC],
-                 rpgStatusCount[RPG_PASTIME], rpgStatusCount[RPG_DO_QUEST],
-                 rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_OUTDOOR_PVP],
-                 rpgStatusCount[RPG_TRAVEL_MOUNT], rpgStatusCount[RPG_GATHERING_CIRCUIT]);
+                 rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_TRAVEL_FLIGHT],
+                 rpgStatusCount[RPG_OUTDOOR_PVP], rpgStatusCount[RPG_TRAVEL_MOUNT],
+                 rpgStatusCount[RPG_GATHERING_CIRCUIT]);
+
+        {
+            std::ostringstream ss;
+            for (uint8 i = 0; i < RS_COUNT; ++i)
+            {
+                if (i) ss << " ";
+                ss << kRestTable[i].name << "=" << restSubCount[i];
+            }
+            LOG_INFO("playerbots", "Bots rpg subtypes: {}", ss.str());
+        }
 
         LOG_INFO("playerbots", "Bots total quests:");
         LOG_INFO("playerbots", "    Accepted: {}, Rewarded: {}, Dropped: {}", rpgStasticTotal.questAccepted,
                  rpgStasticTotal.questRewarded, rpgStasticTotal.questDropped);
-
-        // rest-hub-unification Task 9: GetPastimeProbeCounts + g_pastime* counters removed
-        // along with SelectPastime/NewRpgInfo::Pastime. Census rework (Task 11) will replace
-        // this block with RPG_REST subtype breakdown columns.
     }
 
     LOG_INFO("playerbots", "Bots engine:", dead);
