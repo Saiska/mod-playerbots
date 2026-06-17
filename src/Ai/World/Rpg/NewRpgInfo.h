@@ -1,6 +1,7 @@
 #ifndef _PLAYERBOT_NEWRPGINFO_H
 #define _PLAYERBOT_NEWRPGINFO_H
 
+#include "Action/NewRpgRestHub.h"
 #include "Define.h"
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
@@ -9,6 +10,7 @@
 #include "Strategy.h"
 #include "Timer.h"
 #include "TravelMgr.h"
+#include <vector>
 
 using NewRpgStatusTransitionProb = std::vector<std::vector<int>>;
 
@@ -21,29 +23,6 @@ struct NewRpgInfo
     struct GoGrind
     {
         WorldPosition pos{};
-    };
-    // RPG_WANDER_NPC
-    struct WanderNpc
-    {
-        ObjectGuid npcOrGo{};
-        uint32 lastReach{0};
-    };
-    // RPG_PASTIME
-    struct Pastime
-    {
-        uint8  activityType{0};   // BotActivity
-        ObjectGuid target{};      // companion / node / partner (guid-target activities)
-        WorldPosition targetPos{};// position-target activities (e.g. fishing spot); target union
-        uint32 lastReach{0};      // arrival timestamp (0 = en route)
-        uint32 lastEmote{0};      // last social-emote timestamp
-        uint32 dwellMs{0};        // dwell duration in ms (set on arrival; elapsed measured vs lastReach)
-        uint8  poiType{POI_NONE}; // BotCityPoi — set by SelectLoiterPoi; used by themed-scene enactment
-    };
-    // RPG_WANDER_RANDOM
-    struct WanderRandom
-    {
-        WanderRandom() = default;
-        uint32 nextHaltMs{0};   // micro-halt schedule: 0 = seed on first tick; else next halt-eligible time
     };
     // RPG_DO_QUEST
     struct DoQuest
@@ -66,12 +45,19 @@ struct NewRpgInfo
     struct Rest
     {
         Rest() = default;
-        WorldPosition pos{};    // innkeeper-hub destination (InnPull); empty = rest in place
-        ObjectGuid chair{};     // seated chair GO (empty = floor-sit / not yet resolved)
-        bool onChair{false};    // true once chair->Use() succeeded: gates against re-Use/re-teleport
-        uint8 seatState{0};     // captured UNIT_STAND_STATE_SIT_*_CHAIR value, re-asserted each tick to hold the pose
-        uint32 lastReach{0};    // 0 = en route / not yet resolved; set once on ARRIVAL at the rest pos
-        uint32 dwellMs{0};      // jittered dwell duration in ms (set on arrival; elapsed measured vs lastReach)
+        RestSubtype   subtype{RS_NONE};   // resolved on arrival (or pre-resolved for anywhere subtypes)
+        WorldPosition hubPos{};           // chosen curated hub destination (empty = field-rest)
+        ObjectGuid    target{};           // resolved subtype target (NPC/GO); empty for in-place/social-cluster
+        WorldPosition targetPos{};        // for social cluster / stroll waypoints
+        ObjectGuid    chair{};            // TAVERN/FIELD_REST chair GO (empty = floor-sit)
+        bool          onChair{false};
+        uint8         seatState{0};       // captured SIT_*_CHAIR, re-asserted each tick
+        uint32        sustainedPose{0};   // EMOTE_STATE_* held during dwell (from the table row)
+        uint32        lastReach{0};       // 0 = en route; set once on arrival
+        uint32        dwellMs{0};
+        uint8         strollIdx{0};       // STROLL: current waypoint index
+        uint32        strollPauseUntil{0};// STROLL: ms timestamp the current pause ends
+        std::vector<WorldPosition> strollPts; // STROLL: per-episode waypoint route
     };
     // RPG_OUTDOOR_PVP
     struct OutdoorPvP
@@ -95,6 +81,7 @@ struct NewRpgInfo
     };
 
     uint32 startT{0};  // start timestamp of the current status
+    uint8  lastRestSubtype{RS_NONE};  // cross-episode: subtype of the previous Rest episode (survives variant reset)
 
     BotBehaviorId lastEmittedBehaviorId{BEH_NONE};  // last behaviorId we emitted a lifecycle event for (central emitter)
 
@@ -117,27 +104,12 @@ struct NewRpgInfo
     WorldPosition moveFarPos;
     // END MOVE_FAR
 
-    using RpgData = std::variant<
-        Idle,
-        GoGrind,
-        WanderNpc,
-        Pastime,
-        WanderRandom,
-        DoQuest,
-        Rest,
-        TravelFlight,
-        OutdoorPvP,
-        TravelMount,
-        GatheringCircuit
-    >;
+    using RpgData = std::variant<Idle, GoGrind, DoQuest, Rest, TravelFlight, OutdoorPvP, TravelMount, GatheringCircuit>;
     RpgData data;
 
     NewRpgStatus GetStatus();
     bool HasStatusPersisted(uint32 maxDuration) { return GetMSTimeDiffToNow(startT) > maxDuration; }
     void ChangeToGoGrind(WorldPosition pos);
-    void ChangeToWanderNpc();
-    void ChangeToPastime(uint8 activityType, ObjectGuid target, WorldPosition targetPos = {}, uint8 poiType = POI_NONE);
-    void ChangeToWanderRandom();
     void ChangeToDoQuest(uint32 questId, const Quest* quest);
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
