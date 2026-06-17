@@ -1106,34 +1106,21 @@ AiPlayerbot.RestrictedHealerDPSMaps = "33,34,36,43,47,48,70,90,109,129,209,229,2
 # Default: 1 (enabled)
 AiPlayerbot.EnableNewRpgStrategy = 1
 
-# Control probability weights for RPG status of bots. Takes effect only when the status meets its premise.​
+# Control probability weights for RPG status of bots. Takes effect only when the status meets its premise.
 # Sum of weights need not be 100. Set to 0 to disable the status.
 #
-# WanderRandom  (Default: 15  Move randomly nearby to find and kill mobs)
-# WanderNpc     (Default: 20  Randomly interact with nearby NPCs​)
 # GoGrind       (Default: 15  Go to nearby level-appropriate locations to grind for killing mobs)
-# DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion​)
+# DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion)
 # TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
-# Rest          (Default: 20  Take a break for a while and do nothing)
+# Rest          (Default: 60  umbrella: travel to a hub and do one activity 5-10 min)
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
-# Pastime       (Default: 24  Leisure/social activities: converge on a nearby idle bot to socialize, or loiter at a city service POI)
-AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
-AiPlayerbot.RpgStatusProbWeight.WanderNpc = 20
 AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
 AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
-AiPlayerbot.RpgStatusProbWeight.Rest = 20
+AiPlayerbot.RpgStatusProbWeight.Rest = 60
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
-AiPlayerbot.RpgStatusProbWeight.Pastime = 24
 AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
 AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
-
-# --- Rest InnPull (hub saturation) --------------------------------------------
-#    AiPlayerbot.Rest.InnPull.Enable
-#        When 1, a resting bot travels to a nearby innkeeper hub and sits there (capitals fill
-#        emergently). When 0, it sits in place (legacy). Range/zone capped -> no long-haul travel.
-#        Default: 1
-AiPlayerbot.Rest.InnPull.Enable = 1
 
 #    AiPlayerbot.Rest.DwellMin / .DwellMax
 #        Seated dwell at the inn, in seconds (per-bot jittered, measured from arrival). Long dwell is
@@ -1316,6 +1303,41 @@ AiPlayerbot.Pastime.Craft.DwellMax = 60
 AiPlayerbot.Pastime.Duel.Weight = 80
 AiPlayerbot.Pastime.Duel.Radius = 30.0
 AiPlayerbot.Pastime.Duel.IncludePlayers = 0
+
+# --- Rest Hub (unified rest umbrella) -----------------------------------------
+# Master toggle. 0 = umbrella degrades to FIELD_REST-only (safe soft-kill).
+AiPlayerbot.RestHub.Enable = 1
+# Dwell window per rest episode, seconds (jittered).
+AiPlayerbot.RestHub.DwellMin = 300
+AiPlayerbot.RestHub.DwellMax = 600
+# Curated-hub in-range radius (yards). Beyond this -> field-rest.
+AiPlayerbot.RestHub.HubRange = 2500
+# Real-player witness radius (yards) gating teleport-vs-travel.
+AiPlayerbot.RestHub.WitnessRange = 120
+# Max foot/mount travel distance (yards) when witnessed; beyond -> field-rest.
+AiPlayerbot.RestHub.TravelBudget = 4000
+# STROLL: number of hub POIs walked and pause per POI (seconds).
+AiPlayerbot.RestHub.Stroll.PoiCount = 3
+AiPlayerbot.RestHub.Stroll.PausePerPoi = 45
+# Split class vs profession trainer by creature_template.trainer_type.
+AiPlayerbot.RestHub.TrainerTypeFidelity = 1
+# Per-subtype selection weights.
+AiPlayerbot.RestHub.Weight.Tavern = 30
+AiPlayerbot.RestHub.Weight.ClassTrainer = 10
+AiPlayerbot.RestHub.Weight.ProfessionCraft = 15
+AiPlayerbot.RestHub.Weight.Vendor = 15
+AiPlayerbot.RestHub.Weight.QuestGiver = 12
+AiPlayerbot.RestHub.Weight.Bank = 6
+AiPlayerbot.RestHub.Weight.AuctionHouse = 6
+AiPlayerbot.RestHub.Weight.Mailbox = 4
+AiPlayerbot.RestHub.Weight.FlightMaster = 6
+AiPlayerbot.RestHub.Weight.Social = 20
+AiPlayerbot.RestHub.Weight.Stroll = 18
+AiPlayerbot.RestHub.Weight.Spectate = 6
+AiPlayerbot.RestHub.Weight.Dummy = 10
+AiPlayerbot.RestHub.Weight.Duel = 8
+AiPlayerbot.RestHub.Weight.Fish = 12
+AiPlayerbot.RestHub.Weight.FieldRest = 5
 
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel
