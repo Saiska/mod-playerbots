@@ -762,6 +762,9 @@ bool PlayerbotAIConfig::Initialize()
         restDwellMax = restDwellMin;
     LOG_INFO("server.loading", "[HubSaturation] DwellMin={}s DwellMax={}s SeatRebroadcast={}",
              restDwellMin, restDwellMax, restSeatRebroadcast);
+    LOG_INFO("server.loading",
+             "[RestHub] enabled={} subtypes={} hubRange={} witnessRange={}",
+             restHubEnable, (uint32)RS_COUNT, restHubHubRange, restHubWitnessRange);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);
     RpgStatusProbWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GatheringCircuit", 15);
