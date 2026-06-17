@@ -66,6 +66,11 @@ protected:
     // STROLL route — implemented in Task 8 (stub returns false for now so the link resolves).
     bool        BuildStrollRoute();
 
+    // ── RPG_REST machine (Task 7) ───────────────────────────────────────────
+    void HoldSeat(NewRpgInfo::Rest& rest);    // chair/floor seat re-broadcast (extracted)
+    void TickStroll(NewRpgInfo::Rest& rest);  // STROLL walk loop — Task 8 fills; no-op stub for now
+    EmotePalette PaletteOf(BotBehaviorId beh, BotCityPoi poi) const;  // (beh,poi) -> palette row
+
     // static NewRpgStatusTransitionProb transitionMat;
     const int32 statusWanderNpcDuration = 5 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusPastimeDuration = 10 * MINUTE * IN_MILLISECONDS;

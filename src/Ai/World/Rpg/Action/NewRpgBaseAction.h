@@ -103,4 +103,10 @@ protected:
 // ---------------------------------------------------------------------------
 void GetPastimeProbeCounts(uint32 elig[], uint32 chosen[], uint32 saw[], uint32& duelAreaBlocked);
 
+// rest-hub-unification: (behaviorId, variant) -> curated EmotePalette row. Defined in
+// NewRpgBaseAction.cpp over the file-static kPalette/kLoiterByPoi tables (single source of
+// truth). Exposed so the RPG_REST machine (NewRpgAction.cpp) can read a row's sustained pose
+// without re-declaring those tables. variant is a BotCityPoi for BEH_LOITER (1..6), else 0.
+const EmotePalette& LookupPalette(BotBehaviorId beh, uint8 variant);
+
 #endif

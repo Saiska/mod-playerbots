@@ -55,6 +55,98 @@ static void ForceResitBroadcast(Player* bot, uint8 seatState)
     bot->SetStandState(seatState);
 }
 
+// rest-hub-unification: (beh,poi) -> EmotePalette row. Thin wrapper over the shared
+// LookupPalette (NewRpgBaseAction.cpp), the single source of truth for the kPalette /
+// kLoiterByPoi tables. The RPG_REST P2 phase reads only .sustainedPose from the result.
+EmotePalette NewRpgStatusUpdateAction::PaletteOf(BotBehaviorId beh, BotCityPoi poi) const
+{
+    // BEH_LOITER resolves a per-POI row (variant = BotCityPoi 1..6); everything else uses
+    // the default kPalette[beh] row. LookupPalette applies exactly this rule.
+    return LookupPalette(beh, static_cast<uint8>(beh == BEH_LOITER ? poi : POI_NONE));
+}
+
+// rest-hub-unification: TAVERN/FIELD_REST seated hold — chair-seat-once then HOLD the pose by
+// re-asserting the captured stand-state each tick (no re-Use / re-teleport), with a floor-sit
+// fallback. Extracted VERBATIM (behavior-preserving) from the old RPG_REST Phase-3 block; now
+// operates on the passed `rest`. NOTE the one behavioral nuance preserved exactly: when the chair
+// is still being pathed to, MoveWorldObjectTo returns true and we RETURN OUT OF HoldSeat for the
+// tick (the caller does no further work this tick) — this matches the old `return true` there.
+void NewRpgStatusUpdateAction::HoldSeat(NewRpgInfo::Rest& rest)
+{
+    bool chaired = false;
+    if (rest.chair)
+    {
+        GameObject* chair = ObjectAccessor::GetGameObject(*bot, rest.chair);
+        if (!chair || !chair->isSpawned())
+        {
+            rest.chair = ObjectGuid();   // chair despawned -> floor fallback
+            rest.onChair = false;
+            LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (chair despawned)", bot->GetName());
+        }
+        else if (!rest.onChair && bot->GetExactDist(chair) > INTERACTION_DISTANCE)
+        {
+            // Not seated yet: path into seating range; keep moving toward the chair this tick.
+            if (MoveWorldObjectTo(rest.chair))
+                return;
+            // Pathing failed (offset in geometry); abandon the chair and floor-sit.
+            rest.chair = ObjectGuid();
+            LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (chair pathing failed)", bot->GetName());
+        }
+        else if (!rest.onChair)
+        {
+            // In range, not yet seated: perform the chair Use EXACTLY ONCE. A successful Use
+            // teleports the bot onto a free slot and sets UNIT_STAND_STATE_SIT_LOW_CHAIR(4)..
+            // SIT_HIGH_CHAIR(6); capture that value so we re-assert it later without re-Use.
+            chair->Use(bot);
+            if (bot->getStandState() >= UNIT_STAND_STATE_SIT_LOW_CHAIR)
+            {
+                rest.onChair = true;
+                rest.seatState = bot->getStandState();
+                chaired = true;
+                LOG_DEBUG("playerbots", "[New RPG] {} rest: seated chair (seatState={})",
+                          bot->GetName(), uint32(rest.seatState));
+            }
+            else
+            {
+                rest.chair = ObjectGuid();   // slot full / Use failed -> floor fallback
+                LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (chair Use failed)", bot->GetName());
+            }
+        }
+        else
+        {
+            // Already seated: HOLD the pose. Re-broadcast each tick so a one-shot emote can't
+            // leave the client rendering us standing (the byte never drifts, so a plain
+            // re-assert is a no-op). See ForceResitBroadcast.
+            if (sPlayerbotAIConfig.restSeatRebroadcast)
+                ForceResitBroadcast(bot, rest.seatState);
+            else if (bot->getStandState() != rest.seatState)
+                bot->SetStandState(rest.seatState);
+            chaired = true;
+        }
+    }
+
+    // Floor fallback (no chair this tick): genuine ground-sit, re-asserted each tick so a
+    // stray movement/reset can't leave the bot standing.
+    if (!chaired)
+    {
+        if (sPlayerbotAIConfig.restSeatRebroadcast)
+            ForceResitBroadcast(bot, UNIT_STAND_STATE_SIT);
+        else if (bot->getStandState() != UNIT_STAND_STATE_SIT)
+            bot->SetStandState(UNIT_STAND_STATE_SIT);
+    }
+
+    // Chaired: chair already holds the pose -> do one-shots ONLY (skip the EMOTE_STATE_SIT
+    // re-assert that would fight the SIT_*_CHAIR stand-state). Floor: the BEH_REST palette
+    // pose (EMOTE_STATE_SIT) is the held seated baseline alongside the stand-state sit.
+    TickEmoteCadence(BEH_REST, 0, chaired);
+}
+
+// rest-hub-unification: STROLL walk loop. Task 8 implements the stroll walk loop; no-op stub for now.
+void NewRpgStatusUpdateAction::TickStroll(NewRpgInfo::Rest& /*rest*/)
+{
+    // Task 8 implements the stroll walk loop.
+}
+
 bool TellRpgStatusAction::Execute(Event event)
 {
     Player* owner = event.getOwner();
@@ -238,115 +330,83 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
         case RPG_REST:
         {
-            auto& rest = std::get<NewRpgInfo::Rest>(info.data);
+            // bot-rpg-bleed-suppression: bleed-guard. R2: ChangeToIdle reassigns the variant, so
+            // return immediately and read no `rest&` afterward.
+            if (ShouldSuppressRpg()) { info.ChangeToIdle(); return true; }
+            // R2: take the substruct via get_if + null-guard, NEVER a throwing std::get<>.
+            auto* restp = std::get_if<NewRpgInfo::Rest>(&info.data);
+            if (!restp)
+                return true;
+            auto& rest = *restp;
 
-            // Phase 1 — travel to the inn, then arrive once. rest.lastReach==0 => en route / unresolved.
-            if (!rest.lastReach)
+            // P0 SELECT (once, when subtype unresolved)
+            if (rest.subtype == RS_NONE)
             {
-                // InnPull: walk to the innkeeper hub chosen on REST entry. MoveFarTo returns true while
-                // still moving toward it (mirrors NewRpgGoGrindAction). No dest / pull off => arrive here.
-                if (sPlayerbotAIConfig.restInnPullEnable && rest.pos != WorldPosition() && MoveFarTo(rest.pos))
-                    return true;
-
-                // Arrived (or resting in place): sit, resolve a nearby chair once, set the dwell clock.
-                rest.lastReach = getMSTime();
-                if (bot->getStandState() == UNIT_STAND_STATE_STAND)
-                    bot->SetStandState(UNIT_STAND_STATE_SIT);
-                rest.chair = SelectInnChair(15.0f);
-                if (!rest.chair)
-                    LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (no chair in range)", bot->GetName());
-                uint32 mn = sPlayerbotAIConfig.restDwellMin;
-                uint32 mx = sPlayerbotAIConfig.restDwellMax;
-                if (mx < mn) std::swap(mn, mx);
-                rest.dwellMs = urand(mn, mx) * IN_MILLISECONDS;
-            }
-
-            // Phase 2 — dwell expiry, measured FROM ARRIVAL (so travel time doesn't eat the dwell).
-            if (GetMSTimeDiffToNow(rest.lastReach) >= rest.dwellMs)
-            {
-                // Leave REST in a neutral pose: the chair Use set a SIT_*_CHAIR stand-state
-                // and/or TickEmoteCadence held EMOTE_STATE_SIT — clear both so the bot stands.
-                if (bot->getStandState() != UNIT_STAND_STATE_STAND)
-                    bot->SetStandState(UNIT_STAND_STATE_STAND);
-                bot->ClearEmoteState();
-                rest.chair = ObjectGuid();
-                rest.onChair = false;
-                rest.seatState = 0;
-                info.ChangeToIdle();
+                WorldPosition hub = SelectRandomCampPos(bot);          // curated hub or empty
+                bool hubReachable = (hub != WorldPosition());
+                rest.hubPos = hub;
+                if (!hubReachable)
+                {
+                    RestSubtype st = PickRestSubtype(false);           // anywhere subtype or FIELD_REST
+                    rest.subtype = st;
+                    if (st != RS_FIELD_REST && !AcquireSubtypeTarget(st)) rest.subtype = RS_FIELD_REST;
+                }
+                // hub path defers subtype pick to arrival (P2)
                 return true;
             }
 
-            // Phase 3 — seated hold: seat on a chair ONCE, then HOLD the pose by re-asserting the
-            // captured stand-state each tick (no re-Use / re-teleport). The old code re-Used every
-            // tick whenever standState read < SIT_LOW_CHAIR; the chair Use TeleportTo's the bot, so
-            // any reset re-fired the teleport -> flicker -> bot stands on the chair. Floor-sit fallback.
-            bool chaired = false;
-            if (rest.chair)
+            // P1 TRAVEL + P2 ACQUIRE-ON-ARRIVAL (hub path; subtype stays RS_NONE until we actually arrive).
+            if (rest.hubPos != WorldPosition() && rest.subtype == RS_NONE)
             {
-                GameObject* chair = ObjectAccessor::GetGameObject(*bot, rest.chair);
-                if (!chair || !chair->isSpawned())
+                HubTravel t = TravelToHubOrTeleport(rest.hubPos);
+                if (t == HUB_EN_ROUTE) return true;                    // still traveling -> stay in P1
+                if (t == HUB_GIVE_UP)                                  // beyond budget -> field-rest in place
+                { rest.hubPos = WorldPosition(); rest.subtype = RS_FIELD_REST; return true; }
+                // HUB_ARRIVED -> P2 ACQUIRE
+                RestSubtype st = PickRestSubtype(true);
+                if (st != RS_FIELD_REST && !AcquireSubtypeTarget(st)) st = RS_FIELD_REST;
+                rest.subtype = st;
+                rest.sustainedPose = PaletteOf(kRestTable[st].palette, kRestTable[st].poiVariant).sustainedPose;
+                return true;
+            }
+
+            // P3 ENGAGE + HOLD
+            if (rest.lastReach == 0)
+            {
+                if (!EngageAndHold()) return true;   // still approaching OR fire-and-forget self-terminated (R2)
+            }
+            else
+            {
+                // Defensive: lastReach is only stamped (by EngageAndHold) for a resolved subtype, so
+                // kRestTable[rest.subtype] below is always in range here — but guard anyway so a future
+                // edit that stamps lastReach without resolving the subtype can't index with RS_NONE(0xFF).
+                if (rest.subtype >= RS_COUNT)
                 {
-                    rest.chair = ObjectGuid();   // chair despawned -> floor fallback
-                    rest.onChair = false;
-                    LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (chair despawned)", bot->GetName());
+                    info.ChangeToIdle();
+                    return true;                     // R2: nothing after this touches rest
                 }
-                else if (!rest.onChair && bot->GetExactDist(chair) > INTERACTION_DISTANCE)
-                {
-                    // Not seated yet: path into seating range; keep moving toward the chair this tick.
-                    if (MoveWorldObjectTo(rest.chair))
-                        return true;
-                    // Pathing failed (offset in geometry); abandon the chair and floor-sit.
-                    rest.chair = ObjectGuid();
-                    LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (chair pathing failed)", bot->GetName());
-                }
-                else if (!rest.onChair)
-                {
-                    // In range, not yet seated: perform the chair Use EXACTLY ONCE. A successful Use
-                    // teleports the bot onto a free slot and sets UNIT_STAND_STATE_SIT_LOW_CHAIR(4)..
-                    // SIT_HIGH_CHAIR(6); capture that value so we re-assert it later without re-Use.
-                    chair->Use(bot);
-                    if (bot->getStandState() >= UNIT_STAND_STATE_SIT_LOW_CHAIR)
-                    {
-                        rest.onChair = true;
-                        rest.seatState = bot->getStandState();
-                        chaired = true;
-                        LOG_DEBUG("playerbots", "[New RPG] {} rest: seated chair (seatState={})",
-                                  bot->GetName(), uint32(rest.seatState));
-                    }
-                    else
-                    {
-                        rest.chair = ObjectGuid();   // slot full / Use failed -> floor fallback
-                        LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (chair Use failed)", bot->GetName());
-                    }
-                }
+
+                if (rest.subtype == RS_TAVERN || rest.subtype == RS_FIELD_REST)
+                    HoldSeat(rest);
+                else if (rest.subtype == RS_STROLL)
+                    TickStroll(rest);
                 else
                 {
-                    // Already seated: HOLD the pose. Re-broadcast each tick so a one-shot emote can't
-                    // leave the client rendering us standing (the byte never drifts, so a plain
-                    // re-assert is a no-op). See ForceResitBroadcast.
-                    if (sPlayerbotAIConfig.restSeatRebroadcast)
-                        ForceResitBroadcast(bot, rest.seatState);
-                    else if (bot->getStandState() != rest.seatState)
-                        bot->SetStandState(rest.seatState);
-                    chaired = true;
+                    bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, rest.sustainedPose);
+                    TickEmoteCadence(kRestTable[rest.subtype].palette,
+                                     static_cast<uint8>(kRestTable[rest.subtype].poiVariant));
+                }
+
+                // P4 EXIT
+                if (GetMSTimeDiffToNow(rest.lastReach) >= rest.dwellMs)
+                {
+                    bot->SetStandState(UNIT_STAND_STATE_STAND);
+                    bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, 0);
+                    info.lastRestSubtype = rest.subtype;     // read rest BEFORE ChangeToIdle
+                    info.ChangeToIdle();                     // R2: nothing after this touches rest
                 }
             }
-
-            // Floor fallback (no chair this tick): genuine ground-sit, re-asserted each tick so a
-            // stray movement/reset can't leave the bot standing.
-            if (!chaired)
-            {
-                if (sPlayerbotAIConfig.restSeatRebroadcast)
-                    ForceResitBroadcast(bot, UNIT_STAND_STATE_SIT);
-                else if (bot->getStandState() != UNIT_STAND_STATE_SIT)
-                    bot->SetStandState(UNIT_STAND_STATE_SIT);
-            }
-
-            // Chaired: chair already holds the pose -> do one-shots ONLY (skip the EMOTE_STATE_SIT
-            // re-assert that would fight the SIT_*_CHAIR stand-state). Floor: the BEH_REST palette
-            // pose (EMOTE_STATE_SIT) is the held seated baseline alongside the stand-state sit.
-            TickEmoteCadence(BEH_REST, 0, chaired);
-            return true;   // HOLD so movement AI doesn't walk the resting bot off
+            return true;
         }
         case RPG_OUTDOOR_PVP:
         {

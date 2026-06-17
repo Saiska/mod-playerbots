@@ -132,15 +132,21 @@ namespace
     };
     #undef POOL
 
-    const EmotePalette& LookupPalette(BotBehaviorId beh, uint8 variant)
-    {
-        if (beh == BEH_LOITER && variant >= 1 && variant <= 6)
-            return kLoiterByPoi[variant - 1];
-        if (beh > BEH_NONE && beh < BEH_COUNT)
-            return kPalette[beh];
-        return kPalette[BEH_NONE];
-    }
 } // anonymous namespace
+
+// rest-hub-unification: LookupPalette resolves (behaviorId, variant) -> EmotePalette row.
+// Promoted out of the anonymous namespace (declared in NewRpgBaseAction.h) so the RPG_REST
+// machine's PaletteOf (NewRpgAction.cpp, a different TU) can resolve a row's sustained pose
+// without duplicating the kPalette/kLoiterByPoi tables (single source of truth). Behavior is
+// byte-identical to the prior file-static version.
+const EmotePalette& LookupPalette(BotBehaviorId beh, uint8 variant)
+{
+    if (beh == BEH_LOITER && variant >= 1 && variant <= 6)
+        return kLoiterByPoi[variant - 1];
+    if (beh > BEH_NONE && beh < BEH_COUNT)
+        return kPalette[beh];
+    return kPalette[BEH_NONE];
+}
 
 void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose)
 {
