@@ -1,6 +1,19 @@
 #include "NewRpgRestHub.h"
+#include "NewRpgAction.h"       // NewRpgStatusUpdateAction (the helpers live on it)
 #include "Unit.h"               // UNIT_NPC_FLAG_*
 #include "GameObject.h"         // GAMEOBJECT_TYPE_*
+#include "Creature.h"
+#include "Player.h"
+#include "Map.h"
+#include "ObjectAccessor.h"
+#include "Playerbots.h"         // GET_PLAYERBOT_AI, sPlayerbotAIConfig, AI_VALUE, sPlayerbotsMgr
+#include "SharedDefines.h"      // EMOTE_STATE_DANCE, UNIT_NPC_FLAG_*
+#include "DBCStores.h"          // sAreaTableStore, AreaTableEntry, AREA_FLAG_ALLOW_DUELS
+#include "ChatHelper.h"         // chat->FormatWorldobject
+#include "RandomPlayerbotMgr.h" // sRandomPlayerbotMgr
+#include "Random.h"             // urand
+#include "Timer.h"              // getMSTime
+#include <algorithm>
 
 // PlayerbotAIConfig.h cannot include NewRpgRestHub.h (circular), so its
 // restHubWeight[] is hard-sized to a literal 16. Guard that literal here.
@@ -26,3 +39,434 @@ const RestSubtypeDef kRestTable[RS_COUNT] =
   { RS_FISH,             "FISH",           TK_WATER,           0,                          false, BEH_FISH,        POI_NONE,        true  },
   { RS_FIELD_REST,       "FIELD_REST",     TK_IN_PLACE,        0,                          false, BEH_REST,        POI_NONE,        true  },
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// C5 — real-player witness check. Iterates the bot's MAP player list and treats
+// only NON-bot players (null PlayerbotAI) within `range` of `pos` as witnesses.
+// Iterator form verified against core: Map::GetPlayers() -> MapRefMgr; each
+// MapReference exposes Player* GetSource() const (Reference<>::GetSource()).
+// ───────────────────────────────────────────────────────────────────────────
+bool NewRpgStatusUpdateAction::IsRealPlayerNear(WorldPosition const& pos, float range) const
+{
+    Map* map = bot->GetMap();
+    if (!map)
+        return false;
+    for (auto const& ref : map->GetPlayers())
+    {
+        Player* p = ref.GetSource();
+        if (!p || p == bot)
+            continue;
+        if (GET_PLAYERBOT_AI(p))
+            continue;   // skip bots; only real players witness
+        if (p->GetExactDist(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ()) <= range)
+            return true;
+    }
+    return false;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// C1/R1 — witness-gated hub travel, tri-state. NEVER uses MoveFarTo's return as
+// an arrival predicate: arrival is driven purely by an explicit distance check
+// (10y, mirroring the TravelMount arrive test at NewRpgAction.cpp:363).
+//   - no real witness near the bot OR the hub -> instant TeleportTo, HUB_ARRIVED
+//   - witnessed + beyond restHubTravelBudget                 -> HUB_GIVE_UP
+//   - witnessed + within 10y                                 -> HUB_ARRIVED
+//   - otherwise issue/continue movement (auto-mounts long hauls) -> HUB_EN_ROUTE
+// ───────────────────────────────────────────────────────────────────────────
+HubTravel NewRpgStatusUpdateAction::TravelToHubOrTeleport(WorldPosition const& hub)
+{
+    bool witnessed = IsRealPlayerNear(WorldPosition(bot), sPlayerbotAIConfig.restHubWitnessRange)
+                  || IsRealPlayerNear(hub, sPlayerbotAIConfig.restHubWitnessRange);
+    if (!witnessed)
+    {
+        bot->TeleportTo(hub.GetMapId(), hub.GetPositionX(), hub.GetPositionY(),
+                        hub.GetPositionZ(), bot->GetOrientation());
+        return HUB_ARRIVED;
+    }
+    if (bot->GetExactDist(&hub) > sPlayerbotAIConfig.restHubTravelBudget)
+        return HUB_GIVE_UP;
+    if (bot->GetExactDist(&hub) <= 10.0f /* arrive threshold (cf. TravelMount :363) */)
+        return HUB_ARRIVED;
+    MoveFarTo(hub);   // issue/continue movement; auto-mounts long hauls. NOT an arrival predicate (R1).
+    return HUB_EN_ROUTE;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// C4 — fresh target selectors mirroring SelectVendorNpc's nearest-by-dist idiom.
+// ───────────────────────────────────────────────────────────────────────────
+ObjectGuid NewRpgStatusUpdateAction::SelectNearestNpcWithFlag(uint32 npcFlag) const
+{
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    Creature* best = nullptr;
+    float bestDist = sPlayerbotAIConfig.pastimeRepairSellRadius;
+    for (ObjectGuid& guid : npcs)
+    {
+        Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+        if (!c || !c->IsInWorld())
+            continue;
+        if (!c->HasNpcFlag(npcFlag))
+            continue;
+        float d = bot->GetExactDist(c);
+        if (d <= bestDist)
+        {
+            bestDist = d;
+            best = c;
+        }
+    }
+    return best ? best->GetGUID() : ObjectGuid();
+}
+
+ObjectGuid NewRpgStatusUpdateAction::SelectNearestGoOfType(uint32 goType) const
+{
+    GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
+    GameObject* best = nullptr;
+    float bestDist = sPlayerbotAIConfig.pastimeRepairSellRadius;
+    for (ObjectGuid const& guid : gos)
+    {
+        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+        if (!go || !go->isSpawned())
+            continue;
+        if (go->GetGoType() != goType)
+            continue;
+        float d = bot->GetExactDist(go);
+        if (d <= bestDist)
+        {
+            bestDist = d;
+            best = go;
+        }
+    }
+    return best ? best->GetGUID() : ObjectGuid();
+}
+
+// PROFESSION_CRAFT target. NOTE (deviation): a creature's trainer_type is owned by the
+// Trainer subsystem (keyed by Trainer::Type, reachable only through sObjectMgr's trainer
+// store, not a plain Creature accessor), so the restHubTrainerTypeFidelity "prefer a
+// tradeskill (type 2) trainer" preference is DEGRADED to "any trainer NPC". We still try a
+// forge GO (anvil = GAMEOBJECT_TYPE_BARBER_CHAIR is wrong; the craft pose is in-place anyway)
+// and fall back to any trainer. Flagged for the controller — wire trainer_type fidelity later.
+ObjectGuid NewRpgStatusUpdateAction::SelectForgeOrProfTrainer() const
+{
+    // Best-effort: a profession/skill trainer NPC. (Fidelity to tradeskill-only trainers is
+    // degraded — see note above.) The craft animation is a held in-place pose, so an exact
+    // forge object is not required; a trainer NPC anchors the bot at a plausible craft spot.
+    return SelectNearestNpcWithFlag(UNIT_NPC_FLAG_TRAINER);
+}
+
+// SPECTATE target — a nearby player currently dueling or dancing. Best-effort; empty if none.
+ObjectGuid NewRpgStatusUpdateAction::SelectSpectateTarget() const
+{
+    GuidVector players = AI_VALUE(GuidVector, "nearest friendly players");
+    Player* best = nullptr;
+    float bestDist = sPlayerbotAIConfig.pastimeSocialRadius;
+    for (ObjectGuid& guid : players)
+    {
+        Player* p = ObjectAccessor::FindPlayer(guid);
+        if (!p || p == bot || !p->IsInWorld())
+            continue;
+        bool dueling = p->duel && p->duel->State == DUEL_STATE_IN_PROGRESS;
+        bool dancing = p->GetUInt32Value(UNIT_NPC_EMOTESTATE) == EMOTE_STATE_DANCE;
+        if (!dueling && !dancing)
+            continue;
+        float d = bot->GetExactDist(p);
+        if (d <= bestDist)
+        {
+            bestDist = d;
+            best = p;
+        }
+    }
+    return best ? best->GetGUID() : ObjectGuid();
+}
+
+// Task 8 fills this — STROLL waypoint route builder. Stub returns false so the link
+// resolves now; until Task 8, RS_STROLL acquisition simply yields no target.
+bool NewRpgStatusUpdateAction::BuildStrollRoute()
+{
+    return false;
+}
+
+// Local duel-partner selector. DEVIATION: NewRpgBaseAction.cpp's SelectDuelPartner is a
+// file-static free function (internal linkage) and so is NOT linkable from this TU. Rather
+// than touch NewRpgBaseAction.{h,cpp} (out of scope for this task / would risk a merge
+// conflict), we mirror its selection logic here, minus the file-static g_pastimeSawTarget
+// census counters (also internal to that TU). Behavior is otherwise identical.
+static ObjectGuid RestHubSelectDuelPartner(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    GuidVector friends = AI_VALUE(GuidVector, "nearest friendly players");
+    Player* best = nullptr;
+    float bestDist = sPlayerbotAIConfig.pastimeDuelRadius;
+    for (ObjectGuid& guid : friends)
+    {
+        Player* other = ObjectAccessor::FindPlayer(guid);
+        if (!other || other == bot || !other->IsInWorld())
+            continue;
+        if (other->isDead() || other->IsInCombat())
+            continue;
+        if (other->GetHealthPct() < 90.0f)
+            continue;   // mirrors the AcceptDuelAction <90% auto-decline gate
+        if (bot->GetExactDist(other) > sPlayerbotAIConfig.pastimeDuelRadius)
+            continue;
+
+        bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
+        if (!isBot)
+        {
+            if (!sPlayerbotAIConfig.pastimeDuelIncludePlayers)
+                continue;
+        }
+        else
+        {
+            PlayerbotAI* oai = GET_PLAYERBOT_AI(other);
+            if (oai)
+            {
+                NewRpgStatus st = oai->rpgInfo.GetStatus();
+                bool idleish = (st == RPG_IDLE || st == RPG_REST || st == RPG_WANDER_RANDOM);
+                if (!idleish)
+                    continue;
+            }
+        }
+
+        float d = bot->GetExactDist(other);
+        if (d < bestDist) { bestDist = d; best = other; }
+    }
+    return best ? best->GetGUID() : ObjectGuid();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// R2 — AcquireSubtypeTarget. Reachable during a status-transition window, so the
+// Rest substruct is taken via std::get_if + null-guard (a throwing std::get<> would
+// crash the MapUpdater worker on bad_variant_access). Returns true when the subtype
+// has a usable target (or needs none); false when no target could be acquired.
+// ───────────────────────────────────────────────────────────────────────────
+bool NewRpgStatusUpdateAction::AcquireSubtypeTarget(RestSubtype st)
+{
+    auto* restp = std::get_if<NewRpgInfo::Rest>(&botAI->rpgInfo.data);
+    if (!restp)
+        return false;   // active alternative no longer Rest (R2)
+    auto& rest = *restp;
+    RestSubtypeDef const& d = kRestTable[st];
+    switch (d.target)
+    {
+        case TK_INN_CHAIR:        rest.chair = SelectInnChair(15.0f); return true; // chair optional -> floor-sit fallback
+        case TK_VENDOR:           rest.target = SelectVendorNpc(); return !rest.target.IsEmpty();
+        case TK_DUMMY:            rest.target = SelectTrainingDummy(); return !rest.target.IsEmpty();
+        case TK_SOCIAL:           rest.target = SelectSocialPartner(); return !rest.target.IsEmpty();
+        case TK_DUEL:             rest.target = RestHubSelectDuelPartner(botAI); return !rest.target.IsEmpty();
+        case TK_NPC_FLAG:         rest.target = SelectNearestNpcWithFlag(d.npcFlagOrGoType); return !rest.target.IsEmpty();
+        case TK_GO_TYPE:          rest.target = SelectNearestGoOfType(d.npcFlagOrGoType); return !rest.target.IsEmpty();
+        case TK_FORGE_OR_TRAINER: rest.target = SelectForgeOrProfTrainer(); return !rest.target.IsEmpty();
+        case TK_WATER:            return true;  // fishing chain handled in EngageAndHold
+        case TK_STROLL:           return BuildStrollRoute();  // Task 8 fills BuildStrollRoute
+        case TK_SPECTATE:         rest.target = SelectSpectateTarget(); return !rest.target.IsEmpty();
+        case TK_IN_PLACE:         return true;
+    }
+    return false;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// R1/R2 — EngageAndHold. Drives approach->engage off an EXPLICIT distance check
+// (mirrors the REPAIR_SELL arm at NewRpgAction.cpp:632-650), never off a move
+// call's return. Takes the Rest substruct via std::get_if + guard. After the
+// fire-and-forget DUEL self-terminates (ChangeToIdle), it returns immediately
+// touching no `rest` (R2). Contract:
+//   true  = arrived & engaged this tick (lastReach just stamped)
+//   false = still approaching, OR a fire-and-forget subtype self-terminated
+//           (caller treats false as "return true, touch nothing more this tick")
+// ───────────────────────────────────────────────────────────────────────────
+bool NewRpgStatusUpdateAction::EngageAndHold()
+{
+    auto* restp = std::get_if<NewRpgInfo::Rest>(&botAI->rpgInfo.data);
+    if (!restp)
+        return false;   // active alternative no longer Rest (R2)
+    auto& rest = *restp;
+    RestSubtypeDef const& d = kRestTable[rest.subtype];
+
+    // ── Approach phase (explicit distance check; never trust the move-issue return) ──
+    if (rest.target && !rest.target.IsEmpty())
+    {
+        WorldObject* targetObj = ObjectAccessor::GetWorldObject(*bot, rest.target);
+        if (!targetObj)
+            return false;   // target gone; caller's next pass re-acquires / re-rolls
+        if (bot->GetExactDist(targetObj) > INTERACTION_DISTANCE)
+        {
+            MoveWorldObjectTo(rest.target);   // R1: issue movement, do NOT treat as arrival
+            return false;
+        }
+    }
+    else if (d.target == TK_IN_PLACE || d.target == TK_WATER)
+    {
+        // No object to approach (FIELD_REST/FISH); engaged in place.
+    }
+    else
+    {
+        // Subtype expected a target but none is held (e.g. SOCIAL cluster pos not yet wired,
+        // or STROLL): nothing to engage this tick.
+        return false;
+    }
+
+    // ── Engage phase — runs once, on the tick we first arrive (lastReach unset) ──
+    if (rest.lastReach != 0)
+        return false;   // already engaged; the RPG_REST tick (Task 7) holds the dwell pose
+
+    WorldObject* targetObj = (rest.target && !rest.target.IsEmpty())
+                                 ? ObjectAccessor::GetWorldObject(*bot, rest.target)
+                                 : nullptr;
+    if (targetObj)
+        bot->SetFacingToObject(targetObj);
+
+    rest.lastReach = getMSTime();
+    rest.dwellMs = urand(sPlayerbotAIConfig.restHubDwellMinSec,
+                         sPlayerbotAIConfig.restHubDwellMaxSec) * IN_MILLISECONDS;
+
+    if (d.functional)
+    {
+        switch (rest.subtype)
+        {
+            case RS_VENDOR:
+                // Verbatim from the deleted REPAIR_SELL arm (NewRpgAction.cpp:646-647).
+                botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);
+                botAI->DoSpecificAction("repair", Event(), true);
+                break;
+            case RS_PROFESSION_CRAFT:
+                // USE_STANDING pose only; the craft anim is the held dwell pose (Task 7).
+                break;
+            case RS_DUMMY:
+                if (Unit* dummy = ObjectAccessor::GetUnit(*bot, rest.target))
+                    bot->Attack(dummy, true);
+                break;
+            case RS_DUEL:
+            {
+                // Verbatim from the deleted DUEL arm (NewRpgAction.cpp:615-617). Fire-and-forget:
+                // cast 7266 then drop straight to Idle. R2 — return immediately, touch no `rest` after.
+                WorldObject* partner = ObjectAccessor::GetWorldObject(*bot, rest.target);
+                if (partner)
+                    botAI->DoSpecificAction("cast custom spell",
+                        Event("rpg action", chat->FormatWorldobject(partner) + " 7266"), true);
+                botAI->rpgInfo.ChangeToIdle();
+                return false;   // R2: caller returns true; do not touch `rest` after a ChangeTo*
+            }
+            case RS_FISH:
+                // Fishing is a self-gating chain ("equip fishing pole"/"move near water"/"go fishing");
+                // the RPG_REST tick (Task 7) drives it. The dwell is stamped above.
+                break;
+            case RS_TAVERN:
+            case RS_FIELD_REST:
+                // eat/drink + chair re-broadcast are handled by the seated HoldSeat pose (Task 7).
+                break;
+            default:
+                break;
+        }
+    }
+    return true;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Per-subtype eligibility (skill/area gates). Verified helpers:
+//   BotHasCraftingProfession(Player*)  — NewRpgBaseAction.cpp:1211 (file-static there;
+//       re-declared file-static below since it isn't exported in a header).
+//   AI_VALUE(bool,"can fish")          — CanFishValue, ValueContext.h:327.
+//   BotInDuelAllowedArea(Player*)      — NewRpgBaseAction.cpp:1228 (file-static; re-declared).
+// ───────────────────────────────────────────────────────────────────────────
+static bool RestHubHasCraftingProfession(Player* bot)
+{
+    return bot->HasSkill(SKILL_BLACKSMITHING) ||
+           bot->HasSkill(SKILL_TAILORING)     ||
+           bot->HasSkill(SKILL_ENCHANTING)    ||
+           bot->HasSkill(SKILL_ALCHEMY)       ||
+           bot->HasSkill(SKILL_ENGINEERING)   ||
+           bot->HasSkill(SKILL_LEATHERWORKING)||
+           bot->HasSkill(SKILL_COOKING);
+}
+
+static bool RestHubInDuelAllowedArea(Player* bot)
+{
+    if (sPlayerbotAIConfig.IsInPvpProhibitedZone(bot->GetZoneId()))
+        return false;
+    AreaTableEntry const* areaEntry = sAreaTableStore.LookupEntry(bot->GetAreaId());
+    if (areaEntry && !(areaEntry->flags & AREA_FLAG_ALLOW_DUELS))
+        return false;
+    return true;
+}
+
+bool NewRpgStatusUpdateAction::IsSubtypeEligible(RestSubtype st) const
+{
+    switch (st)
+    {
+        case RS_PROFESSION_CRAFT: return RestHubHasCraftingProfession(bot);
+        case RS_FISH:             return AI_VALUE(bool, "can fish");
+        case RS_DUEL:             return RestHubInDuelAllowedArea(bot);
+        default:                  return true;
+    }
+}
+
+// Cheap presence probe for the anywhere (no-hub) subtypes. Eligibility already covers
+// skill/area; this only checks whether a target is plausibly around right now.
+bool NewRpgStatusUpdateAction::IsAnywhereTargetPresent(RestSubtype st) const
+{
+    switch (st)
+    {
+        case RS_DUEL:       return !RestHubSelectDuelPartner(botAI).IsEmpty();
+        case RS_FISH:       return true;   // "can fish" eligibility implies reachable water nearby
+        case RS_FIELD_REST: return true;   // always possible in place
+        default:            return true;
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Weighted picker. Math kept pure (PickRestSubtypePure / RestSubtypeEffectiveSum)
+// so it is unit-testable; the member only assembles the weight/avail arrays and
+// draws the roll.
+// ───────────────────────────────────────────────────────────────────────────
+uint32 RestSubtypeEffectiveSum(const uint16 weight[RS_COUNT], const bool avail[RS_COUNT],
+                               RestSubtype last)
+{
+    uint32 sum = 0;
+    for (uint8 i = 0; i < RS_COUNT; ++i)
+    {
+        if (!avail[i])
+            continue;
+        uint32 w = weight[i];
+        if ((RestSubtype)i == last)
+            w /= 4;   // anti-repeat: quarter the previous episode's subtype
+        sum += w;
+    }
+    return sum;
+}
+
+RestSubtype PickRestSubtypePure(const uint16 weight[RS_COUNT], const bool avail[RS_COUNT],
+                                RestSubtype last, uint32 rngRoll)
+{
+    uint32 acc = 0;
+    for (uint8 i = 0; i < RS_COUNT; ++i)
+    {
+        if (!avail[i])
+            continue;
+        uint32 w = weight[i];
+        if ((RestSubtype)i == last)
+            w /= 4;
+        if (w == 0)
+            continue;
+        acc += w;
+        if (rngRoll <= acc)
+            return (RestSubtype)i;
+    }
+    return RS_FIELD_REST;   // nothing available, or roll fell through rounding
+}
+
+RestSubtype NewRpgStatusUpdateAction::PickRestSubtype(bool hubReachable)
+{
+    uint16 w[RS_COUNT];
+    bool   avail[RS_COUNT];
+    for (uint8 i = 0; i < RS_COUNT; ++i)
+    {
+        RestSubtype st = (RestSubtype)i;
+        avail[i] = (kRestTable[st].needsHub ? hubReachable : IsAnywhereTargetPresent(st))
+                   && IsSubtypeEligible(st);
+        w[i] = avail[i] ? sPlayerbotAIConfig.restHubWeight[i] : 0;
+    }
+    RestSubtype last = (RestSubtype)botAI->rpgInfo.lastRestSubtype;
+    uint32 sum = RestSubtypeEffectiveSum(w, avail, last);
+    if (sum == 0)
+        return RS_FIELD_REST;
+    return PickRestSubtypePure(w, avail, last, urand(1, sum));
+}

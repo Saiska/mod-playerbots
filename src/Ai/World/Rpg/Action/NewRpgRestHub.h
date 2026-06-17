@@ -24,6 +24,10 @@ enum TargetKind : uint8
     TK_SOCIAL, TK_STROLL, TK_SPECTATE, TK_DUMMY, TK_DUEL, TK_WATER, TK_IN_PLACE
 };
 
+// Tri-state result of the witness-gated hub travel: arrived (TP or on-foot),
+// still walking/mounting, or give up (witnessed + beyond the foot/mount budget).
+enum HubTravel : uint8 { HUB_ARRIVED, HUB_EN_ROUTE, HUB_GIVE_UP };
+
 struct RestSubtypeDef
 {
     RestSubtype  id;
@@ -37,5 +41,22 @@ struct RestSubtypeDef
 };
 
 extern const RestSubtypeDef kRestTable[RS_COUNT];
+
+// Pure weighted picker (testable, no bot state). Contract:
+//   weight[]  base per-subtype weight (caller already zeroed unavailable rows is NOT required;
+//             this fn re-zeroes any row whose avail[] is false).
+//   avail[]   per-subtype availability gate (hub-reachable/eligible/present).
+//   last      the previous episode's subtype (RS_NONE if none) — its effective weight is quartered
+//             for anti-repeat (still selectable, just less likely).
+//   rngRoll   a value the caller drew in [1, sum] where sum is the post-gate, post-anti-repeat total.
+// Returns the picked RestSubtype; RS_FIELD_REST if nothing is available (sum == 0).
+// Because the caller needs `sum` to draw rngRoll, compute it with RestSubtypeEffectiveSum() first.
+RestSubtype PickRestSubtypePure(const uint16 weight[RS_COUNT], const bool avail[RS_COUNT],
+                                RestSubtype last, uint32 rngRoll);
+
+// Companion to PickRestSubtypePure: returns the cumulative weight sum used to draw rngRoll,
+// applying the same gating (avail) and anti-repeat (quarter `last`) rules. 0 = nothing available.
+uint32 RestSubtypeEffectiveSum(const uint16 weight[RS_COUNT], const bool avail[RS_COUNT],
+                               RestSubtype last);
 
 #endif

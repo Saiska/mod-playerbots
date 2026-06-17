@@ -45,6 +45,27 @@ public:
     bool Execute(Event event) override;
 
 protected:
+    // ── RestHub helpers (rest-hub-unification) ──────────────────────────────
+    // Witness check + witness-gated hub travel (R1: distance-driven, never treats a
+    // MoveFarTo/MoveWorldObjectTo return as "arrived"; R2: target-acquire/engage take the
+    // Rest substruct via std::get_if + null-guard and never read it after a ChangeTo*).
+    bool        IsRealPlayerNear(WorldPosition const& pos, float range) const;
+    HubTravel   TravelToHubOrTeleport(WorldPosition const& hub);
+    bool        AcquireSubtypeTarget(RestSubtype st);
+    bool        EngageAndHold();
+    RestSubtype PickRestSubtype(bool hubReachable);
+    bool        IsSubtypeEligible(RestSubtype st) const;
+    bool        IsAnywhereTargetPresent(RestSubtype st) const;
+
+    // Fresh target selectors (mirror SelectVendorNpc's "nearest npcs"/"nearest game objects" idiom).
+    ObjectGuid  SelectNearestNpcWithFlag(uint32 npcFlag) const;
+    ObjectGuid  SelectNearestGoOfType(uint32 goType) const;
+    ObjectGuid  SelectForgeOrProfTrainer() const;
+    ObjectGuid  SelectSpectateTarget() const;
+
+    // STROLL route — implemented in Task 8 (stub returns false for now so the link resolves).
+    bool        BuildStrollRoute();
+
     // static NewRpgStatusTransitionProb transitionMat;
     const int32 statusWanderNpcDuration = 5 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusPastimeDuration = 10 * MINUTE * IN_MILLISECONDS;
