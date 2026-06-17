@@ -8,6 +8,7 @@
 #include <sstream>
 #include "Config.h"
 #include "NewRpgInfo.h"
+#include "NewRpgRestHub.h"
 #include "PlayerbotDungeonRepository.h"
 #include "PlayerbotFactory.h"
 #include "Playerbots.h"
@@ -727,6 +728,31 @@ bool PlayerbotAIConfig::Initialize()
     restDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMin", 120);
     restDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMax", 300);
     restSeatRebroadcast = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.SeatRebroadcast", true);
+
+    restHubEnable           = sConfigMgr->GetOption<bool>("AiPlayerbot.RestHub.Enable", true);
+    restHubDwellMinSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.DwellMin", 300);
+    restHubDwellMaxSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.DwellMax", 600);
+    restHubHubRange         = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.HubRange", 2500.0f);
+    restHubWitnessRange     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.WitnessRange", 120.0f);
+    restHubTravelBudget     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.TravelBudget", 4000.0f);
+    restHubStrollPoiCount   = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.Stroll.PoiCount", 3);
+    restHubStrollPausePerPoiSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.Stroll.PausePerPoi", 45);
+    restHubTrainerTypeFidelity  = sConfigMgr->GetOption<bool>("AiPlayerbot.RestHub.TrainerTypeFidelity", true);
+
+    static const std::pair<RestSubtype, const char*> kRestHubWeightKeys[] = {
+        {RS_TAVERN,"Tavern"}, {RS_CLASS_TRAINER,"ClassTrainer"}, {RS_PROFESSION_CRAFT,"ProfessionCraft"},
+        {RS_VENDOR,"Vendor"}, {RS_QUEST_GIVER,"QuestGiver"}, {RS_BANK,"Bank"}, {RS_AUCTION_HOUSE,"AuctionHouse"},
+        {RS_MAILBOX,"Mailbox"}, {RS_FLIGHT_MASTER,"FlightMaster"}, {RS_SOCIAL,"Social"}, {RS_STROLL,"Stroll"},
+        {RS_SPECTATE,"Spectate"}, {RS_DUMMY,"Dummy"}, {RS_DUEL,"Duel"}, {RS_FISH,"Fish"}, {RS_FIELD_REST,"FieldRest"}
+    };
+    static const uint16 kRestHubWeightDefault[RS_COUNT] = {
+        /*Tavern*/30, /*ClassTrainer*/10, /*Craft*/15, /*Vendor*/15, /*QuestGiver*/12, /*Bank*/6, /*AH*/6,
+        /*Mail*/4, /*Flight*/6, /*Social*/20, /*Stroll*/18, /*Spectate*/6, /*Dummy*/10, /*Duel*/8, /*Fish*/12, /*FieldRest*/5
+    };
+    for (auto const& k : kRestHubWeightKeys)
+        restHubWeight[k.first] = sConfigMgr->GetOption<uint32>(
+            fmt::format("AiPlayerbot.RestHub.Weight.{}", k.second), kRestHubWeightDefault[k.first]);
+
     if (restDwellMax < restDwellMin)
         std::swap(restDwellMin, restDwellMax);
     if (restDwellMin == 0)   // never instant-expire: a resting bot must dwell >= 1s
