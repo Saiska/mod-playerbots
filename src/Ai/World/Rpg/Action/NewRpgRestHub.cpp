@@ -177,11 +177,69 @@ ObjectGuid NewRpgStatusUpdateAction::SelectSpectateTarget() const
     return best ? best->GetGUID() : ObjectGuid();
 }
 
-// Task 8 fills this — STROLL waypoint route builder. Stub returns false so the link
-// resolves now; until Task 8, RS_STROLL acquisition simply yields no target.
+// ───────────────────────────────────────────────────────────────────────────
+// Task 8 — STROLL waypoint route builder.
+// Collects up to restHubStrollPoiCount nearby NPC positions from the
+// "possible new rpg targets" GuidVector (the same source ChooseNpcOrGameObjectToInteract
+// uses) and writes them into rest.strollPts. Falls back to the "nearest npcs" vector
+// if the rpg-target list comes up short. Returns true if at least 1 point was stored
+// (caller will accept the subtype); false → caller falls back to RS_FIELD_REST.
+// ───────────────────────────────────────────────────────────────────────────
 bool NewRpgStatusUpdateAction::BuildStrollRoute()
 {
-    return false;
+    auto* restp = std::get_if<NewRpgInfo::Rest>(&botAI->rpgInfo.data);
+    if (!restp)
+        return false;
+    auto& rest = *restp;
+
+    rest.strollPts.clear();
+    rest.strollIdx = 0;
+    rest.strollPauseUntil = 0;
+
+    uint8 wantCount = sPlayerbotAIConfig.restHubStrollPoiCount;
+    if (wantCount == 0)
+        return false;
+
+    // Primary source: "possible new rpg targets" (curated NPC list used by RPG_WANDER_NPC).
+    GuidVector rpgTargets = AI_VALUE(GuidVector, "possible new rpg targets");
+    for (ObjectGuid& guid : rpgTargets)
+    {
+        if (rest.strollPts.size() >= wantCount)
+            break;
+        Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+        if (!c || !c->IsInWorld())
+            continue;
+        rest.strollPts.push_back(WorldPosition(c));
+    }
+
+    // Fallback / top-up: "nearest npcs" (broader list).
+    if (rest.strollPts.size() < wantCount)
+    {
+        GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+        for (ObjectGuid& guid : npcs)
+        {
+            if (rest.strollPts.size() >= wantCount)
+                break;
+            Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+            if (!c || !c->IsInWorld())
+                continue;
+            // Cheap de-dup: skip if a point very close to this one is already stored.
+            WorldPosition pt(c);
+            bool duplicate = false;
+            for (WorldPosition& existing : rest.strollPts)
+            {
+                if (existing.distance(pt) < 5.0f)
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate)
+                rest.strollPts.push_back(pt);
+        }
+    }
+
+    return !rest.strollPts.empty();
 }
 
 // Local duel-partner selector. DEVIATION: NewRpgBaseAction.cpp's SelectDuelPartner is a
@@ -306,9 +364,10 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
             return false;
         }
     }
-    else if (d.target == TK_IN_PLACE || d.target == TK_WATER)
+    else if (d.target == TK_IN_PLACE || d.target == TK_WATER || d.target == TK_STROLL)
     {
-        // No object to approach (FIELD_REST/FISH); engaged in place.
+        // No single object to approach (FIELD_REST / FISH / STROLL): engage in place.
+        // STROLL's per-POI walking is driven by TickStroll during the hold phase.
     }
     else
     {

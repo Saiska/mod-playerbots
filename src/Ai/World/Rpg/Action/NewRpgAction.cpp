@@ -141,10 +141,58 @@ void NewRpgStatusUpdateAction::HoldSeat(NewRpgInfo::Rest& rest)
     TickEmoteCadence(BEH_REST, 0, chaired);
 }
 
-// rest-hub-unification: STROLL walk loop. Task 8 implements the stroll walk loop; no-op stub for now.
-void NewRpgStatusUpdateAction::TickStroll(NewRpgInfo::Rest& /*rest*/)
+// ───────────────────────────────────────────────────────────────────────────
+// Task 8 — STROLL walk loop. Called from the RPG_REST hold phase (P3) each tick
+// while rest.subtype == RS_STROLL. The episode's overall end is driven by P4's
+// dwell check (GetMSTimeDiffToNow(rest.lastReach) >= rest.dwellMs); this function
+// must NOT call ChangeTo* and must NOT index strollPts out of range.
+//
+// Pause convention: rest.strollPauseUntil stores the absolute getMSTime() value
+// at which the pause ends. We test `getMSTime() < rest.strollPauseUntil` to
+// decide "still pausing". This matches the pattern used elsewhere in the codebase
+// (e.g. allowActiveCheckTimer comparisons in PlayerbotAI.cpp) — both sides of the
+// comparison are uint32 getMSTime()-derived values and wrap identically, so the
+// check is consistent.
+//
+// Arrival test: explicit bot->GetExactDist(x,y,z) < 10.0f, mirroring the
+// TravelMount arrive threshold (NewRpgAction.cpp:363) and TravelToHubOrTeleport.
+// MoveFarTo's return is NEVER used as an arrival predicate (R1).
+// ───────────────────────────────────────────────────────────────────────────
+void NewRpgStatusUpdateAction::TickStroll(NewRpgInfo::Rest& rest)
 {
-    // Task 8 implements the stroll walk loop.
+    if (rest.strollPts.empty())
+        return;     // no waypoints — P4 dwell timer will end the episode naturally
+
+    // Guard index against corruption (defensive; BuildStrollRoute sets idx=0 on init).
+    if (rest.strollIdx >= rest.strollPts.size())
+        rest.strollIdx = 0;
+
+    // ── Pause phase: hold at the current POI until the pause expires ──
+    if (rest.strollPauseUntil != 0 && getMSTime() < rest.strollPauseUntil)
+        return;     // still pausing; do nothing this tick
+
+    // Pause expired (or was never set) — reset the pause sentinel so we enter the
+    // walk phase cleanly. If strollPauseUntil was just set last tick, clear it now.
+    rest.strollPauseUntil = 0;
+
+    // ── Walk phase: move toward the current waypoint ──
+    WorldPosition& dest = rest.strollPts[rest.strollIdx];
+
+    // Arrival check (explicit distance; NOT MoveFarTo's return).
+    bool arrived = bot->GetExactDist(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ()) <= 10.0f;
+    if (!arrived)
+    {
+        MoveFarTo(dest);    // issue/continue movement — R1: return value ignored
+        return;
+    }
+
+    // ── Arrived at this waypoint: begin a pause ──
+    // Fire one-shot emote to signal the bot has "arrived and is looking around".
+    FireOneShotEmote(BEH_WANDER_NPC, 0);
+
+    // Set the pause end timestamp and advance to the next waypoint (wrapping).
+    rest.strollPauseUntil = getMSTime() + sPlayerbotAIConfig.restHubStrollPausePerPoiSec * IN_MILLISECONDS;
+    rest.strollIdx = static_cast<uint8>((rest.strollIdx + 1) % rest.strollPts.size());
 }
 
 bool TellRpgStatusAction::Execute(Event event)
