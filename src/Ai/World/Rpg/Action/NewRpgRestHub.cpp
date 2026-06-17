@@ -104,7 +104,7 @@ ObjectGuid NewRpgStatusUpdateAction::SelectNearestNpcWithFlag(uint32 npcFlag) co
         Creature* c = ObjectAccessor::GetCreature(*bot, guid);
         if (!c || !c->IsInWorld())
             continue;
-        if (!c->HasNpcFlag(npcFlag))
+        if (!c->HasNpcFlag((NPCFlags)npcFlag))   // table stores the flag as uint32; HasNpcFlag wants NPCFlags
             continue;
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
