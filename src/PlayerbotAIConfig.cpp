@@ -726,14 +726,15 @@ bool PlayerbotAIConfig::Initialize()
     restInnPullEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.InnPull.Enable", true);
     restDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMin", 120);
     restDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMax", 300);
+    restSeatRebroadcast = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.SeatRebroadcast", true);
     if (restDwellMax < restDwellMin)
         std::swap(restDwellMin, restDwellMax);
     if (restDwellMin == 0)   // never instant-expire: a resting bot must dwell >= 1s
         restDwellMin = 1;
     if (restDwellMax < restDwellMin)
         restDwellMax = restDwellMin;
-    LOG_INFO("server.loading", "[HubSaturation] Rest.InnPull={} DwellMin={}s DwellMax={}s",
-             restInnPullEnable, restDwellMin, restDwellMax);
+    LOG_INFO("server.loading", "[HubSaturation] Rest.InnPull={} DwellMin={}s DwellMax={}s SeatRebroadcast={}",
+             restInnPullEnable, restDwellMin, restDwellMax, restSeatRebroadcast);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 24);
     RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);

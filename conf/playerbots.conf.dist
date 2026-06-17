@@ -1141,6 +1141,14 @@ AiPlayerbot.Rest.InnPull.Enable = 1
 AiPlayerbot.Rest.DwellMin = 120
 AiPlayerbot.Rest.DwellMax = 300
 
+#
+#    AiPlayerbot.Rest.SeatRebroadcast
+#        Re-broadcast a resting bot's seat stand-state each tick so a one-shot emote (its rest
+#        cadence, or a chat talk-emote) can't leave it rendering standing. 1 = on (default), 0 = legacy.
+#        Default: 1
+#
+AiPlayerbot.Rest.SeatRebroadcast = 1
+
 # --- Occupation satiation (variety) -------------------------------------------
 # Biases the RPG occupation pick above AWAY from recently-done activities. Each
 # bot keeps a per-category meter that rises while doing that category and decays
