@@ -2,6 +2,10 @@
 #include "Unit.h"               // UNIT_NPC_FLAG_*
 #include "GameObject.h"         // GAMEOBJECT_TYPE_*
 
+// PlayerbotAIConfig.h cannot include NewRpgRestHub.h (circular), so its
+// restHubWeight[] is hard-sized to a literal 16. Guard that literal here.
+static_assert(RS_COUNT == 16, "PlayerbotAIConfig::restHubWeight[16] must match RS_COUNT");
+
 const RestSubtypeDef kRestTable[RS_COUNT] =
 {
   // id,                 name,             target,             npcFlagOrGoType,            needsHub, palette,         poiVariant,      functional
