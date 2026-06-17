@@ -43,8 +43,8 @@ struct RestSubtypeDef
 extern const RestSubtypeDef kRestTable[RS_COUNT];
 
 // Pure weighted picker (testable, no bot state). Contract:
-//   weight[]  base per-subtype weight (caller already zeroed unavailable rows is NOT required;
-//             this fn re-zeroes any row whose avail[] is false).
+//   weight[]  base per-subtype weight. Rows whose avail[] is false are SKIPPED via the avail
+//             gate (the fn does not re-zero weight[]); the caller may pass weight[] as-is.
 //   avail[]   per-subtype availability gate (hub-reachable/eligible/present).
 //   last      the previous episode's subtype (RS_NONE if none) — its effective weight is quartered
 //             for anti-repeat (still selectable, just less likely).

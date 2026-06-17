@@ -285,6 +285,8 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
     if (!restp)
         return false;   // active alternative no longer Rest (R2)
     auto& rest = *restp;
+    if (rest.subtype == RS_NONE || rest.subtype >= RS_COUNT)
+        return false;   // subtype not resolved yet — never index kRestTable with RS_NONE(0xFF)
     RestSubtypeDef const& d = kRestTable[rest.subtype];
 
     // ── Approach phase (explicit distance check; never trust the move-issue return) ──

@@ -732,6 +732,10 @@ bool PlayerbotAIConfig::Initialize()
     restHubEnable           = sConfigMgr->GetOption<bool>("AiPlayerbot.RestHub.Enable", true);
     restHubDwellMinSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.DwellMin", 300);
     restHubDwellMaxSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.DwellMax", 600);
+    if (restHubDwellMaxSec < restHubDwellMinSec)   // never let urand(min,max) assert on inverted config
+        std::swap(restHubDwellMinSec, restHubDwellMaxSec);
+    if (restHubDwellMinSec == 0)
+        restHubDwellMinSec = 1;
     restHubHubRange         = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.HubRange", 2500.0f);
     restHubWitnessRange     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.WitnessRange", 120.0f);
     restHubTravelBudget     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.TravelBudget", 4000.0f);
