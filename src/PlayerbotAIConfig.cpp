@@ -718,12 +718,10 @@ bool PlayerbotAIConfig::Initialize()
     autoDoQuests = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoDoQuests", true);
     enableNewRpgStrategy = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableNewRpgStrategy", true);
 
-    RpgStatusProbWeight[RPG_WANDER_RANDOM] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.WanderRandom", 15);
-    RpgStatusProbWeight[RPG_WANDER_NPC] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.WanderNpc", 20);
     RpgStatusProbWeight[RPG_GO_GRIND] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoGrind", 15);
     RpgStatusProbWeight[RPG_DO_QUEST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoQuest", 60);
     RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
-    RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 20);
+    RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 60);
     restDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMin", 120);
     restDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMax", 300);
     restSeatRebroadcast = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.SeatRebroadcast", true);
@@ -765,7 +763,6 @@ bool PlayerbotAIConfig::Initialize()
     LOG_INFO("server.loading", "[HubSaturation] DwellMin={}s DwellMax={}s SeatRebroadcast={}",
              restDwellMin, restDwellMax, restSeatRebroadcast);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
-    RpgStatusProbWeight[RPG_PASTIME] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Pastime", 24);
     RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);
     RpgStatusProbWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GatheringCircuit", 15);
 

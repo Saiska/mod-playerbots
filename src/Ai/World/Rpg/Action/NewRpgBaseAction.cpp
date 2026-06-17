@@ -1816,20 +1816,13 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         case RPG_REST:
             return true;
         case RPG_WANDER_RANDOM:
-        {
-            Unit* target = AI_VALUE(Unit*, "grind target");
-            return target != nullptr;
-        }
+        case RPG_WANDER_NPC:
+        case RPG_PASTIME:
+            return false; // deleted in rest-hub-unification
         case RPG_GO_GRIND:
         {
             WorldPosition pos = SelectRandomGrindPos(bot);
             return pos != WorldPosition();
-        }
-        case RPG_PASTIME:
-        case RPG_WANDER_NPC:
-        {
-            GuidVector possibleTargets = AI_VALUE(GuidVector, "possible new rpg targets");
-            return possibleTargets.size() >= 3;
         }
         case RPG_DO_QUEST:
         {
