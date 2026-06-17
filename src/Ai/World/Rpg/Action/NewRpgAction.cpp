@@ -40,6 +40,21 @@ static void EndSocialPastime(Player* bot)
     bot->ClearEmoteState();   // zeroes UNIT_NPC_EMOTESTATE -> drops any held loiter pose
 }
 
+// rest-chair-sit-visual-hold: a seated bot has a fake session, so observers learn its sit ONLY from
+// the UNIT_FIELD_BYTES_1 stand-state field, which re-broadcasts only on a real value change. A one-shot
+// emote (REST's own cadence, or mod-ollama-chat's talk emote) renders the bot STANDING client-side
+// without changing the byte, so SetStandState(same) sends nothing and it stays visually up. Force a
+// fresh re-broadcast by flipping to an alternate SIT state and back: both are seated, so this never
+// strips NOT_SEATED auras (food/drink) and never flickers (the field batches to one observer update per
+// tick at the final value). Keeping the seat fresh also makes emotes auto-render their SEATED variant.
+static void ForceResitBroadcast(Player* bot, uint8 seatState)
+{
+    uint8 alt = (seatState == UNIT_STAND_STATE_SIT) ? UNIT_STAND_STATE_SIT_MEDIUM_CHAIR
+                                                    : UNIT_STAND_STATE_SIT;
+    bot->SetStandState(alt);
+    bot->SetStandState(seatState);
+}
+
 bool TellRpgStatusAction::Execute(Event event)
 {
     Player* owner = event.getOwner();
@@ -306,9 +321,12 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 }
                 else
                 {
-                    // Already seated: HOLD the pose. Re-assert the captured chair stand-state if
-                    // anything cleared it. Cheap replicated field set -> NO teleport, no flicker.
-                    if (bot->getStandState() != rest.seatState)
+                    // Already seated: HOLD the pose. Re-broadcast each tick so a one-shot emote can't
+                    // leave the client rendering us standing (the byte never drifts, so a plain
+                    // re-assert is a no-op). See ForceResitBroadcast.
+                    if (sPlayerbotAIConfig.restSeatRebroadcast)
+                        ForceResitBroadcast(bot, rest.seatState);
+                    else if (bot->getStandState() != rest.seatState)
                         bot->SetStandState(rest.seatState);
                     chaired = true;
                 }
@@ -318,7 +336,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             // stray movement/reset can't leave the bot standing.
             if (!chaired)
             {
-                if (bot->getStandState() != UNIT_STAND_STATE_SIT)
+                if (sPlayerbotAIConfig.restSeatRebroadcast)
+                    ForceResitBroadcast(bot, UNIT_STAND_STATE_SIT);
+                else if (bot->getStandState() != UNIT_STAND_STATE_SIT)
                     bot->SetStandState(UNIT_STAND_STATE_SIT);
             }
 
