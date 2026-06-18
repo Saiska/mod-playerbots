@@ -5,11 +5,15 @@
 
 #include "PlayerbotFactory.h"
 
+#include <algorithm>
 #include <array>
 #include <limits>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "AccountMgr.h"
+#include "Guild.h"
 #include "AiFactory.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
@@ -37,6 +41,7 @@
 #include "ReputationMgr.h"
 #include "SharedDefines.h"
 #include "StatsWeightCalculator.h"
+#include "Timer.h"
 #include "World.h"
 #include "AiObjectContext.h"
 #include "ItemPackets.h"
@@ -61,6 +66,54 @@ std::vector<uint32> PlayerbotFactory::enchantSpellIdCache;
 std::vector<uint32> PlayerbotFactory::enchantGemIdCache;
 std::unordered_map<uint32, std::vector<uint32>> PlayerbotFactory::trainerIdCache;
 std::vector<uint32> PlayerbotFactory::ccBreakTrinketCache;
+
+namespace
+{
+    // One cached, equippable-only snapshot of a guild bank, shared across that guild's bots.
+    struct BankGearEntry
+    {
+        uint8  tabId;
+        uint8  slotId;
+        uint32 entry;
+        uint32 count;
+        int32  randomPropertyId;
+        uint8  invType;     // ItemTemplate::InventoryType (for cheap slot bucketing)
+        uint32 reqLevel;
+    };
+
+    struct GuildBankSnapshot
+    {
+        uint32 lastBuildMs = 0;
+        std::vector<BankGearEntry> items;
+    };
+
+    // guildId -> snapshot. World-thread only (maintenance runs on the world update), no lock needed.
+    std::unordered_map<uint32, GuildBankSnapshot> g_guildBankGearCache;
+
+    // Rebuild the snapshot from the live bank if missing or older than the TTL.
+    GuildBankSnapshot& EnsureGuildBankSnapshot(Guild* guild)
+    {
+        GuildBankSnapshot& snap = g_guildBankGearCache[guild->GetId()];
+        uint32 ttlMs = (uint32)std::max(1, sPlayerbotAIConfig.guildBankWithdrawIndexTtlSeconds) * IN_MILLISECONDS;
+        if (snap.lastBuildMs != 0 && GetMSTimeDiffToNow(snap.lastBuildMs) < ttlMs)
+            return snap;
+
+        snap.items.clear();
+        std::vector<GuildBankEquipItem> raw;
+        guild->GetEquippableBankItems((uint32)sPlayerbotAIConfig.guildBankWithdrawMinQuality, raw);
+        for (GuildBankEquipItem const& r : raw)
+        {
+            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(r.entry);
+            if (!proto)
+                continue;
+            snap.items.push_back(BankGearEntry{
+                r.tabId, r.slotId, r.entry, r.count, r.randomPropertyId,
+                (uint8)proto->InventoryType, proto->RequiredLevel });
+        }
+        snap.lastBuildMs = getMSTime();
+        return snap;
+    }
+}
 
 bool PlayerbotFactory::IsPrimaryTradeSkill(uint16 skillId)
 {
@@ -2537,6 +2590,157 @@ void PlayerbotFactory::TopUpGear()
     {
         LOG_INFO("server.loading", "[GearFloor] Bot #{} {} lvl{}: filled {} slot(s) ({})",
             bot->GetGUID().GetCounter(), bot->GetName().c_str(), bot->GetLevel(), filled, slotsStr.c_str());
+    }
+}
+
+void PlayerbotFactory::WithdrawUpgradesFromGuildBank()
+{
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
+    if (!guild)
+        return;
+
+    GuildBankSnapshot& snap = EnsureGuildBankSnapshot(guild);
+    if (snap.items.empty())
+        return;
+
+    uint8 botLevel = bot->GetLevel();
+    bool isPvp = sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass());
+    ObjectGuid botGuid = bot->GetGUID();
+
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+    {
+        if (slot == EQUIPMENT_SLOT_TABARD || slot == EQUIPMENT_SLOT_BODY)
+            continue;
+
+        // Which inventory types can land in this equip slot (reuse SelectBestItemForSlot's helper).
+        std::vector<InventoryType> slotTypes = GetPossibleInventoryTypeListBySlot((EquipmentSlots)slot);
+        if (slotTypes.empty())
+            continue;
+
+        StatsWeightCalculator calculator(bot);
+        if (isPvp)
+            calculator.SetPvpSpec(true);
+        bool isTrinketSlot = (slot == EQUIPMENT_SLOT_TRINKET1 || slot == EQUIPMENT_SLOT_TRINKET2);
+        calculator.SetExcludeResilience(isTrinketSlot);
+
+        Item* cur = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        float curScore = cur ? calculator.CalculateItem(cur->GetEntry(), cur->GetItemRandomPropertyId(), slot) : 0.0f;
+
+        // Find the best strictly-better candidate for this slot.
+        int bestIdx = -1;
+        float bestScore = curScore;
+        uint16 bestDest = 0;
+        for (size_t i = 0; i < snap.items.size(); ++i)
+        {
+            BankGearEntry const& e = snap.items[i];
+            // Cheap bucket filter: candidate's inventory type must fit this slot.
+            if (std::find(slotTypes.begin(), slotTypes.end(), (InventoryType)e.invType) == slotTypes.end())
+                continue;
+            if (e.reqLevel > botLevel)
+                continue;
+            // Respect tab VIEW rights (the guild's wall-off lever); rank-agnostic shared cache.
+            if (!guild->MemberHasTabRights(botGuid, e.tabId, GUILD_BANK_RIGHT_VIEW_TAB))
+                continue;
+            uint16 dest = 0;
+            if (!CanEquipUnseenItem(slot, dest, e.entry))   // class-usable + slot-valid
+                continue;
+            float sc = calculator.CalculateItem(e.entry, e.randomPropertyId, slot);
+            if (sc > bestScore)
+            {
+                bestScore = sc;
+                bestIdx = (int)i;
+                bestDest = dest;
+            }
+        }
+
+        if (bestIdx < 0)
+            continue;
+
+        BankGearEntry chosen = snap.items[bestIdx];   // copy: we mutate the cache below
+
+        // --- Withdraw the chosen item into a free bag slot (quota-bypassed) ---
+        ItemPosCountVec dst;
+        if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dst, chosen.entry, chosen.count) != EQUIP_ERR_OK || dst.empty())
+            continue;   // no room
+        uint8 freeBag = dst[0].pos >> 8;
+        uint8 freeSlot = dst[0].pos & 0xFF;
+
+        guild->SwapItemsWithInventory(bot, true, chosen.tabId, chosen.slotId, freeBag, freeSlot, 0, /*botIgnoreSlotQuota=*/true);
+
+        Item* withdrawn = bot->GetItemByPos(freeBag, freeSlot);
+        if (!withdrawn || withdrawn->GetEntry() != chosen.entry)
+            continue;   // race / cache stale: bank item was gone
+
+        // --- Capture & unequip the current piece so the slot is free ---
+        ObjectGuid oldGuid = cur ? cur->GetGUID() : ObjectGuid::Empty;
+        if (cur)
+        {
+            uint8 obag = cur->GetBagSlot();
+            uint8 oslot = cur->GetSlot();
+            uint8 dstBag = NULL_BAG;
+            WorldPacket packet(CMSG_AUTOSTORE_BAG_ITEM, 3);
+            packet << obag << oslot << dstBag;
+            WorldPackets::Item::AutoStoreBagItem nicePacket(std::move(packet));
+            nicePacket.Read();
+            bot->GetSession()->HandleAutoStoreBagItemOpcode(nicePacket);
+
+            if (bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            {
+                // Could not free the slot (bags full): abort this slot, leave withdrawn item in bags.
+                continue;
+            }
+        }
+
+        // --- Equip the withdrawn (existing) item into the target slot ---
+        uint16 dest2 = 0;
+        if (bot->CanEquipItem(slot, dest2, withdrawn, false, true) != EQUIP_ERR_OK)
+            continue;
+        uint8 wbag = withdrawn->GetBagSlot();
+        uint8 wslot = withdrawn->GetSlot();
+        bot->RemoveItem(wbag, wslot, true);
+        bot->EquipItem(dest2, withdrawn, true);
+        bot->AutoUnequipOffhandIfNeed();
+
+        // --- Handle the replaced piece (bound -> disposal; unbound -> swap back into vacated slot) ---
+        bool returned = false;
+        Item* oldItem = (oldGuid != ObjectGuid::Empty) ? bot->GetItemByGuid(oldGuid) : nullptr;
+        if (oldItem && !oldItem->IsSoulBound())
+        {
+            uint8 obag = oldItem->GetBagSlot();
+            uint8 oslot = oldItem->GetSlot();
+            // Deposit into the EXACT slot the withdrawn item left (now empty). Stock deposit path:
+            // needs the bot's tab DEPOSIT rights; failure leaves the item in bags for normal disposal.
+            guild->SwapItemsWithInventory(bot, false, chosen.tabId, chosen.slotId, obag, oslot, 0);
+            returned = (bot->GetItemByGuid(oldGuid) == nullptr);
+        }
+
+        // --- Update the cache to match reality ---
+        // Remove the withdrawn entry.
+        for (size_t i = 0; i < snap.items.size(); ++i)
+        {
+            if (snap.items[i].tabId == chosen.tabId && snap.items[i].slotId == chosen.slotId)
+            {
+                snap.items.erase(snap.items.begin() + i);
+                break;
+            }
+        }
+        // If the old piece was returned and still qualifies, index it at the vacated slot.
+        if (returned && oldItem)
+        {
+            ItemTemplate const* op = oldItem->GetTemplate();
+            if (op && (op->Class == ITEM_CLASS_WEAPON || op->Class == ITEM_CLASS_ARMOR) &&
+                op->InventoryType != INVTYPE_NON_EQUIP &&
+                (int32)op->Quality >= sPlayerbotAIConfig.guildBankWithdrawMinQuality)
+            {
+                snap.items.push_back(BankGearEntry{
+                    chosen.tabId, chosen.slotId, oldItem->GetEntry(), oldItem->GetCount(),
+                    oldItem->GetItemRandomPropertyId(), (uint8)op->InventoryType, op->RequiredLevel });
+            }
+        }
+
+        ItemTemplate const* wproto = withdrawn->GetTemplate();
+        LOG_INFO("server.loading", "Bots guildbank withdraw: {} <- {} (tab {})",
+            bot->GetName().c_str(), wproto ? wproto->Name1.c_str() : "?", chosen.tabId);
     }
 }
 
