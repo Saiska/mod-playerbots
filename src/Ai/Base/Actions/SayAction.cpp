@@ -139,6 +139,10 @@ bool SayAction::Execute(Event /*event*/)
     else
         bot->Say(text, (bot->GetTeamId() == TEAM_ALLIANCE ? LANG_COMMON : LANG_ORCISH));
 
+    if (sPlayerbotAIConfig.healSayOncePerEpisode &&
+        (qualifier == "low health" || qualifier == "critical health"))
+        botAI->GetAiObjectContext()->GetValue<time_t>("last said", "heal say latch")->Set(time(nullptr));
+
     return true;
 }
 
@@ -149,6 +153,21 @@ bool SayAction::isUseful()
 
     if (botAI->HasStrategy("silent", BotState::BOT_STATE_NON_COMBAT))
         return false;
+
+    if (sPlayerbotAIConfig.healSayOncePerEpisode &&
+        (qualifier == "low health" || qualifier == "critical health"))
+    {
+        time_t latched = AI_VALUE2(time_t, "last said", "heal say latch");
+        if (bot->GetHealthPct() >= sPlayerbotAIConfig.mediumHealth)
+        {
+            if (latched)  // recovered -> clear the latch so the next descent may announce
+                botAI->GetAiObjectContext()->GetValue<time_t>("last said", "heal say latch")->Set(0);
+        }
+        else if (latched)
+        {
+            return false;  // already announced this low-health episode
+        }
+    }
 
     time_t lastSaid = AI_VALUE2(time_t, "last said", qualifier);
     return (time(nullptr) - lastSaid) > 30;
