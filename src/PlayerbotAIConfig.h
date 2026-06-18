@@ -569,6 +569,7 @@ public:
     int32 equipmentPersistenceLevel;
     bool maintenanceGearFloor;
     int32 maintenanceGearFloorLevelGap;
+    int32 maintenanceGearFloorScansPerTick;
     int32 groupInvitationPermission;
     bool keepAltsInGroup = false;
     bool KeepAltsInGroup() const { return keepAltsInGroup; }
