@@ -1194,6 +1194,14 @@ AiPlayerbot.TravelMount.DistMax = 2000.0
 AiPlayerbot.GatheringCircuit.MinNodes = 3
 AiPlayerbot.GatheringCircuit.MaxNodes = 6
 AiPlayerbot.GatheringCircuit.Radius = 60.0
+#
+#    AiPlayerbot.Gather.HarvestHoldMs
+#        How long (ms) a bot on the gathering_circuit occupation holds at a node for its mining/herb
+#        gather cast to finish before giving up. Must exceed the longest gather cast (~3s). 0/low =
+#        legacy bug (walks off mid-cast, never harvests).
+#        Default: 4000
+#
+AiPlayerbot.Gather.HarvestHoldMs = 4000
 
 # Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).

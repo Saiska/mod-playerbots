@@ -797,9 +797,10 @@ bool PlayerbotAIConfig::Initialize()
     rpgSuppressVehicle = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Vehicle", true);
     rpgSuppressRaidSim = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.RaidSim", true);
     rpgSuppressCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Combat", true);
-    LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={}",
+    gatherHarvestHoldMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.Gather.HarvestHoldMs", 4000);
+    LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={}",
              rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,
-             rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat);
+             rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat, gatherHarvestHoldMs);
 
     pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
