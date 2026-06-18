@@ -1202,6 +1202,27 @@ AiPlayerbot.GatheringCircuit.Radius = 60.0
 #        Default: 4000
 #
 AiPlayerbot.Gather.HarvestHoldMs = 4000
+#
+#    AiPlayerbot.LowHealthSelfPreservation
+#        At the low-health band (AiPlayerbot.LowHealth, default 45%), a bot uses a healing potion in
+#        combat or a bandage out of combat ("try emergency") — not just at critical. 1 = on, 0 = legacy.
+#        Default: 1
+#
+AiPlayerbot.LowHealthSelfPreservation = 1
+#
+#    AiPlayerbot.RpgSuppressWhenHurt
+#        Below AiPlayerbot.LowHealth, suppress autonomous NewRpg wandering so the bot stays put and
+#        recovers (eat / bandage / out-of-combat regen). 1 = on, 0 = legacy.
+#        Default: 1
+#
+AiPlayerbot.RpgSuppressWhenHurt = 1
+#
+#    AiPlayerbot.HealSayOncePerEpisode
+#        Announce "need heal" once when health drops into the low band, then stay quiet until health
+#        recovers above AiPlayerbot.MediumHealth and drops again (no back-to-back spam). 1 = on, 0 = legacy.
+#        Default: 1
+#
+AiPlayerbot.HealSayOncePerEpisode = 1
 
 # Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
