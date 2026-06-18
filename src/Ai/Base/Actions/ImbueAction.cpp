@@ -214,6 +214,7 @@ bool TryEmergencyAction::Execute(Event /*event*/)
         {
             botAI->ImbueItem(bandage, bot);
             botAI->SetNextCheckDelay(8);
+            return true;            // bandaged — do not also chug potions
         }
     }
 
@@ -223,6 +224,7 @@ bool TryEmergencyAction::Execute(Event /*event*/)
         if (Item* healthItem = botAI->FindConsumable(uPrioritizedHealingItemIds[i]))
         {
             botAI->ImbueItem(healthItem);
+            break;                 // use ONE potion, not the whole list
         }
     }
 
