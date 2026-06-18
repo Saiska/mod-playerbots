@@ -557,6 +557,23 @@ AiPlayerbot.MaintenanceGearFloorLevelGap = 9
 #
 AiPlayerbot.MaintenanceGearFloorScansPerTick = 4
 
+#
+#    AiPlayerbot.GuildBankWithdraw.Enable
+#        Guilded bots (guild contains a real player) withdraw + equip gear upgrades
+#        from the guild bank during maintenance. Default: 1
+#
+#    AiPlayerbot.GuildBankWithdraw.MinQuality
+#        Minimum item quality a bot will withdraw (2=Uncommon,3=Rare,4=Epic,5=Legendary).
+#        Default: 3
+#
+#    AiPlayerbot.GuildBankWithdraw.IndexTTLSeconds
+#        Per-guild bank scan cache lifetime; the bank is rescanned at most this often
+#        per guild, shared across the guild's bots. Default: 300
+#
+AiPlayerbot.GuildBankWithdraw.Enable = 1
+AiPlayerbot.GuildBankWithdraw.MinQuality = 3
+AiPlayerbot.GuildBankWithdraw.IndexTTLSeconds = 300
+
 # Enable/Disable specific maintenance command functionality for alt bots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their alt bots
 # Default: 1 (enabled)
