@@ -5,6 +5,8 @@
 
 #include "UsePotionsStrategy.h"
 
+#include "Playerbots.h"
+
 class UsePotionsStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
 {
 public:
@@ -33,4 +35,7 @@ void UsePotionsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "critical health", { NextAction("healthstone", ACTION_MEDIUM_HEAL + 1) }));
     triggers.push_back(
         new TriggerNode("low mana", { NextAction("mana potion", ACTION_EMERGENCY) }));
+    if (sPlayerbotAIConfig.lowHealthSelfPreservation)
+        triggers.push_back(new TriggerNode(
+            "low health", { NextAction("try emergency", ACTION_EMERGENCY) }));
 }
