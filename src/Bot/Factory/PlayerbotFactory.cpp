@@ -94,7 +94,7 @@ namespace
     GuildBankSnapshot& EnsureGuildBankSnapshot(Guild* guild)
     {
         GuildBankSnapshot& snap = g_guildBankGearCache[guild->GetId()];
-        uint32 ttlMs = (uint32)std::max(1, sPlayerbotAIConfig.guildBankWithdrawIndexTtlSeconds) * IN_MILLISECONDS;
+        uint32 ttlMs = (uint32)std::max(1, sPlayerbotAIConfig.guildBankWithdrawIndexTtlSeconds) * (uint32)IN_MILLISECONDS;
         if (snap.lastBuildMs != 0 && GetMSTimeDiffToNow(snap.lastBuildMs) < ttlMs)
             return snap;
 
