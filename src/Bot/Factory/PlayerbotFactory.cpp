@@ -2671,6 +2671,19 @@ void PlayerbotFactory::WithdrawUpgradesFromGuildBank()
         if (!withdrawn || withdrawn->GetEntry() != chosen.entry)
             continue;   // race / cache stale: bank item was gone
 
+        // The bank slot is now empty regardless of whether the equip below succeeds, so drop the
+        // entry from the snapshot immediately (an aborted equip must not leave the cache advertising
+        // an item that is no longer in the bank, which would make this guild's bots skip real slots
+        // until the TTL rebuild). The vacated slot may be re-indexed with the replaced piece below.
+        for (size_t i = 0; i < snap.items.size(); ++i)
+        {
+            if (snap.items[i].tabId == chosen.tabId && snap.items[i].slotId == chosen.slotId)
+            {
+                snap.items.erase(snap.items.begin() + i);
+                break;
+            }
+        }
+
         // --- Capture & unequip the current piece so the slot is free ---
         ObjectGuid oldGuid = cur ? cur->GetGUID() : ObjectGuid::Empty;
         if (cur)
@@ -2715,15 +2728,7 @@ void PlayerbotFactory::WithdrawUpgradesFromGuildBank()
         }
 
         // --- Update the cache to match reality ---
-        // Remove the withdrawn entry.
-        for (size_t i = 0; i < snap.items.size(); ++i)
-        {
-            if (snap.items[i].tabId == chosen.tabId && snap.items[i].slotId == chosen.slotId)
-            {
-                snap.items.erase(snap.items.begin() + i);
-                break;
-            }
-        }
+        // (The withdrawn entry was already removed right after the withdraw was confirmed.)
         // If the old piece was returned and still qualifies, index it at the vacated slot.
         if (returned && oldItem)
         {
