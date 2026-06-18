@@ -798,9 +798,13 @@ bool PlayerbotAIConfig::Initialize()
     rpgSuppressRaidSim = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.RaidSim", true);
     rpgSuppressCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Combat", true);
     gatherHarvestHoldMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.Gather.HarvestHoldMs", 4000);
-    LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={}",
+    lowHealthSelfPreservation = sConfigMgr->GetOption<bool>("AiPlayerbot.LowHealthSelfPreservation", true);
+    rpgSuppressWhenHurt = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenHurt", true);
+    healSayOncePerEpisode = sConfigMgr->GetOption<bool>("AiPlayerbot.HealSayOncePerEpisode", true);
+    LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={} lowHpSelfPres={} rpgSuppressHurt={} healSayOnce={}",
              rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,
-             rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat, gatherHarvestHoldMs);
+             rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat, gatherHarvestHoldMs,
+             lowHealthSelfPreservation, rpgSuppressWhenHurt, healSayOncePerEpisode);
 
     pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);

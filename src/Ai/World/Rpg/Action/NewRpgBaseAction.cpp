@@ -1629,6 +1629,10 @@ bool NewRpgBaseAction::IsFreeToIdle()
 
 bool NewRpgBaseAction::ShouldSuppressRpg()
 {
+    // low-health-self-preservation: a hurt bot stops wandering and recovers (eat/bandage/OOC regen).
+    if (sPlayerbotAIConfig.rpgSuppressWhenHurt && bot->IsAlive() &&
+        bot->GetHealthPct() < sPlayerbotAIConfig.lowHealth)
+        return true;
     return !IsFreeToIdle();
 }
 

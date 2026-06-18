@@ -480,6 +480,10 @@ public:
     bool rpgSuppressCombat{true};
     uint32 gatherHarvestHoldMs{4000};  // gathering_circuit: hold at a node this long for the gather cast
                                        // to complete before giving up and moving to the next node
+    // low-health self-preservation knobs
+    bool lowHealthSelfPreservation{true};  // low-band (45%) potion-in-combat / bandage-out-of-combat
+    bool rpgSuppressWhenHurt{true};        // stop NewRpg wandering while below lowHealth so the bot recovers
+    bool healSayOncePerEpisode{true};      // announce "need heal" once per low-health descent, not in a row
     // --- more-activities-occupations (pipe 2b) ---
     float  travelMountDistMin{300.0f};
     float  travelMountDistMax{2000.0f};

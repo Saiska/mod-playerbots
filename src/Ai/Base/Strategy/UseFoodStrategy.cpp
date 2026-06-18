@@ -19,6 +19,9 @@ void UseFoodStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     else
     {
         triggers.push_back(new TriggerNode("low health", { NextAction("food", 3.0f) }));
+        if (sPlayerbotAIConfig.lowHealthSelfPreservation)
+            triggers.push_back(new TriggerNode(
+                "low health", { NextAction("try emergency", ACTION_EMERGENCY) }));
         triggers.push_back(new TriggerNode("low mana", { NextAction("drink", 3.0f) }));
     }
 }
