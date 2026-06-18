@@ -616,6 +616,9 @@ bool PlayerbotAIConfig::Initialize()
     maintenanceGearFloorLevelGap = sConfigMgr->GetOption<int32>("AiPlayerbot.MaintenanceGearFloorLevelGap", 9);
     maintenanceGearFloorScansPerTick = sConfigMgr->GetOption<int32>("AiPlayerbot.MaintenanceGearFloorScansPerTick", 4);
     LOG_INFO("server.loading", "GearFloor: config loaded — enabled={} levelGap={} scansPerTick={}", maintenanceGearFloor, maintenanceGearFloorLevelGap, maintenanceGearFloorScansPerTick);
+    guildBankWithdraw = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildBankWithdraw.Enable", true);
+    guildBankWithdrawMinQuality = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildBankWithdraw.MinQuality", 3);
+    guildBankWithdrawIndexTtlSeconds = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildBankWithdraw.IndexTTLSeconds", 300);
     groupInvitationPermission = sConfigMgr->GetOption<int32>("AiPlayerbot.GroupInvitationPermission", 1);
     keepAltsInGroup = sConfigMgr->GetOption<bool>("AiPlayerbot.KeepAltsInGroup", false);
     allowSummonInCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowSummonInCombat", true);

@@ -576,6 +576,9 @@ public:
     bool maintenanceGearFloor;
     int32 maintenanceGearFloorLevelGap;
     int32 maintenanceGearFloorScansPerTick;
+    bool guildBankWithdraw;
+    int32 guildBankWithdrawMinQuality;
+    int32 guildBankWithdrawIndexTtlSeconds;
     int32 groupInvitationPermission;
     bool keepAltsInGroup = false;
     bool KeepAltsInGroup() const { return keepAltsInGroup; }

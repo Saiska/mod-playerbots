@@ -72,6 +72,9 @@ public:
     void InitSpecialSpells();
     void InitEquipment(bool incremental, bool second_chance = false);
     void TopUpGear();  // maintenance gear-floor: fill lacking slots with best green/blue
+    // Guild-bank gear economy (demand side): withdraw + equip strict upgrades from the bot's
+    // guild bank, returning the replaced (unbound) piece to the vacated bank slot.
+    void WithdrawUpgradesFromGuildBank();
     // Resumable form of TopUpGear, driven by GearFloorMgr. Processes initSlotsOrder starting at
     // `cursor`, performing at most `scanBudget` candidate scans (SelectBestItemForSlot calls);
     // cheap level-gated / not-lacking slots are skipped without consuming budget. Advances
