@@ -72,6 +72,13 @@ public:
     void InitSpecialSpells();
     void InitEquipment(bool incremental, bool second_chance = false);
     void TopUpGear();  // maintenance gear-floor: fill lacking slots with best green/blue
+    // Resumable form of TopUpGear, driven by GearFloorMgr. Processes initSlotsOrder starting at
+    // `cursor`, performing at most `scanBudget` candidate scans (SelectBestItemForSlot calls);
+    // cheap level-gated / not-lacking slots are skipped without consuming budget. Advances
+    // `cursor`, accumulates `filled`/`slotsStr` for equipped slots, sets `done` when the slot
+    // list is exhausted, and returns the number of scans consumed.
+    uint32 TopUpGearStep(size_t& cursor, uint32 scanBudget, uint32& filled,
+                         std::string& slotsStr, bool& done);
     void InitPet();
     void InitAmmo();
     static uint32 CalcMixedGearScore(uint32 gs, uint32 quality);
