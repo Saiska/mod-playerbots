@@ -546,6 +546,17 @@ AiPlayerbot.MaintenanceGearFloor = 1
 #
 AiPlayerbot.MaintenanceGearFloorLevelGap = 9
 
+#
+#    AiPlayerbot.MaintenanceGearFloorScansPerTick
+#        Description: Throttle for the gear-floor top-up. The maximum number of candidate-item
+#                     scans the gear-floor queue may perform per world-update tick, across all
+#                     queued bots. Keeps the bot auto-gear work from spiking the main loop
+#                     (cast-bar jitter). Lower = smoother ticks, slower catch-up.
+#        Default:     4
+#                     0 - unlimited (drain the whole queue each tick; pre-throttle behavior)
+#
+AiPlayerbot.MaintenanceGearFloorScansPerTick = 4
+
 # Enable/Disable specific maintenance command functionality for alt bots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their alt bots
 # Default: 1 (enabled)

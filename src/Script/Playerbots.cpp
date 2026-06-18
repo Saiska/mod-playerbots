@@ -30,6 +30,7 @@
 #include "PlayerbotWorldThreadProcessor.h"
 #include "RaidSimulationMgr.h"
 #include "PopulationDynamicsMgr.h"
+#include "GearFloorMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "PlayerbotCommandScript.h"
@@ -404,6 +405,7 @@ public:
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
         sRaidSimulationMgr.Update(diff);
         sPopulationDynamicsMgr.Update(diff);
+        sGearFloorMgr.Update(diff);
     }
 };
 

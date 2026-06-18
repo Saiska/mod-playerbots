@@ -6,6 +6,7 @@
 #include "PlayerbotFactory.h"
 
 #include <array>
+#include <limits>
 #include <utility>
 
 #include "AccountMgr.h"
@@ -2524,6 +2525,24 @@ uint32 PlayerbotFactory::SelectBestItemForSlot(uint8 slot, uint32 qualityCap)
 
 void PlayerbotFactory::TopUpGear()
 {
+    size_t cursor = 0;
+    uint32 filled = 0;
+    std::string slotsStr;
+    bool done = false;
+
+    // Unbudgeted: process every slot in one call (pre-throttle behavior).
+    TopUpGearStep(cursor, std::numeric_limits<uint32>::max(), filled, slotsStr, done);
+
+    if (filled > 0)
+    {
+        LOG_INFO("server.loading", "[GearFloor] Bot #{} {} lvl{}: filled {} slot(s) ({})",
+            bot->GetGUID().GetCounter(), bot->GetName().c_str(), bot->GetLevel(), filled, slotsStr.c_str());
+    }
+}
+
+uint32 PlayerbotFactory::TopUpGearStep(size_t& cursor, uint32 scanBudget, uint32& filled,
+                                       std::string& slotsStr, bool& done)
+{
     uint8 botLevel = bot->GetLevel();
     int32 gap = sPlayerbotAIConfig.maintenanceGearFloorLevelGap;
 
@@ -2533,12 +2552,13 @@ void PlayerbotFactory::TopUpGear()
     if (isPvp)
         calculator.SetPvpSpec(true);
 
-    uint32 count = 0;
-    std::string slotsStr;
+    uint32 scansUsed = 0;
 
-    for (int32 slot : initSlotsOrder)
+    for (; cursor < initSlotsOrder.size(); ++cursor)
     {
-        // Same level gates as InitEquipment.
+        int32 slot = (int32)initSlotsOrder[cursor];
+
+        // Same level gates as InitEquipment (cheap; no budget cost).
         if (slot == EQUIPMENT_SLOT_TABARD || slot == EQUIPMENT_SLOT_BODY)
             continue;
 
@@ -2563,7 +2583,7 @@ void PlayerbotFactory::TopUpGear()
 
         Item* cur = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
 
-        // Determine whether this slot is lacking.
+        // Determine whether this slot is lacking (cheap; no budget cost).
         float curScore = 0.0f;
         if (cur)
         {
@@ -2581,8 +2601,17 @@ void PlayerbotFactory::TopUpGear()
             }
         }
 
+        // This slot needs a candidate scan — the budgeted unit. If the budget is exhausted,
+        // stop here (cursor still points at this slot) and resume next tick.
+        if (scansUsed >= scanBudget)
+        {
+            done = false;
+            return scansUsed;
+        }
+
         // Cap at Rare quality (helper rejects Quality > ITEM_QUALITY_RARE).
         uint32 best = SelectBestItemForSlot(slot, ITEM_QUALITY_RARE);
+        ++scansUsed;
         if (!best)
             continue;
 
@@ -2616,17 +2645,14 @@ void PlayerbotFactory::TopUpGear()
         bot->EquipNewItem(dest, best, true);
         bot->AutoUnequipOffhandIfNeed();
 
-        ++count;
+        ++filled;
         if (!slotsStr.empty())
             slotsStr += ", ";
         slotsStr += std::to_string(slot);
     }
 
-    if (count > 0)
-    {
-        LOG_INFO("server.loading", "[GearFloor] Bot #{} {} lvl{}: filled {} slot(s) ({})",
-            bot->GetGUID().GetCounter(), bot->GetName().c_str(), botLevel, count, slotsStr.c_str());
-    }
+    done = true;
+    return scansUsed;
 }
 
 bool PlayerbotFactory::IsDesiredReplacement(Item* item)
