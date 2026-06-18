@@ -76,6 +76,8 @@ struct NewRpgInfo
         ObjectGuid node{};
         uint32 visited{0};
         uint32 maxNodes{0};
+        bool   harvesting{false};   // true while holding at a node for the gather cast to finish
+        uint32 harvestStartMs{0};   // GetMSTime() when the gather cast was (re)issued; wrap-safe elapsed
     };
     struct Idle
     {

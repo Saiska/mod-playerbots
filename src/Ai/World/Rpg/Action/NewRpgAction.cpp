@@ -797,29 +797,63 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
             info.ChangeToIdle();   // no node nearby -> done
             return true;
         }
+        data->harvesting = false;       // fresh node — no harvest in progress
+        data->harvestStartMs = 0;
     }
     GameObject* node = ObjectAccessor::GetGameObject(*bot, data->node);
     if (!node || !node->isSpawned())
     {
-        data->node = ObjectGuid();   // harvested/despawned -> re-pick
+        if (data->harvesting)           // we were harvesting this one -> success
+            ++data->visited;
+        data->node = ObjectGuid();
+        data->harvesting = false;
+        data->harvestStartMs = 0;
         return true;
     }
     if (!IsWithinInteractionDist(node))
     {
         if (MoveWorldObjectTo(data->node))
             return true;
-        data->node = ObjectGuid();   // unreachable -> try another
+        data->node = ObjectGuid();      // unreachable -> try another
+        data->harvesting = false;
+        data->harvestStartMs = 0;
         return true;
     }
-    // arrived: harvest — mirrors the loot-harvest delegation
-    LootObject lootObj(bot, data->node);
-    if (lootObj.IsLootPossible(bot))
+    // arrived & within interaction distance
+    if (!data->harvesting)
     {
-        context->GetValue<LootObject>("loot target")->Set(lootObj);
-        botAI->DoSpecificAction("open loot", Event(), true);
+        // Begin the harvest: DoLoot stops movement, then casts the mining/herb gather spell.
+        LootObject lootObj(bot, data->node);
+        if (lootObj.IsLootPossible(bot))
+        {
+            context->GetValue<LootObject>("loot target")->Set(lootObj);
+            botAI->DoSpecificAction("open loot", Event(), true);
+        }
+        data->harvesting = true;
+        data->harvestStartMs = getMSTime();
+        TickEmoteCadence(BEH_GATHERING_CIRCUIT, 0);   // between-node pause at the node
+        return true;                                   // HOLD — do not advance, do not move
     }
-    TickEmoteCadence(BEH_GATHERING_CIRCUIT, 0);   // between-node pause at the harvested node
-    ++data->visited;
-    data->node = ObjectGuid();   // advance to the next node
-    return true;
+
+    // Harvest in progress: hold here. The node despawning (caught above) is success; otherwise wait out
+    // the window. Re-issue the cast once if a transient nudge cancelled it (bot no longer casting).
+    if (GetMSTimeDiffToNow(data->harvestStartMs) >= sPlayerbotAIConfig.gatherHarvestHoldMs)
+    {
+        ++data->visited;                 // gave up on this node -> count it and move on
+        data->node = ObjectGuid();
+        data->harvesting = false;
+        data->harvestStartMs = 0;
+        return true;
+    }
+    if (!bot->HasUnitState(UNIT_STATE_CASTING))
+    {
+        LootObject lootObj(bot, data->node);
+        if (lootObj.IsLootPossible(bot))
+        {
+            context->GetValue<LootObject>("loot target")->Set(lootObj);
+            botAI->DoSpecificAction("open loot", Event(), true);
+            data->harvestStartMs = getMSTime();   // restart the window for the re-issued cast
+        }
+    }
+    return true;   // still holding
 }

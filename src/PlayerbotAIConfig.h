@@ -478,6 +478,8 @@ public:
     bool rpgSuppressVehicle{true};
     bool rpgSuppressRaidSim{true};
     bool rpgSuppressCombat{true};
+    uint32 gatherHarvestHoldMs{4000};  // gathering_circuit: hold at a node this long for the gather cast
+                                       // to complete before giving up and moving to the next node
     // --- more-activities-occupations (pipe 2b) ---
     float  travelMountDistMin{300.0f};
     float  travelMountDistMax{2000.0f};
