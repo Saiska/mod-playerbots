@@ -270,6 +270,9 @@ bool MaintenanceAction::Execute(Event /*event*/)
     if (sPlayerbotAIConfig.maintenanceGearFloor)
         sGearFloorMgr.Enqueue(bot);
 
+    if (sPlayerbotAIConfig.guildBankWithdraw && botAI->IsInRealGuild())
+        factory.WithdrawUpgradesFromGuildBank();
+
     return true;
 }
 
