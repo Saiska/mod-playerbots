@@ -342,6 +342,11 @@ AiPlayerbot.LootRollDisenchant = 0
 # Max AI iterations per tick
 AiPlayerbot.IterationsPerTick = 10
 
+# slow-ai-tick-instrument (diagnostic): if > 0, log a "Slow bot AI tick:" line to
+# Playerbots.log whenever a single bot's UpdateAI tick exceeds this many ms, naming the
+# heaviest action/trigger. 0 = off (default, byte-identical). Recommended capture value: 200.
+AiPlayerbot.SlowAiTickLogMs = 0
+
 # Delay between two short-time spells cast
 AiPlayerbot.GlobalCooldown = 500
 

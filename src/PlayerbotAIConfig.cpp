@@ -135,6 +135,7 @@ bool PlayerbotAIConfig::Initialize()
     randomBotRpgChance = sConfigMgr->GetOption<float>("AiPlayerbot.RandomBotRpgChance", 0.20f);
 
     iterationsPerTick = sConfigMgr->GetOption<int32>("AiPlayerbot.IterationsPerTick", 10);
+    slowAiTickLogMs = sConfigMgr->GetOption<int32>("AiPlayerbot.SlowAiTickLogMs", 0);
 
     allowAccountBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowAccountBots", true);
     allowGuildBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowGuildBots", true);

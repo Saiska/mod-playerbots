@@ -15,9 +15,60 @@
 #include <map>
 #include <algorithm>
 #include <string>
+#include <chrono>
 
 #include "DBCEnums.h"
 #include "SharedDefines.h"
+
+// slow-ai-tick-instrument (7th tick-spike instrument): per-bot UpdateAI outlier capture.
+// One thread_local accumulator per bot-tick: a bot's whole UpdateAI runs to completion on a
+// single MapUpdater worker thread before the next bot, so all reads/writes are same-thread.
+// PlayerbotAI::UpdateAI resets it at entry and emits at exit; Engine fills the action/trigger
+// laps. Microseconds (a single action's Execute can be sub-ms; ms truncation loses the signal).
+// Zero cost when AiPlayerbot.SlowAiTickLogMs == 0 (every write is behind that gate).
+struct SlowAiTickAccum
+{
+    uint64 internalUs = 0;   // UpdateAIInternal call (bracketed in UpdateAI)
+    uint64 engineUs   = 0;   // Engine::DoNextAction
+    uint64 trigSumUs  = 0;   // sum of all trigger->Check this tick
+    uint64 actSumUs   = 0;   // sum of all action->Execute this tick
+    uint32 nAct       = 0;   // actions executed this tick
+    uint64 maxActUs   = 0;   // heaviest single action
+    uint64 maxTrigUs  = 0;   // heaviest single trigger
+    std::string maxActName;
+    std::string maxTrigName;
+};
+
+inline thread_local SlowAiTickAccum g_slowAiTick;
+
+inline void SlowAiTickReset() { g_slowAiTick = SlowAiTickAccum{}; }
+
+inline uint64 SlowAiTickNowUs()
+{
+    return static_cast<uint64>(std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+inline void SlowAiTickNoteAct(std::string const& name, uint64 us)
+{
+    g_slowAiTick.actSumUs += us;
+    ++g_slowAiTick.nAct;
+    if (us > g_slowAiTick.maxActUs)
+    {
+        g_slowAiTick.maxActUs = us;
+        g_slowAiTick.maxActName = name;
+    }
+}
+
+inline void SlowAiTickNoteTrig(std::string const& name, uint64 us)
+{
+    g_slowAiTick.trigSumUs += us;
+    if (us > g_slowAiTick.maxTrigUs)
+    {
+        g_slowAiTick.maxTrigUs = us;
+        g_slowAiTick.maxTrigName = name;
+    }
+}
 
 enum class BotCheatMask : uint32
 {
@@ -396,6 +447,7 @@ public:
     uint32 guildTaskKillTaskDistance;
 
     uint32 iterationsPerTick;
+    uint32 slowAiTickLogMs;  // slow-ai-tick-instrument threshold in ms; 0 = off (default)
 
     std::mutex m_logMtx;
     bool enableAutoTradeOnItemMention;
