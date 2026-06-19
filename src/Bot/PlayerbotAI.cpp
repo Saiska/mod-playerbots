@@ -237,6 +237,13 @@ PlayerbotAI::~PlayerbotAI()
 
 void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
 {
+    // slow-ai-tick-instrument: bracket this whole UpdateAI tick (== instrument #6's botAI scope).
+    // Reset the per-bot accumulator at entry; the engine fills action/trigger laps; emit at exit.
+    bool const slowAiTick = sPlayerbotAIConfig.slowAiTickLogMs > 0;
+    uint64 const slowTickStartUs = slowAiTick ? SlowAiTickNowUs() : 0;
+    if (slowAiTick)
+        SlowAiTickReset();
+
     // Handle the AI check delay
     if (nextAICheckDelay > elapsed)
         nextAICheckDelay -= elapsed;
@@ -410,8 +417,37 @@ void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
     UpdateAIGroupMaster();
 
     // Update internal AI
-    UpdateAIInternal(elapsed, minimal);
+    if (slowAiTick)
+    {
+        uint64 const s = SlowAiTickNowUs();
+        UpdateAIInternal(elapsed, minimal);
+        g_slowAiTick.internalUs += SlowAiTickNowUs() - s;
+    }
+    else
+        UpdateAIInternal(elapsed, minimal);
+
     YieldThread(bot, GetReactDelay());
+
+    if (slowAiTick)
+    {
+        uint64 const totalUs = SlowAiTickNowUs() - slowTickStartUs;
+        if (totalUs >= static_cast<uint64>(sPlayerbotAIConfig.slowAiTickLogMs) * 1000)
+        {
+            char const st = (currentState == BOT_STATE_COMBAT) ? 'C'
+                          : (currentState == BOT_STATE_DEAD) ? 'D' : 'N';
+            LOG_INFO("playerbots",
+                "Slow bot AI tick: bot={} guid={} map={} total={}ms "
+                "[internal={}ms engine={}ms trig={}ms act={}ms nAct={} state={}] "
+                "maxAct={}({}ms) maxTrig={}({}ms)",
+                bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), totalUs / 1000,
+                g_slowAiTick.internalUs / 1000, g_slowAiTick.engineUs / 1000,
+                g_slowAiTick.trigSumUs / 1000, g_slowAiTick.actSumUs / 1000, g_slowAiTick.nAct, st,
+                g_slowAiTick.maxActName.empty() ? "-" : g_slowAiTick.maxActName,
+                g_slowAiTick.maxActUs / 1000,
+                g_slowAiTick.maxTrigName.empty() ? "-" : g_slowAiTick.maxTrigName,
+                g_slowAiTick.maxTrigUs / 1000);
+        }
+    }
 }
 
 // Helper function for UpdateAI to check group membership and handle removal if necessary

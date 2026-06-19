@@ -140,6 +140,10 @@ void Engine::Init()
 
 bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
 {
+    // slow-ai-tick-instrument: time the whole engine pass (gated). Read by UpdateAI's emit.
+    bool const slowAiTick = sPlayerbotAIConfig.slowAiTickLogMs > 0;
+    uint64 const slowEngStartUs = slowAiTick ? SlowAiTickNowUs() : 0;
+
     LogAction("--- AI Tick ---");
 
     if (sPlayerbotAIConfig.logValuesPerTick)
@@ -205,7 +209,10 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 }
 
                 PerfMonitorOperation* pmo = sPerfMonitor.start(PERF_MON_ACTION, action->getName(), &aiObjectContext->performanceStack);
+                uint64 const slowActStartUs = slowAiTick ? SlowAiTickNowUs() : 0;
                 actionExecuted = ListenAndExecute(action, event);
+                if (slowAiTick)
+                    SlowAiTickNoteAct(action->getName(), SlowAiTickNowUs() - slowActStartUs);
                 if (pmo)
                     pmo->finish();
 
@@ -247,6 +254,9 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
         LogAction("no actions executed");
 
     queue.RemoveExpired();
+
+    if (slowAiTick)
+        g_slowAiTick.engineUs += SlowAiTickNowUs() - slowEngStartUs;
 
     return actionExecuted;
 }
@@ -464,7 +474,10 @@ void Engine::ProcessTriggers(bool minimal)
 
             PerfMonitorOperation* pmo =
                 sPerfMonitor.start(PERF_MON_TRIGGER, trigger->getName(), &aiObjectContext->performanceStack);
+            uint64 const slowTrigStartUs = sPlayerbotAIConfig.slowAiTickLogMs ? SlowAiTickNowUs() : 0;
             Event event = trigger->Check();
+            if (sPlayerbotAIConfig.slowAiTickLogMs)
+                SlowAiTickNoteTrig(trigger->getName(), SlowAiTickNowUs() - slowTrigStartUs);
             if (pmo)
                 pmo->finish();
 
