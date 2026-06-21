@@ -38,6 +38,7 @@
 #include "BroadcastHelper.h"
 #include "WorldSessionMgr.h"
 #include "DatabaseEnv.h"
+#include "DBCStores.h"
 
 class BotInitGuard
 {
@@ -530,10 +531,43 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
     }
     PlayerbotRepository::instance().Load(botAI);
 
-    if (master && !master->HasUnitState(UNIT_STATE_IN_FLIGHT))
+    if (!master || !master->HasUnitState(UNIT_STATE_IN_FLIGHT))
     {
-        bot->GetMotionMaster()->MovementExpired();
-        bot->CleanupAfterTaxiFlight();
+        // taxi-flight-stuck-login-cleanup: a masterless (random) bot that was mid-taxi-flight
+        // at restart reloads still UNIT_STATE_IN_FLIGHT with a persisted pending path. Plain
+        // CleanupAfterTaxiFlight() dismounts but does NOT relocate, so it would hover. Land it
+        // on the ground at the flight's destination node via the core's canonical TeleportTo
+        // (Player::TeleportTo does the full taxi teardown + relocate). Mastered bots keep the
+        // existing path unchanged (a mastered bot is summoned to its master right after login).
+        if (!master && !bot->m_taxi.empty())
+        {
+            // Capture the landing node BEFORE teardown — MovementExpired() (via the flight
+            // generator's DoFinalize) and CleanupAfterTaxiFlight() both clear m_taxi.
+            uint32 const landNode = bot->m_taxi.GetPath().back();
+            TaxiNodesEntry const* node = sTaxiNodesStore.LookupEntry(landNode);
+            // Finalize the (login-rearmed) flight + clear taxi state unconditionally: this is
+            // what actually drops UNIT_STATE_IN_FLIGHT (FlightPathMovementGenerator::DoFinalize),
+            // and unlike TeleportTo's internal teardown it does not depend on IsInFlight() still
+            // being set at this point. Then land the bot on the ground at the destination node.
+            bot->GetMotionMaster()->MovementExpired();
+            bot->CleanupAfterTaxiFlight();
+            if (node)
+            {
+                bot->TeleportTo(node->map_id, node->x, node->y, node->z, bot->GetOrientation());
+                // INFO (not DEBUG): Logger.playerbots=4 (INFO) suppresses DEBUG, and this
+                // one-shot-per-restart line is the grep gate for live verification.
+                LOG_INFO("playerbots",
+                    "Bot {} cleaned up stale taxi flight on login, landed at node {}",
+                    bot->GetName(), landNode);
+            }
+            // node lookup failed: bot is still un-stuck (state/flags cleared above), just not
+            // relocated — the random-bot updater will re-teleport it on its next cycle.
+        }
+        else
+        {
+            bot->GetMotionMaster()->MovementExpired();
+            bot->CleanupAfterTaxiFlight();
+        }
     }
 
     // check activity
