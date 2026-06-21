@@ -2857,3 +2857,26 @@ RaidSim.ReaperInterval = 120
 #        Default: 3
 
 RaidSim.ReaperBatch = 3
+
+###################################
+#    RAIDSIM BROADCAST
+###################################
+#
+#    RaidSim.BroadcastRealmWide
+#        1 = start/stop/loot announcements are realm-wide [System] lines that every
+#            online player sees, carrying guild + raid name and a clickable item link.
+#        0 = legacy: messages go to the (bot-only) raiding guild's guild chat, old wording.
+#        The master RaidSim.Broadcast and per-event BroadcastStartStop/BroadcastLoot
+#        toggles still apply on top of this.
+#        Default: 1
+
+RaidSim.BroadcastRealmWide = 1
+
+#    RaidSim.BroadcastLootMinQuality
+#        Minimum item quality for a realm-wide loot announcement (spam control).
+#        0=Poor 1=Common 2=Uncommon 3=Rare 4=Epic 5=Legendary.
+#        Only loot at or above this quality announces realm-wide. 0 = announce all.
+#        Has no effect on the legacy guild-chat path or when RaidSim.BroadcastLoot = 0.
+#        Default: 3 (Rare/blue and above)
+
+RaidSim.BroadcastLootMinQuality = 3

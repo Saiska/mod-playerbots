@@ -6,6 +6,7 @@
 #include "RaidSimulationMgr.h"
 
 #include "Chat.h"
+#include "ChatHelper.h"
 #include "DatabaseEnv.h"
 #include "DBCStores.h"
 #include "Group.h"
@@ -28,6 +29,8 @@
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "StatsWeightCalculator.h"
+#include "WorldPacket.h"
+#include "WorldSessionMgr.h"
 
 #include <algorithm>
 #include <memory>
@@ -322,7 +325,17 @@ namespace
 
             if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
                 if (Guild* guild = sGuildMgr->GetGuildById(leader->GetGuildId()))
-                    guild->BroadcastToGuild(leader->GetSession(), false, "We set out for " + m_label + ".", LANG_UNIVERSAL);
+                {
+                    if (sPlayerbotAIConfig.raidSimBroadcastRealmWide)
+                    {
+                        std::string msg = std::string(guild->GetName()) + " has set out for " + m_label + ".";
+                        WorldPacket data;
+                        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, msg);
+                        sWorldSessionMgr->SendGlobalMessage(&data);
+                    }
+                    else
+                        guild->BroadcastToGuild(leader->GetSession(), false, "We set out for " + m_label + ".", LANG_UNIVERSAL);
+                }
             return true;
         }
 
@@ -356,7 +369,17 @@ namespace
             if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
                 if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
                     if (Guild* guild = sGuildMgr->GetGuildById(leader->GetGuildId()))
-                        guild->BroadcastToGuild(leader->GetSession(), false, "We return from " + m_label + ".", LANG_UNIVERSAL);
+                    {
+                        if (sPlayerbotAIConfig.raidSimBroadcastRealmWide)
+                        {
+                            std::string msg = std::string(guild->GetName()) + " returns from " + m_label + ".";
+                            WorldPacket data;
+                            ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, msg);
+                            sWorldSessionMgr->SendGlobalMessage(&data);
+                        }
+                        else
+                            guild->BroadcastToGuild(leader->GetSession(), false, "We return from " + m_label + ".", LANG_UNIVERSAL);
+                    }
 
             for (ObjectGuid const& guid : m_memberGuids)
             {
@@ -1213,7 +1236,21 @@ void RaidSimulationMgr::AwardLoot(RaidSimulationMgr::ActiveRun const& run)
 
         if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastLoot)
             if (Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId()))
-                guild->BroadcastToGuild(bot->GetSession(), false, bot->GetName() + " receives " + itemName + ".",
-                                        LANG_UNIVERSAL);
+            {
+                if (sPlayerbotAIConfig.raidSimBroadcastRealmWide)
+                {
+                    if (proto && proto->Quality >= sPlayerbotAIConfig.raidSimBroadcastLootMinQuality)
+                    {
+                        std::string msg = bot->GetName() + " of " + run.guildName + " equips " +
+                                          ChatHelper::FormatItem(proto) + " in " + run.label + ".";
+                        WorldPacket data;
+                        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, msg);
+                        sWorldSessionMgr->SendGlobalMessage(&data);
+                    }
+                }
+                else
+                    guild->BroadcastToGuild(bot->GetSession(), false, bot->GetName() + " receives " + itemName + ".",
+                                            LANG_UNIVERSAL);
+            }
     }
 }

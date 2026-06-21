@@ -454,6 +454,8 @@ bool PlayerbotAIConfig::Initialize()
     raidSimBroadcast          = sConfigMgr->GetOption<bool>("RaidSim.Broadcast", true);
     raidSimBroadcastStartStop = sConfigMgr->GetOption<bool>("RaidSim.BroadcastStartStop", true);
     raidSimBroadcastLoot      = sConfigMgr->GetOption<bool>("RaidSim.BroadcastLoot", true);
+    raidSimBroadcastRealmWide      = sConfigMgr->GetOption<bool>("RaidSim.BroadcastRealmWide", true);
+    raidSimBroadcastLootMinQuality = sConfigMgr->GetOption<uint32>("RaidSim.BroadcastLootMinQuality", 3);
     raidSimAnnounce         = sConfigMgr->GetOption<bool>("RaidSim.Announce", false);
     raidSimOrphanReaper     = sConfigMgr->GetOption<bool>("RaidSim.OrphanReaper", true);
     raidSimReaperInterval   = sConfigMgr->GetOption<int32>("RaidSim.ReaperInterval", 120);
