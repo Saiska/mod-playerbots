@@ -62,6 +62,7 @@ public:
     void Status(ChatHandler* handler);
 
     void ClearRaidingFlags(std::vector<ObjectGuid> const& members);  // called by teardown op
+    void SetRunGroupGuid(uint32 guildId, ObjectGuid groupGuid);      // called by formation op
 
 private:
     RaidSimulationMgr() = default;
@@ -97,7 +98,6 @@ private:
     // (all npc_vendor edges) + chest mining (chest instances only), deduped. Logs composition.
     std::vector<uint32> BuildPool(RaidSimInstance const& inst);
     void  PersistBaseIlvl();
-    void  SetRunGroupGuid(uint32 guildId, ObjectGuid groupGuid);  // formation op -> record live group
     void  ReconcileOrphans(uint32 diff);  // leader-independent orphan-group reaper (drip)
 
     std::mutex _mutex;
