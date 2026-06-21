@@ -541,9 +541,16 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
         // existing path unchanged (a mastered bot is summoned to its master right after login).
         if (!master && !bot->m_taxi.empty())
         {
-            // Capture the landing node BEFORE cleanup — CleanupAfterTaxiFlight clears m_taxi.
+            // Capture the landing node BEFORE teardown — MovementExpired() (via the flight
+            // generator's DoFinalize) and CleanupAfterTaxiFlight() both clear m_taxi.
             uint32 const landNode = bot->m_taxi.GetPath().back();
             TaxiNodesEntry const* node = sTaxiNodesStore.LookupEntry(landNode);
+            // Finalize the (login-rearmed) flight + clear taxi state unconditionally: this is
+            // what actually drops UNIT_STATE_IN_FLIGHT (FlightPathMovementGenerator::DoFinalize),
+            // and unlike TeleportTo's internal teardown it does not depend on IsInFlight() still
+            // being set at this point. Then land the bot on the ground at the destination node.
+            bot->GetMotionMaster()->MovementExpired();
+            bot->CleanupAfterTaxiFlight();
             if (node)
             {
                 bot->TeleportTo(node->map_id, node->x, node->y, node->z, bot->GetOrientation());
@@ -553,12 +560,8 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
                     "Bot {} cleaned up stale taxi flight on login, landed at node {}",
                     bot->GetName(), landNode);
             }
-            else
-            {
-                // Path id didn't resolve — degrade to plain teardown (no worse than before).
-                bot->GetMotionMaster()->MovementExpired();
-                bot->CleanupAfterTaxiFlight();
-            }
+            // node lookup failed: bot is still un-stuck (state/flags cleared above), just not
+            // relocated — the random-bot updater will re-teleport it on its next cycle.
         }
         else
         {
