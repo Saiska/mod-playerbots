@@ -15,6 +15,7 @@
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "ObjectAccessor.h"
+#include "CharacterCache.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -248,10 +249,10 @@ namespace
     class RaidSimFormationOperation : public PlayerbotOperation
     {
     public:
-        RaidSimFormationOperation(ObjectGuid leaderGuid, std::vector<ObjectGuid> memberGuids,
+        RaidSimFormationOperation(uint32 guildId, ObjectGuid leaderGuid, std::vector<ObjectGuid> memberGuids,
                                   uint32 mapId, uint8 difficulty, std::string label,
                                   float x, float y, float z, float o)
-            : m_leaderGuid(leaderGuid), m_memberGuids(std::move(memberGuids)), m_mapId(mapId),
+            : m_guildId(guildId), m_leaderGuid(leaderGuid), m_memberGuids(std::move(memberGuids)), m_mapId(mapId),
               m_difficulty(difficulty), m_label(std::move(label)), m_x(x), m_y(y), m_z(z), m_o(o)
         {
         }
@@ -284,6 +285,7 @@ namespace
                 return false;
             }
             sGroupMgr->AddGroup(group);
+            sRaidSimulationMgr.SetRunGroupGuid(m_guildId, group->GetGUID());
             MapEntry const* mapEntry = sMapStore.LookupEntry(m_mapId);
             if (mapEntry && mapEntry->IsRaid())
             {
@@ -330,6 +332,7 @@ namespace
         bool IsValid() const override { return ObjectAccessor::FindPlayer(m_leaderGuid) != nullptr; }
 
     private:
+        uint32 m_guildId;
         ObjectGuid m_leaderGuid;
         std::vector<ObjectGuid> m_memberGuids;
         uint32 m_mapId;
@@ -341,8 +344,10 @@ namespace
     class RaidSimTeardownOperation : public PlayerbotOperation
     {
     public:
-        RaidSimTeardownOperation(ObjectGuid leaderGuid, std::vector<ObjectGuid> memberGuids, std::string label)
-            : m_leaderGuid(leaderGuid), m_memberGuids(std::move(memberGuids)), m_label(std::move(label))
+        RaidSimTeardownOperation(ObjectGuid leaderGuid, ObjectGuid groupGuid,
+                                 std::vector<ObjectGuid> memberGuids, std::string label)
+            : m_leaderGuid(leaderGuid), m_groupGuid(groupGuid),
+              m_memberGuids(std::move(memberGuids)), m_label(std::move(label))
         {
         }
 
@@ -363,9 +368,14 @@ namespace
                 p->TeleportTo(HOME_MAP, HOME_X, HOME_Y, HOME_Z, HOME_O);
             }
 
-            if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
-                if (Group* g = leader->GetGroup())
-                    g->Disband(true);
+            Group* g = nullptr;
+            if (m_groupGuid)
+                g = sGroupMgr->GetGroupByGUID(m_groupGuid.GetCounter());
+            if (!g)
+                if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
+                    g = leader->GetGroup();
+            if (g)
+                g->Disband(true);
 
             sRaidSimulationMgr.ClearRaidingFlags(m_memberGuids);
             LOG_INFO("playerbots", "RaidSim: teardown complete leader={}", m_leaderGuid.ToString());
@@ -379,6 +389,7 @@ namespace
 
     private:
         ObjectGuid m_leaderGuid;
+        ObjectGuid m_groupGuid;
         std::vector<ObjectGuid> m_memberGuids;
         std::string m_label;
     };
@@ -674,18 +685,26 @@ void RaidSimulationMgr::LaunchRun(uint32 guildId, std::string const& guildName, 
         _raiding.insert(g);
 
     PlayerbotWorldThreadProcessor::instance().QueueOperation(
-        std::make_unique<RaidSimFormationOperation>(run.leader, members, inst.mapId, inst.difficulty,
+        std::make_unique<RaidSimFormationOperation>(guildId, run.leader, members, inst.mapId, inst.difficulty,
                                                     inst.label, inst.entryX, inst.entryY, inst.entryZ, inst.entryO));
 
     LOG_INFO("playerbots", "RaidSim: LAUNCH guild='{}' band {} inst {} ({}) bots={} leader={}",
              guildName, uint32(inst.band), inst.id, inst.label, members.size(), run.leader.ToString());
 }
 
+void RaidSimulationMgr::SetRunGroupGuid(uint32 guildId, ObjectGuid groupGuid)
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto it = _runs.find(guildId);
+    if (it != _runs.end())
+        it->second.groupGuid = groupGuid;
+}
+
 void RaidSimulationMgr::EndRun(ActiveRun const& run)
 {
     // Caller holds _mutex. _raiding stays set; the teardown op clears it once bots are home.
     if (!PlayerbotWorldThreadProcessor::instance().QueueOperation(
-            std::make_unique<RaidSimTeardownOperation>(run.leader, run.members, run.label)))
+            std::make_unique<RaidSimTeardownOperation>(run.leader, run.groupGuid, run.members, run.label)))
     {
         LOG_ERROR("playerbots", "RaidSim: teardown op dropped for guild '{}'; clearing raiding flags directly.",
                   run.guildName);
@@ -858,6 +877,8 @@ void RaidSimulationMgr::Update(uint32 diff)
     if (!sPlayerbotAIConfig.raidSimEnable)
         return;
 
+    ReconcileOrphans(diff);
+
     std::lock_guard<std::mutex> lock(_mutex);
 
     for (auto it = _cooldownMs.begin(); it != _cooldownMs.end(); )
@@ -973,6 +994,92 @@ void RaidSimulationMgr::Update(uint32 diff)
             LaunchRun(guildId, guildName, linst, cohort);
         }
     }
+}
+
+void RaidSimulationMgr::ReconcileOrphans(uint32 diff)
+{
+    if (!sPlayerbotAIConfig.raidSimOrphanReaper)
+        return;
+
+    // --- Short lock: advance our own timer and snapshot live-run group GUIDs. ---
+    std::unordered_set<ObjectGuid> activeGroupGuids;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _reaperTimerMs += diff;
+        if (_reaperTimerMs < sPlayerbotAIConfig.raidSimReaperInterval * 1000u)
+            return;
+        _reaperTimerMs = 0;
+        for (auto const& kv : _runs)
+            if (kv.second.groupGuid)
+                activeGroupGuids.insert(kv.second.groupGuid);
+    }
+    // _mutex released — NO Group::Disband under the lock.
+
+    uint32 const batch = sPlayerbotAIConfig.raidSimReaperBatch;
+
+    // --- Lock-free scan: candidate groups via online bots, deduped by group GUID. ---
+    std::unordered_set<ObjectGuid> seenGroups;
+    std::vector<Group*> toDisband;   // capped at batch
+    uint32 totalOrphans = 0;
+
+    for (auto const& it : ObjectAccessor::GetPlayers())
+    {
+        Player* bot = it.second;
+        if (!bot || !bot->IsInWorld() || !GET_PLAYERBOT_AI(bot))
+            continue;
+
+        Group* grp = bot->GetGroup();
+        if (!grp)
+            continue;
+
+        ObjectGuid gguid = grp->GetGUID();
+        if (!seenGroups.insert(gguid).second)
+            continue;  // already evaluated this group
+
+        // Rule 1: normal party/raid only.
+        if (grp->isLFGGroup() || grp->isBGGroup() || grp->isBFGroup())
+            continue;
+
+        // Rule 3: skip live in-flight runs.
+        if (activeGroupGuids.find(gguid) != activeGroupGuids.end())
+            continue;
+
+        // Rule 2: every member's account is a random-bot account.
+        auto const& slots = grp->GetMemberSlots();
+        if (slots.empty())
+            continue;  // degenerate -> treat as NOT all-bot
+        bool allBots = true;
+        for (auto const& ms : slots)
+        {
+            uint32 acc = sCharacterCache->GetCharacterAccountIdByGuid(ms.guid);
+            if (!sPlayerbotAIConfig.IsInRandomAccountList(acc))
+            {
+                allBots = false;
+                break;
+            }
+        }
+        if (!allBots)
+            continue;
+
+        // Orphan confirmed.
+        ++totalOrphans;
+        if (toDisband.size() < batch)
+            toDisband.push_back(grp);
+    }
+
+    if (toDisband.empty())
+        return;
+
+    uint32 disbanded = 0;
+    for (Group* g : toDisband)
+    {
+        g->Disband(true);
+        ++disbanded;
+    }
+
+    uint32 remaining = (totalOrphans > disbanded) ? (totalOrphans - disbanded) : 0u;
+    LOG_INFO("playerbots", "RaidSim: reaper disbanded {} orphan group(s) ({} remaining)",
+             disbanded, remaining);
 }
 
 std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)

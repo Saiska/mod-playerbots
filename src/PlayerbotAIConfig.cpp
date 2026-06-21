@@ -455,6 +455,9 @@ bool PlayerbotAIConfig::Initialize()
     raidSimBroadcastStartStop = sConfigMgr->GetOption<bool>("RaidSim.BroadcastStartStop", true);
     raidSimBroadcastLoot      = sConfigMgr->GetOption<bool>("RaidSim.BroadcastLoot", true);
     raidSimAnnounce         = sConfigMgr->GetOption<bool>("RaidSim.Announce", false);
+    raidSimOrphanReaper     = sConfigMgr->GetOption<bool>("RaidSim.OrphanReaper", true);
+    raidSimReaperInterval   = sConfigMgr->GetOption<int32>("RaidSim.ReaperInterval", 120);
+    raidSimReaperBatch      = sConfigMgr->GetOption<int32>("RaidSim.ReaperBatch", 3);
 
     //////////////////////////// Population Dynamics
     populationDynamicsEnable       = sConfigMgr->GetOption<bool>("PopulationDynamics.Enable", true);

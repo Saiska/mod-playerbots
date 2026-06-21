@@ -2833,3 +2833,27 @@ PopulationDynamics.Bracket7 = 41
 #        0 = legacy uniform-random source pick (no class balancing).
 #        Default: 1
 PopulationDynamics.ClassFavor = 1
+
+###################################
+#    RAIDSIM ORPHAN REAPER
+###################################
+#
+#    RaidSim.OrphanReaper
+#        Leader-independent reaper that disbands all-random-bot groups left
+#        over from a restart (orphans not backed by a live run).
+#        Default: 1 (enabled)
+
+RaidSim.OrphanReaper = 1
+
+#    RaidSim.ReaperInterval
+#        Seconds between reaper passes.
+#        Default: 120
+
+RaidSim.ReaperInterval = 120
+
+#    RaidSim.ReaperBatch
+#        Max orphan groups disbanded per reaper pass (drip; keeps the boot
+#        drain off the world-tick spike).
+#        Default: 3
+
+RaidSim.ReaperBatch = 3
