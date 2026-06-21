@@ -699,6 +699,8 @@ public:
     bool   raidSimBroadcast;           // master switch for ALL guild-chat broadcasts
     bool   raidSimBroadcastStartStop;  // "sets out for X" / "returns from X" lines
     bool   raidSimBroadcastLoot;       // "<bot> receives <item>" lines
+    bool   raidSimBroadcastRealmWide;      // realm-wide [System] lines (new wording) vs legacy guild chat
+    uint32 raidSimBroadcastLootMinQuality; // min item Quality for a realm-wide loot line (spam gate)
     bool   raidSimAnnounce;            // server-wide SendWorldText announce (debug/flavor; orthogonal)
     // Orphan reaper (raidsim-orphan-reaper): leader-independent teardown of all-random-bot groups
     // left over from a restart (orphans not backed by a live run). Budgeted drip; off the world tick.

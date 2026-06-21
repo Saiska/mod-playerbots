@@ -1,229 +1,255 @@
-# SPEC — raidsim-orphan-reaper
+# SPEC — raidsim-broadcast-realmwide
 
-**Branch:** `feat/raidsim-orphan-reaper` (cut off master tip `8e81a702`)
-**Target repo:** Saiska/mod-playerbots fork (in-tree `acore/modules/mod-playerbots`). Rebuild + deploy Y: (master-only).
-**Scope of this lane:** mod-playerbots source + the in-repo conf template only. Edit-only. No core edits, no new source files, no CMake reconfigure, no build/deploy.
+Branch: `feat/raidsim-broadcast-realmwide` (off master tip `534fe392`)
+Target: mod-playerbots fork (rebuild), deploy Y:. **mod-playerbots only, no core change, NO new files** (no CMake reconfigure).
 
----
+## Problem
 
-## 1. Problem (root cause — code-proven, live-sized)
+RaidSim's 3 broadcast messages (start / stop / loot) are sent via `Guild::BroadcastToGuild`,
+i.e. into the **raiding bot guild's guild chat only**. RaidSim guilds are bot-only — no human is
+ever a member — so nobody can read them (dead from a player POV). Config is already ON
+(`RaidSim.Broadcast` / `BroadcastStartStop` / `BroadcastLoot` = 1). The wording is also
+context-free (omits guild name; loot omits raid name; item is plain text, not a clickable link).
 
-RaidSim forms real, DB-persisted groups (`Group::Create` + `sGroupMgr->AddGroup` write `groups`/`group_member`). Teardown relies entirely on in-memory state (`_runs`, `_raiding`):
+## Goal
 
-1. **Restart creates orphans.** On worldserver shutdown mid-run, `_runs`/`_raiding` are lost. The persisted groups reload on next boot with no active run backing them and no teardown ever scheduled.
-2. **They never self-heal — a grouping-starvation deadlock.** The only orphan-disband is `RandomPlayerbotMgr::ProcessBot(Player*)` at `RandomPlayerbotMgr.cpp:1573-1578` ("remove from group since leader is random bot"). That overload is reached only via `RandomBotUpdateAction`, whose `isUseful()` arms the "random bot update" AI flag **only behind the group-guard at `RandomPlayerbotMgr.cpp:1477`** (`if (player->GetGroup() || player->HasUnitState(UNIT_STATE_IN_FLIGHT)) return false;`). A grouped bot is therefore excluded from the very update cycle that arms the flag that fires the action that would disband it. Closed loop: grouped → never scheduled → never disbanded → stays grouped, regardless of whether the leader is online.
+Make start/stop/loot announcements **realm-wide** (yellow `[System]` line every online player sees)
+and readable, carrying guild + raid name and a clickable, quality-colored item link, with a
+**quality gate** on loot so a populated realm with many bot guilds isn't flooded. Preserve the
+existing guild-chat path behind a toggle (zero behaviour change when the new mode is off).
 
-**Live evidence (2026-06-21, `pbtest_characters`):** 141 persisted groups / 652 grouped bots; 129 groups (~592 bots) have all members on continent maps (0/1/530/571) = orphans, vs only 12 groups / 60 bots on instance maps (the ~11 legit in-flight runs). Size signature: 97×5-member, 36×4, 7×3, 1×2.
+## Design
 
----
+### New config fields (2)
 
-## 2. Goal
-
-Give RaidSim a **leader-independent orphan reaper** that disbands any all-random-bot group not backed by a live `_run`, running **entirely outside** the starved per-bot update loop (sidesteps the deadlock). It clears the backlog and keeps it clear across restarts — with **zero measurable world-tick cost** (budgeted drip, never a storm). No change to legitimate in-flight runs, real-player groups, or any chat/gear behaviour.
-
----
-
-## 3. Performance contract (FIRST-CLASS — "absolutely painless for world lag")
-
-The reaper runs on the world thread (`RaidSimulationMgr::Update`). The hazard is the **boot pass**: disbanding ~129 groups at once is a guaranteed spike. Mandatory mitigations (mirror the shipped `gearfloor-tick-throttle` drain and PopDyn `DripDrain`):
-
-- **Budgeted drip.** Disband at most `RaidSim.ReaperBatch` groups per reaper tick (default 3), draining over many ticks. A 129-orphan boot backlog must drain with **no correlated Perf.log world-tick spike**.
-- **Bounded cadence.** Reaper work happens on a `RaidSim.ReaperInterval` timer (default 120 s), not every raw tick. The per-tick disband budget caps cost even during the drain.
-- **Cheap predicate.** Per-group check uses only in-memory lookups (CharacterCache account id + random-account-set membership); **no per-member DB query**.
-- **No lock held across `Group::Disband`.** The reaper takes `_mutex` only to advance its own timer and snapshot the active-run group-GUID set; it **releases the lock before** scanning groups and disbanding. `Group::Disband` does not re-enter RaidSim, so this is safe.
-
-Acceptance is gated on a live Y: `Perf.log` proof that the boot drain produces no correlated tick spike (master task).
-
----
-
-## 4. Confirmed core/fork APIs (verified against the real tip — NOT the charter's assumptions)
-
-| Need | Confirmed signature / fact | Source |
-|---|---|---|
-| Iterate all groups | **`GroupMgr::GroupStore` is `protected` and there is NO public `GetGroupStore()`** (charter assumption WRONG). `Group* GetGroupByGUID(ObjectGuid::LowType guid) const;` is public. | `acore/src/server/game/Groups/GroupMgr.h:32-48` |
-| A bot's group | `Group* Player::GetGroup()` (existing, used everywhere) | core |
-| Group GUID | `ObjectGuid Group::GetGUID() const;` | `Group.h:221` |
-| Group kind predicates | `bool isLFGGroup(bool restricted=false)`, `bool isBGGroup()`, `bool isBFGroup()`, `bool isRaidGroup()` | `Group.h:213-216` |
-| Group members (offline-safe) | `MemberSlotList const& GetMemberSlots() const` → `struct MemberSlot { ObjectGuid guid; std::string name; ... }`; `MemberSlotList = std::list<MemberSlot>` | `Group.h:171-179, 242` |
-| Member count | `uint32 GetMembersCount() const` | `Group.h:245` |
-| Account id for a guid (offline-safe) | `uint32 sCharacterCache->GetCharacterAccountIdByGuid(ObjectGuid guid) const;` | `acore/.../Cache/CharacterCache.h:75` |
-| Random-bot account test | `bool PlayerbotAIConfig::IsInRandomAccountList(uint32 id);` (impl `PlayerbotAIConfig.cpp:1047`) | `PlayerbotAIConfig.h:212` |
-| Disband a group | `void Group::Disband(bool hideDestroy=false)` (used today at formation `:277` and teardown `:368`) | `Group.h` / `RaidSimulationMgr.cpp` |
-| Online-bot enumeration | `ObjectAccessor::GetPlayers()` (already used by `Update()` scheduler at `RaidSimulationMgr.cpp:899`) | core |
-
-`#include "GroupMgr.h"` and `#include "Group.h"` are **already present** in `RaidSimulationMgr.cpp:11-12`. `CharacterCache` must be added (`#include "CharacterCache.h"`).
-
----
-
-## 5. Design — how groups are enumerated (DEVIATION from charter, justified)
-
-The charter assumed `GroupMgr::GetGroupStore()` exists for an all-groups sweep. **It does not** — `GroupStore` is `protected` with no public accessor, and this lane may not edit the core repo. The reaper therefore enumerates **candidate groups via online playerbots**, which is mod-playerbots-only and matches the perf contract:
-
-1. Snapshot active-run group GUIDs under `_mutex`, then release.
-2. Iterate `ObjectAccessor::GetPlayers()`; for each in-world bot with a `PlayerbotAI`, take `Player::GetGroup()`.
-3. Dedupe candidate groups by `Group::GetGUID()` into a local set (so each group is examined once).
-4. Apply the orphan predicate (§6) to each distinct candidate group; collect orphans.
-5. Disband up to `ReaperBatch` of them this tick (drip; the rest next tick).
-
-**Why this is sufficient on this realm:** bots autologin (`RandomBotAutologin`) and remain in-world parked/wandering — every orphan group's members are in-world (the live evidence shows 592 grouped bots present on continent maps). A group only causes the starvation harm when its members are *in-world* (the starved update cycle is for in-world bots), so reaping exactly the in-world-backed groups fixes exactly the harmful set. An all-offline orphan group (members logged out) causes no in-world starvation and will be reaped the moment any member logs back in. This is documented as the one accepted limitation vs. a full GroupStore sweep, and it requires no core edit.
-
-> Implementation note for a future lane: if reaping fully-offline orphan groups is ever needed, the right move is a separate charter adding a public `GroupMgr::GetGroupStore()` core accessor — **out of scope here.**
-
----
-
-## 6. Orphan predicate
-
-Disband group `g` **iff ALL** hold:
-
-1. **Normal party/raid** — `!g->isLFGGroup() && !g->isBGGroup() && !g->isBFGroup()`. (LFG/BG/BF groups are dungeon-finder/battleground machinery, never RaidSim's.)
-2. **All-random-bot** — for **every** `MemberSlot ms` in `g->GetMemberSlots()`: `sPlayerbotAIConfig.IsInRandomAccountList(sCharacterCache->GetCharacterAccountIdByGuid(ms.guid))` is true. The first member whose account is NOT in the random list → the group is **never** touched. (Works for offline members too, unlike `IsRandomBot(LowType)` which needs `currentBots`.) An empty member list (degenerate) is treated as NOT all-bot → skip.
-3. **Not a live run** — `g->GetGUID()` is NOT in the snapshotted active-run group-GUID set (§5 step 1).
-
-All three are pure in-memory lookups; no DB query per member.
-
----
-
-## 7. `ActiveRun.groupGuid` — record the live group
-
-Add `ObjectGuid groupGuid;` to `struct ActiveRun` (`RaidSimulationMgr.h:69-82`).
-
-- **Set it** in `RaidSimFormationOperation::Execute` (`RaidSimulationMgr.cpp:248`) **right after** the successful `group->Create(leader)` + `sGroupMgr->AddGroup(group)` (`:280-286`), by writing the new group's GUID back into the run. Because the formation op runs asynchronously on the world-thread processor (queued from `LaunchRun`), the op must reach the run via the manager: give `RaidSimulationMgr` a small setter `void SetRunGroupGuid(uint32 guildId, ObjectGuid groupGuid);` (locks `_mutex`, finds `_runs[guildId]` if present, sets `groupGuid`) and pass `guildId` into the formation op so it can call `sRaidSimulationMgr.SetRunGroupGuid(m_guildId, group->GetGUID())`. The op already has the leader; thread `guildId` through its ctor.
-  - Predicate rule 3 (§6) reads `groupGuid` from each `_runs` entry to build the active-run GUID set.
-- **Use it to harden teardown** (§8).
-
-> Why the async setter is required: `groupGuid` cannot be set synchronously in `LaunchRun` because the `Group` does not exist until the formation op runs on the world-thread processor. Keep `guildId` (not a raw `ActiveRun*`) across the async boundary to avoid a dangling pointer.
-
-The active-run GUID set for rule 3 = `{ run.groupGuid : run in _runs, run.groupGuid not empty }`. A run whose formation op has not yet executed has an empty `groupGuid` and thus no group to confuse the reaper with — excluding empty is correct.
-
----
-
-## 8. Teardown hardening (disband-by-GUID)
-
-In `RaidSimTeardownOperation::Execute` (`RaidSimulationMgr.cpp:349-373`), the current disband is:
+In `src/PlayerbotAIConfig.h`, in the contiguous `raidSim*` block (after `raidSimBroadcastLoot`,
+near the orphan-reaper fields):
 
 ```cpp
-if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
-    if (Group* g = leader->GetGroup())
-        g->Disband(true);
+bool   raidSimBroadcastRealmWide;      // new mode: realm-wide [System] lines vs legacy guild chat
+uint32 raidSimBroadcastLootMinQuality; // loot quality gate (realm-wide path only); proto->Quality >= this
 ```
 
-This silently no-ops if the leader is momentarily unresolved (logged out / mid-teleport). Harden it to disband by recorded group GUID, falling back to the leader path:
+In `src/PlayerbotAIConfig.cpp`, immediately after the existing `raidSimBroadcastLoot` read
+(currently line 456), matching the neighbours' `GetOption` style:
 
 ```cpp
-Group* g = nullptr;
-if (m_groupGuid)
-    g = sGroupMgr->GetGroupByGUID(m_groupGuid.GetCounter());
-if (!g)
+raidSimBroadcastRealmWide      = sConfigMgr->GetOption<bool>("RaidSim.BroadcastRealmWide", true);
+raidSimBroadcastLootMinQuality = sConfigMgr->GetOption<uint32>("RaidSim.BroadcastLootMinQuality", 3);
+```
+
+- `RaidSim.BroadcastRealmWide` default **true** (new behaviour on by default).
+- `RaidSim.BroadcastLootMinQuality` default **3** (Rare/blue). 0 = announce everything.
+
+Note: existing bool toggles in the RaidSim block use `GetOption<bool>`; ints use `GetOption<int32>`.
+The min-quality field is a `uint32` quality value (never negative) → `GetOption<uint32>`, matching
+the field type cleanly.
+
+### Includes to add (in `RaidSimulationMgr.cpp`)
+
+Already present: `Chat.h`, `Guild.h`, `GuildMgr.h`, `ItemTemplate.h`, `ObjectMgr.h`, `Player.h`,
+`PlayerbotAIConfig.h`. **Add:**
+
+```cpp
+#include "ChatHelper.h"        // ChatHelper::FormatItem
+#include "WorldSessionMgr.h"   // sWorldSessionMgr->SendGlobalMessage
+#include "WorldPacket.h"       // local WorldPacket stack object
+```
+
+Confirmed: across the module, `ChatHelper.h` is included as `#include "ChatHelper.h"` (build adds
+its dir to the include path; e.g. `src/Bot/PlayerbotAI.cpp`). `WorldSessionMgr.h` is included the
+same way elsewhere (`src/Bot/PlayerbotMgr.cpp:37`). Files that build a stack `WorldPacket` include
+`WorldPacket.h` explicitly (e.g. `AcceptInvitationAction.cpp`), so we add it even though Chat.h takes
+`WorldPacket&` by reference.
+
+### The realm-wide send (CORRECTED — the charter's call was wrong)
+
+Verified `acore/src/server/game/Chat/Chat.h:51`:
+
+```cpp
+static void BuildChatPacket(
+    WorldPacket& data, ChatMsg msgtype, std::string_view message, Language language = LANG_UNIVERSAL,
+    PlayerChatTag chatTag = CHAT_TAG_NONE, ObjectGuid const& senderGuid = ObjectGuid(), ...);
+```
+
+→ **message is the 3rd arg, language the 4th.** The correct realm-wide send is:
+
+```cpp
+WorldPacket data;
+ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, msg);   // language defaults LANG_UNIVERSAL
+sWorldSessionMgr->SendGlobalMessage(&data);
+```
+
+`sWorldSessionMgr` is `#define sWorldSessionMgr WorldSessionMgr::Instance()` returning
+`WorldSessionMgr*` (→ `->`). `SendGlobalMessage(WorldPacket const* packet, WorldSession* self =
+nullptr, TeamId = TEAM_NEUTRAL)` at `WorldSessionMgr.h:82`. `msg` is a `std::string` (binds to
+`std::string_view`).
+
+### Per-site branch structure
+
+Each of the 3 sites keeps its **existing outer guard** wrapping BOTH branches. The new code is a
+branch on `raidSimBroadcastRealmWide`:
+
+```
+if (<existing outer guard: raidSimBroadcast && raidSimBroadcast{StartStop|Loot}>)
+{
+    if (sPlayerbotAIConfig.raidSimBroadcastRealmWide)
+        <realm-wide path: build msg, BuildChatPacket, SendGlobalMessage>
+    else
+        <legacy BroadcastToGuild path — BYTE-IDENTICAL to today>
+}
+```
+
+Both start/stop legacy and realm-wide branches need the `Guild*` (legacy calls
+`guild->BroadcastToGuild`; realm-wide needs `guild->GetName()`). So the `if (Guild* guild = ...)`
+lookup stays and the `raidSimBroadcastRealmWide` branch sits **inside** it. If `guild` is null,
+neither branch runs (the existing `if (Guild* guild = ...)` short-circuits) — graceful, no crash.
+
+### Site 1 — START (`RaidSimFormationOperation::Execute`, currently :323-325)
+
+Scope: `leader` (Player*), `m_label` (std::string), `guild` (Guild*).
+
+```cpp
+if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
+    if (Guild* guild = sGuildMgr->GetGuildById(leader->GetGuildId()))
+    {
+        if (sPlayerbotAIConfig.raidSimBroadcastRealmWide)
+        {
+            std::string msg = std::string(guild->GetName()) + " has set out for " + m_label + ".";
+            WorldPacket data;
+            ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, msg);
+            sWorldSessionMgr->SendGlobalMessage(&data);
+        }
+        else
+            guild->BroadcastToGuild(leader->GetSession(), false, "We set out for " + m_label + ".", LANG_UNIVERSAL);
+    }
+```
+
+Message: `"<Guild> has set out for <Raid>."`
+
+### Site 2 — STOP (`RaidSimTeardownOperation::Execute`, currently :356-359)
+
+Scope: `m_leaderGuid` → `leader` (Player*, via `ObjectAccessor::FindPlayer`), `m_label`, `guild`.
+
+```cpp
+if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
     if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
-        g = leader->GetGroup();
-if (g)
-    g->Disband(true);
+        if (Guild* guild = sGuildMgr->GetGuildById(leader->GetGuildId()))
+        {
+            if (sPlayerbotAIConfig.raidSimBroadcastRealmWide)
+            {
+                std::string msg = std::string(guild->GetName()) + " returns from " + m_label + ".";
+                WorldPacket data;
+                ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, msg);
+                sWorldSessionMgr->SendGlobalMessage(&data);
+            }
+            else
+                guild->BroadcastToGuild(leader->GetSession(), false, "We return from " + m_label + ".", LANG_UNIVERSAL);
+        }
 ```
 
-`GetGroupByGUID` takes `ObjectGuid::LowType` → pass `m_groupGuid.GetCounter()`. Thread the recorded `run.groupGuid` into `RaidSimTeardownOperation` (new ctor param `ObjectGuid groupGuid`); `EndRun` (`:684-688`) builds the op and already has the full `ActiveRun run`, so it passes `run.groupGuid`. Null-guard everything (`GetGroupByGUID` can return null; `FindPlayer` can return null).
+Message: `"<Guild> returns from <Raid>."`
 
----
+### Site 3 — LOOT (`RaidSimulationMgr::AwardLoot`, currently :1214-1217)
 
-## 9. Reaper wiring in `Update()`
+This point is reached **only on a successful equip** (the `continue` filters above mean non-upgrades
+never get here), so "equips" is definitively correct (decision 3). Scope: `run.guildName`,
+`run.label`, `bot` (Player*), `proto` (ItemTemplate const*), `itemName`, `guild`.
 
-`RaidSimulationMgr::Update(uint32 diff)` (`:856-894`) **holds `_mutex` across its whole body** (`std::lock_guard` at `:861`) and has early `return`s (`:893`). The reaper must NOT call `Group::Disband` under that lock, and must run regardless of the scheduler's early returns.
+```cpp
+if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastLoot)
+    if (Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId()))
+    {
+        if (sPlayerbotAIConfig.raidSimBroadcastRealmWide)
+        {
+            if (proto && proto->Quality >= sPlayerbotAIConfig.raidSimBroadcastLootMinQuality)
+            {
+                std::string msg = bot->GetName() + " of " + run.guildName + " equips " +
+                                  ChatHelper::FormatItem(proto) + " in " + run.label + ".";
+                WorldPacket data;
+                ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, msg);
+                sWorldSessionMgr->SendGlobalMessage(&data);
+            }
+        }
+        else
+            guild->BroadcastToGuild(bot->GetSession(), false, bot->GetName() + " receives " + itemName + ".",
+                                    LANG_UNIVERSAL);
+    }
+```
 
-Chosen structure — **call `ReconcileOrphans(diff)` at the very top of `Update()`**, after the `raidSimEnable` check (`:858-859`) and before the existing `lock_guard` (`:861`). This keeps the reaper's timer and lock fully independent of the scheduler, leaves the existing scheduler body byte-unchanged, and is unaffected by the scheduler's early returns.
+Message: `"<Bot> of <Guild> equips <[ItemLink]> in <Raid>."`
 
-`ReconcileOrphans(uint32 diff)`:
+Quality gate (realm-wide only): `proto && proto->Quality >= raidSimBroadcastLootMinQuality`.
+Confirmed `ItemTemplate.Quality` is `uint32` (`acore/.../ItemTemplate.h:626`). `ChatHelper::FormatItem`
+signature confirmed (`src/Bot/Cmd/ChatHelper.h:46`):
+`static std::string const FormatItem(ItemTemplate const* proto, uint32 count = 0, uint32 total = 0);`
+→ called `ChatHelper::FormatItem(proto)`, yields `|Hitem:...|h[Name]|h|r` (quality-colored).
 
-1. If `!sPlayerbotAIConfig.raidSimOrphanReaper` return.
-2. **Lock scope (short):** take `std::lock_guard<std::mutex> lock(_mutex);` in an inner block:
-   - `_reaperTimerMs += diff;`
-   - `if (_reaperTimerMs < sPlayerbotAIConfig.raidSimReaperInterval * 1000u) return;` (returns out of the function — the lock releases on the way out; fine).
-   - `_reaperTimerMs = 0;`
-   - Build `std::unordered_set<ObjectGuid> activeGroupGuids;` from `_runs`: insert each `run.groupGuid` that is not empty.
-   - End the inner block → **lock released.**
-3. **Lock-free scan:** build a candidate-group set from online bots — iterate `ObjectAccessor::GetPlayers()`; for each `Player* bot` that `IsInWorld()` and has `GET_PLAYERBOT_AI(bot)`, take `Group* grp = bot->GetGroup()`; if `grp` and its `GetGUID()` not already seen (dedupe via a local `std::unordered_set<ObjectGuid>`), evaluate the predicate (§6) with `activeGroupGuids` for rule 3. Collect orphan `Group*` into a vector; **stop collecting once it reaches `ReaperBatch`** (bounds the work).
-4. **Disband (lock-free):** `uint32 disbanded = 0; for (Group* g : orphans) { g->Disband(true); ++disbanded; }` (`orphans.size() <= ReaperBatch`).
-5. **Log** (§11) only when `disbanded > 0`.
+The `LOG_INFO("playerbots", "RaidSim: '{}' {} receives {} ({})", ...)` line at :1211-1212 and
+`itemName` are **left unchanged** (the legacy branch still uses `itemName`; the log is independent).
 
-Add a private field `uint32 _reaperTimerMs = 0;` next to `_schedTimerMs` (`RaidSimulationMgr.h:117`), and a private decl `void ReconcileOrphans(uint32 diff);` in the private-helpers area (near `:84-98`). The reaper's interval is fully independent of the 60 s scheduler.
+### conf.dist keys
 
-> Lock-discipline note for the reviewer: the only lock the reaper holds is the inner scope in step 2, which contains zero `Group`/`Player` mutation. Steps 3-4 (scan + `Disband`) run with no lock held. `_runs` is read only inside the locked snapshot. This satisfies the charter's "no lock held across disband."
-
----
-
-## 10. Config keys
-
-Three new keys, read in `PlayerbotAIConfig::Initialize()` next to the existing `raidSim*` block (`PlayerbotAIConfig.cpp:442-457`), with members declared next to the `raidSim*` block in `PlayerbotAIConfig.h` (`:686-702`):
-
-| Key | Type | Default | Member |
-|---|---|---|---|
-| `RaidSim.OrphanReaper` | bool | `true` | `raidSimOrphanReaper` |
-| `RaidSim.ReaperInterval` | int32 (seconds) | `120` | `raidSimReaperInterval` |
-| `RaidSim.ReaperBatch` | int32 (groups/tick) | `3` | `raidSimReaperBatch` |
-
-Read with: `sConfigMgr->GetOption<bool>("RaidSim.OrphanReaper", true)`, `GetOption<int32>("RaidSim.ReaperInterval", 120)`, `GetOption<int32>("RaidSim.ReaperBatch", 3)` (match the existing `int32` style at `:443-452`). Member types: `bool raidSimOrphanReaper; uint32 raidSimReaperInterval; uint32 raidSimReaperBatch;`.
-
-**Conf template** (`conf/playerbots.conf.dist`): the `.dist` template currently has **no RaidSim block at all** (the live `RaidSim.*` keys exist only in the deployed `run/configs/modules/playerbots.conf`). The lane adds a small, self-contained RaidSim-reaper block to the `.dist` so the keys are documented for fresh installs. **AC parser breaks on trailing `#` inline comments** → every comment goes on its own line. Block to add (at the end of the file, or adjacent to other RaidSim/Population sections):
+In `conf/playerbots.conf.dist`, add a `RAIDSIM BROADCAST` block after the existing orphan-reaper
+block (which ends at line 2860 with `RaidSim.ReaperBatch = 3`). Comments on **their own lines** (AC
+parser breaks on trailing `#` inline comments):
 
 ```
 ###################################
-#    RAIDSIM ORPHAN REAPER
+#    RAIDSIM BROADCAST
 ###################################
 #
-#    RaidSim.OrphanReaper
-#        Leader-independent reaper that disbands all-random-bot groups left
-#        over from a restart (orphans not backed by a live run).
-#        Default: 1 (enabled)
+#    RaidSim.BroadcastRealmWide
+#        1 = start/stop/loot announcements are realm-wide [System] lines that every
+#            online player sees, carrying guild + raid name and a clickable item link.
+#        0 = legacy: messages go to the (bot-only) raiding guild's guild chat, old wording.
+#        The master RaidSim.Broadcast and per-event BroadcastStartStop/BroadcastLoot
+#        toggles still apply on top of this.
+#        Default: 1
 
-RaidSim.OrphanReaper = 1
+RaidSim.BroadcastRealmWide = 1
 
-#    RaidSim.ReaperInterval
-#        Seconds between reaper passes.
-#        Default: 120
+#    RaidSim.BroadcastLootMinQuality
+#        Minimum item quality for a realm-wide loot announcement (spam control).
+#        0=Poor 1=Common 2=Uncommon 3=Rare 4=Epic 5=Legendary.
+#        Only loot at or above this quality announces realm-wide. 0 = announce all.
+#        Has no effect on the legacy guild-chat path or when RaidSim.BroadcastLoot = 0.
+#        Default: 3 (Rare/blue and above)
 
-RaidSim.ReaperInterval = 120
-
-#    RaidSim.ReaperBatch
-#        Max orphan groups disbanded per reaper pass (drip; keeps the boot
-#        drain off the world-tick spike).
-#        Default: 3
-
-RaidSim.ReaperBatch = 3
+RaidSim.BroadcastLootMinQuality = 3
 ```
 
-> **Master-only deploy note (NOT this lane):** the live `run/configs/modules/playerbots.conf` (and the Y: copy `C:/server/w/configs/modules/playerbots.conf`) should get the same 3 keys appended to their RaidSim section. The coded defaults equal these values, so a missing key is safe (falls back to default + logs `Missing property`), but the keys should be present for tuning. Recorded as the final PLAN task.
+## Acceptance criteria → how met
 
----
+1. **Builds clean Release, no reconfigure, no C2xxx/LNK.** No new files; only existing files edited.
+   Corrected `BuildChatPacket` signature compiles (message 3rd arg). Includes added for the 3 new
+   symbols.
+2. **`BroadcastRealmWide=0` → 3 messages byte-identical to today.** The `else` branches are the
+   verbatim current `BroadcastToGuild` calls (same args, same wording "We set out for…", "We return
+   from…", "<bot> receives <item>."). No quality gate on the legacy path.
+3. **`=1` → human not in the bot guild sees yellow `[System]` lines** with correct guild+raid name and
+   clickable quality-colored item link. `CHAT_MSG_SYSTEM` + `SendGlobalMessage` reaches all online
+   sessions; `ChatHelper::FormatItem(proto)` gives the link.
+4. **`BroadcastLootMinQuality` gates loot** (default 3 → greens/whites suppressed; 0 = all;
+   `BroadcastLoot=0` = no loot lines, since the outer guard still requires `raidSimBroadcastLoot`).
+5. **Live-verifiable** via `.playerbots raidsim start <guild>` on a populated realm; master confirms
+   from a non-guild character (MASTER-ONLY step).
 
-## 11. Log line (boot-grep verify gate)
+## Out of scope (do NOT touch)
 
-In `ReconcileOrphans`, after disbanding, emit (only when `disbanded > 0`):
+- Any discard / "not taken" / "received but didn't equip" line (non-upgrades are a silent `continue`).
+- RaidSim award/equip logic, loot composition, any non-broadcast behaviour.
+- `ChatHelper::FormatItem`, `BroadcastToGuild`, `SendWorldText`, `BuildChatPacket`,
+  `SendGlobalMessage` themselves (consumed, not changed).
+- New files / timers / throttle (realm-wide chat is one cheap packet per event — start/stop are rare;
+  loot already gated to upgrades and now quality).
+- The `LOG_INFO` "RaidSim: '...' receives ... " server-log line (unchanged).
 
-```cpp
-LOG_INFO("playerbots", "RaidSim: reaper disbanded {} orphan group(s) ({} remaining)",
-         disbanded, remaining);
-```
+## Confirmed real facts (vs charter)
 
-- Use fmt `{}` placeholders, NOT `%d`/`%u` (the maintenance-gear-floor lesson).
-- `disbanded` = groups disbanded this pass; `remaining` = orphan candidates found this pass beyond the batch (i.e. backlog still to drain — computed as the count of orphans discovered minus `disbanded`; since scanning stops at `ReaperBatch`, track whether more were found by continuing a cheap count OR report `remaining` as best-effort). Simplest correct form: keep scanning to count all orphans found this pass (the predicate is cheap), but only disband the first `ReaperBatch`; then `remaining = totalOrphansFound - disbanded`. This makes the drip visible in `Playerbots.log` and is the perf-pacing proof for acceptance criterion 4.
-
-> Implementer choice: counting ALL orphans (for an accurate `remaining`) vs. stopping at `ReaperBatch` (cheaper) is a minor trade. Because the predicate is pure in-memory and the candidate set is bounded by online-bot count, **count all orphans** so `remaining` is accurate; still disband only `ReaperBatch`. This keeps the log honest about drain progress at negligible cost.
-
----
-
-## 12. Scope — OUT (do NOT touch)
-
-- The `RandomPlayerbotMgr` per-bot update loop / the `:1477` guard / `ProcessBot` / `RandomBotUpdateAction`. Do NOT try to fix the starvation there. Leave the existing `:1573-1578` auto-disband as-is.
-- Any change to run scheduling, formation, loot, or eligibility logic.
-- Persisting `_runs`/`_raiding` across restarts.
-- Off-thread disband / async DB (Player + Group mutation is world-thread-bound; the drip is the perf answer).
-- Core repo edits (no `GetGroupStore()` accessor — §5).
-- No new source files → no CMake reconfigure.
-
----
-
-## 13. Acceptance criteria → how met
-
-1. **Builds clean Release** (no new files / no reconfigure; no C2xxx/LNK; warnings OK, no /WX). All edits in existing `.cpp`/`.h`; new include `CharacterCache.h`. — Tasks 1-5; verified by master Task 6.
-2. **Predicate correctness on review** — §6: a group is disbanded only when all 3 rules hold; any group with a non-random account is never touched; an active in-flight run (its `groupGuid` recorded, §7) is never disbanded.
-3. **Functional (live Y:)** — after a restart taken with runs in-flight, the orphan backlog drains to ≈ live run count within a few reaper intervals (§9 drip); `.playerbots raidsim status runs=N` stays consistent (the reaper never touches `_runs`); in-flight runs survive (rule 3 + recorded `groupGuid`). — master Task 6.
-4. **PERFORMANCE (live Y: Perf.log)** — during the boot drain of a large backlog, no correlated world-tick spike; drain visibly paced via the `disbanded {} ({} remaining)` log (§11) and the `ReaperBatch`/`ReaperInterval` budget (§3, §9). — master Task 6.
-5. **Teardown disbands even when `leader->GetGroup()` is null** — §8 disband-by-GUID path with leader fallback.
+- `ChatHandler::BuildChatPacket` real signature has **message 3rd, language 4th** — the charter's
+  `(data, CHAT_MSG_SYSTEM, LANG_UNIVERSAL, nullptr, nullptr, msg)` was WRONG. Use
+  `BuildChatPacket(data, CHAT_MSG_SYSTEM, msg)`.
+- `ItemTemplate` quality field = `uint32 Quality;` (confirmed).
+- `ChatHelper.h` is included as `#include "ChatHelper.h"` across the module.
+- `WorldPacket.h` is added explicitly (module convention for stack `WorldPacket` objects).
