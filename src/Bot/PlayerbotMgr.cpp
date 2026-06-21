@@ -547,7 +547,9 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
             if (node)
             {
                 bot->TeleportTo(node->map_id, node->x, node->y, node->z, bot->GetOrientation());
-                LOG_DEBUG("playerbots",
+                // INFO (not DEBUG): Logger.playerbots=4 (INFO) suppresses DEBUG, and this
+                // one-shot-per-restart line is the grep gate for live verification.
+                LOG_INFO("playerbots",
                     "Bot {} cleaned up stale taxi flight on login, landed at node {}",
                     bot->GetName(), landNode);
             }
