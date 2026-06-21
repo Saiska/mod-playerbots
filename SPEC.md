@@ -1,216 +1,229 @@
-# Server Population Dynamics — As-Built Spec
+# SPEC — raidsim-orphan-reaper
 
-**Branch:** `feat/server-population-dynamics`
-**Module:** `mod-playerbots` (Saiska fork)
-**Date:** 2026-06-01
-**Design doc:** `asp-server-config/docs/superpowers/specs/2026-05-31-server-population-dynamics-design.md`
-**Plan:** `asp-server-config/docs/superpowers/plans/2026-06-01-server-population-dynamics.md`
-**Charter:** `asp-server-config/docs/charters/server-population-dynamics.md`
+**Branch:** `feat/raidsim-orphan-reaper` (cut off master tip `8e81a702`)
+**Target repo:** Saiska/mod-playerbots fork (in-tree `acore/modules/mod-playerbots`). Rebuild + deploy Y: (master-only).
+**Scope of this lane:** mod-playerbots source + the in-repo conf template only. Edit-only. No core edits, no new source files, no CMake reconfigure, no build/deploy.
 
 ---
 
-## Overview
+## 1. Problem (root cause — code-proven, live-sized)
 
-The realm grows with its real players. A monotonic, persisted real-player max-level **frontier** drives two things: (1) the total bot **count** target fed to the native random-bot engine, and (2) an up-only level **conveyor** that cycles bots from the bottom of the level range up toward the frontier. New bots always spawn at the bottom decade; a drift pass promotes bots +1 level when higher brackets need population; a prune pass recycles surplus level-80 bots. No bot is ever down-levelled. The system subsumes and replaces `mod-player-bot-level-brackets` (removed by the master at integration).
+RaidSim forms real, DB-persisted groups (`Group::Create` + `sGroupMgr->AddGroup` write `groups`/`group_member`). Teardown relies entirely on in-memory state (`_runs`, `_raiding`):
 
----
+1. **Restart creates orphans.** On worldserver shutdown mid-run, `_runs`/`_raiding` are lost. The persisted groups reload on next boot with no active run backing them and no teardown ever scheduled.
+2. **They never self-heal — a grouping-starvation deadlock.** The only orphan-disband is `RandomPlayerbotMgr::ProcessBot(Player*)` at `RandomPlayerbotMgr.cpp:1573-1578` ("remove from group since leader is random bot"). That overload is reached only via `RandomBotUpdateAction`, whose `isUseful()` arms the "random bot update" AI flag **only behind the group-guard at `RandomPlayerbotMgr.cpp:1477`** (`if (player->GetGroup() || player->HasUnitState(UNIT_STATE_IN_FLIGHT)) return false;`). A grouped bot is therefore excluded from the very update cycle that arms the flag that fires the action that would disband it. Closed loop: grouped → never scheduled → never disbanded → stays grouped, regardless of whether the leader is online.
 
-## Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS playerbots_population_state (
-  id               TINYINT NOT NULL PRIMARY KEY DEFAULT 1,
-  max_player_level TINYINT UNSIGNED NOT NULL DEFAULT 0
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-
-INSERT IGNORE INTO playerbots_population_state (id, max_player_level) VALUES (1, 0);
-```
-
-**File:** `data/sql/characters/updates/2026_06_01_00_population_state.sql`
-Auto-applied by AC dbupdater at worldserver boot. The row stores the single monotonic frontier value. Decoupled from raid-sim's `playerbots_raid_server_state` by design (no cross-feature schema dependency).
+**Live evidence (2026-06-21, `pbtest_characters`):** 141 persisted groups / 652 grouped bots; 129 groups (~592 bots) have all members on continent maps (0/1/530/571) = orphans, vs only 12 groups / 60 bots on instance maps (the ~11 legit in-flight runs). Size signature: 97×5-member, 36×4, 7×3, 1×2.
 
 ---
 
-## Frontier
+## 2. Goal
 
-`PopulationDynamicsMgr` (singleton, `sPopulationDynamicsMgr`) caches the frontier as `_frontier` (uint8).
-
-**Load:** `LoadFromDB()` — called once at world init (inside `PlayerbotsWorldScript::OnWorldInit`). Reads `max_player_level` from the state row into `_frontier`. If the row is absent (first boot), logs a warning and defaults to 0.
-
-**Feed:** `ConsiderPlayerLevel(Player*)` — caller is responsible for bot-filtering before calling. Wired at two call sites in `Playerbots.cpp`, both gated by `!player->GetSession()->IsBot()`:
-- `OnPlayerLogin` — fires when a real player logs in.
-- `OnPlayerLevelChanged` — fires when a real player levels up.
-
-Bots are excluded using `GetSession()->IsBot()` (not `GET_PLAYERBOT_AI()`) because PlayerbotAI is not yet attached to autologin bots at `OnPlayerLogin`.
-
-**Monotonic guarantee:** `ConsiderPlayerLevel` only updates `_frontier` when `lvl > _frontier`. The new value is immediately written to the DB via `PersistFrontier()` (`UPDATE playerbots_population_state SET max_player_level = {} WHERE id = 1`).
-
-**Disabled:** when `PopulationDynamics.Enable = 0`, `ConsiderPlayerLevel` returns early (frontier never advances; no DB writes).
+Give RaidSim a **leader-independent orphan reaper** that disbands any all-random-bot group not backed by a live `_run`, running **entirely outside** the starved per-bot update loop (sidesteps the deadlock). It clears the backlog and keeps it clear across restarts — with **zero measurable world-tick cost** (budgeted drip, never a storm). No change to legitimate in-flight runs, real-player groups, or any chat/gear behaviour.
 
 ---
 
-## Bracket Ladder
+## 3. Performance contract (FIRST-CLASS — "absolutely painless for world lag")
 
-Nine fixed brackets, computed by static helpers:
+The reaper runs on the world thread (`RaidSimulationMgr::Update`). The hazard is the **boot pass**: disbanding ~129 groups at once is a guaranteed spike. Mandatory mitigations (mirror the shipped `gearfloor-tick-throttle` drain and PopDyn `DripDrain`):
 
-| Bracket (b) | `BracketLower(b)` | `BracketUpper(b)` | Notes |
-|---|---|---|---|
-| 0 | 1 | 9 | Bottom inflow target for non-DKs |
-| 1 | 10 | 19 | |
-| 2 | 20 | 29 | |
-| 3 | 30 | 39 | |
-| 4 | 40 | 49 | |
-| 5 | 50 | 59 | Lowest bracket DKs can enter (spawn at 55) |
-| 6 | 60 | 69 | |
-| 7 | 70 | 79 | |
-| 8 | 80 | 80 | Top bracket; prune target |
+- **Budgeted drip.** Disband at most `RaidSim.ReaperBatch` groups per reaper tick (default 3), draining over many ticks. A 129-orphan boot backlog must drain with **no correlated Perf.log world-tick spike**.
+- **Bounded cadence.** Reaper work happens on a `RaidSim.ReaperInterval` timer (default 120 s), not every raw tick. The per-tick disband budget caps cost even during the drain.
+- **Cheap predicate.** Per-group check uses only in-memory lookups (CharacterCache account id + random-account-set membership); **no per-member DB query**.
+- **No lock held across `Group::Disband`.** The reaper takes `_mutex` only to advance its own timer and snapshot the active-run group-GUID set; it **releases the lock before** scanning groups and disbanding. `Group::Disband` does not re-enter RaidSim, so this is safe.
 
-`BracketOf(level)`: `>= 80` → 8; `< 10` → 0; otherwise `level / 10`.
-
-DKs spawn at level 55 (bracket 5) and only occupy brackets 5–8.
+Acceptance is gated on a live Y: `Perf.log` proof that the boot drain produces no correlated tick spike (master task).
 
 ---
 
-## Math
+## 4. Confirmed core/fork APIs (verified against the real tip — NOT the charter's assumptions)
 
-### Cap
-
-```
-C = min(80, max(MinCap, frontier + Headroom))
-```
-
-### Openness
-
-For bracket `b` with `[lo, hi]` and cap `C`:
-
-```
-openness = 1.0          if C >= hi
-openness = 0.0          if C < lo
-openness = (C - lo + 1) / (hi - lo + 1)   otherwise
-```
-
-### Targets
-
-```
-targets[b] = round(MaxPopulation * (BracketPct[b] / 100.0) * Openness(b, C))
-P = sum(targets[0..8])
-```
-
-Brackets above the cap have `Openness = 0`, so their targets are 0. This bounds the conveyor at the frontier.
-
----
-
-## Config Keys and Defaults
-
-| Key | Default | Notes |
+| Need | Confirmed signature / fact | Source |
 |---|---|---|
-| `PopulationDynamics.Enable` | `1` (true) | Master on/off switch |
-| `PopulationDynamics.MaxPopulation` | `2000` | Total bot count ceiling |
-| `PopulationDynamics.Headroom` | `10` | Levels above frontier the cap extends |
-| `PopulationDynamics.MinCap` | `20` | Floor for the cap regardless of frontier |
-| `PopulationDynamics.Period` | `300` | Tick interval in seconds |
-| `PopulationDynamics.DriftRate` | `0.02` | Fraction of per-faction deficit to promote each cycle |
-| `PopulationDynamics.MaxPromotionsPerCycle` | `10` | Hard ceiling on drift promotions AND prune removals per cycle |
-| `PopulationDynamics.Bracket1.Pct` | `6` | b0: levels 1–9 |
-| `PopulationDynamics.Bracket2.Pct` | `6` | b1: 10–19 |
-| `PopulationDynamics.Bracket3.Pct` | `6` | b2: 20–29 |
-| `PopulationDynamics.Bracket4.Pct` | `6` | b3: 30–39 |
-| `PopulationDynamics.Bracket5.Pct` | `6` | b4: 40–49 |
-| `PopulationDynamics.Bracket6.Pct` | `6` | b5: 50–59 |
-| `PopulationDynamics.Bracket7.Pct` | `6` | b6: 60–69 |
-| `PopulationDynamics.Bracket8.Pct` | `8` | b7: 70–79 |
-| `PopulationDynamics.Bracket9.Pct` | `50` | b8: level 80 |
+| Iterate all groups | **`GroupMgr::GroupStore` is `protected` and there is NO public `GetGroupStore()`** (charter assumption WRONG). `Group* GetGroupByGUID(ObjectGuid::LowType guid) const;` is public. | `acore/src/server/game/Groups/GroupMgr.h:32-48` |
+| A bot's group | `Group* Player::GetGroup()` (existing, used everywhere) | core |
+| Group GUID | `ObjectGuid Group::GetGUID() const;` | `Group.h:221` |
+| Group kind predicates | `bool isLFGGroup(bool restricted=false)`, `bool isBGGroup()`, `bool isBFGroup()`, `bool isRaidGroup()` | `Group.h:213-216` |
+| Group members (offline-safe) | `MemberSlotList const& GetMemberSlots() const` → `struct MemberSlot { ObjectGuid guid; std::string name; ... }`; `MemberSlotList = std::list<MemberSlot>` | `Group.h:171-179, 242` |
+| Member count | `uint32 GetMembersCount() const` | `Group.h:245` |
+| Account id for a guid (offline-safe) | `uint32 sCharacterCache->GetCharacterAccountIdByGuid(ObjectGuid guid) const;` | `acore/.../Cache/CharacterCache.h:75` |
+| Random-bot account test | `bool PlayerbotAIConfig::IsInRandomAccountList(uint32 id);` (impl `PlayerbotAIConfig.cpp:1047`) | `PlayerbotAIConfig.h:212` |
+| Disband a group | `void Group::Disband(bool hideDestroy=false)` (used today at formation `:277` and teardown `:368`) | `Group.h` / `RaidSimulationMgr.cpp` |
+| Online-bot enumeration | `ObjectAccessor::GetPlayers()` (already used by `Update()` scheduler at `RaidSimulationMgr.cpp:899`) | core |
 
-Config keys are 1-indexed (`Bracket1.Pct` maps to `b=0`, …, `Bracket9.Pct` maps to `b=8`).
-
-**Profile normalization:** at load, if the sum of the 9 `BracketPct` values does not equal 100, the code adds or subtracts `+1`/`-1` round-robin across non-zero brackets until the sum reaches 100. The normalized sum is logged at boot.
+`#include "GroupMgr.h"` and `#include "Group.h"` are **already present** in `RaidSimulationMgr.cpp:11-12`. `CharacterCache` must be added (`#include "CharacterCache.h"`).
 
 ---
 
-## Three Reconcile Flows (each `Period` seconds)
+## 5. Design — how groups are enumerated (DEVIATION from charter, justified)
 
-### 1. Bottom Inflow — `SetPopulationTarget(P)`
+The charter assumed `GroupMgr::GetGroupStore()` exists for an all-groups sweep. **It does not** — `GroupStore` is `protected` with no public accessor, and this lane may not edit the core repo. The reaper therefore enumerates **candidate groups via online playerbots**, which is mod-playerbots-only and matches the perf contract:
 
-`P` (computed from `ComputeTargets`) is passed to `RandomPlayerbotMgr::SetPopulationTarget(P)`, which clamps `P` to `[MinRandomBots, MaxRandomBots]` and writes it as the `bot_count` event with a TTL of `Period + 60` seconds (outlives one controller cycle). The native random-bot engine respects this event to decide how many bots to maintain online.
+1. Snapshot active-run group GUIDs under `_mutex`, then release.
+2. Iterate `ObjectAccessor::GetPlayers()`; for each in-world bot with a `PlayerbotAI`, take `Player::GetGroup()`.
+3. Dedupe candidate groups by `Group::GetGUID()` into a local set (so each group is examined once).
+4. Apply the orphan predicate (§6) to each distinct candidate group; collect orphans.
+5. Disband up to `ReaperBatch` of them this tick (drip; the rest next tick).
 
-New bots that spawn (via `RandomizeFirst`) enter at a random level in bracket 0 (levels 1–9). DKs enter at exactly level 55. This is an early-return path: when `populationDynamicsEnable` is true, `RandomizeFirst` skips the weighted level roll and the `disableRandomLevels` override and goes directly to `urand(lo, hi)`.
+**Why this is sufficient on this realm:** bots autologin (`RandomBotAutologin`) and remain in-world parked/wandering — every orphan group's members are in-world (the live evidence shows 592 grouped bots present on continent maps). A group only causes the starvation harm when its members are *in-world* (the starved update cycle is for in-world bots), so reaping exactly the in-world-backed groups fixes exactly the harmful set. An all-offline orphan group (members logged out) causes no in-world starvation and will be reaped the moment any member logs back in. This is documented as the one accepted limitation vs. a full GroupStore sweep, and it requires no core edit.
 
-### 2. Up-Only Drift — `DriftUp`
-
-**Goal:** move bots upward when higher brackets are under-populated.
-
-**Algorithm:**
-1. Compute per-faction deficit: for each `(faction f, bracket b)`, `deficit += max(0, targets[b]/2 - census.count[f][b])`.
-2. `budget = clamp(round(DriftRate * deficit), 0, MaxPromotionsPerCycle)`.
-3. Walk brackets low→high (`b = 0..7`), per faction. For each bracket `b`, check if any bracket `b+1..8` has `count[f][hb] < targets[hb]/2`. If so, promote the highest-level safe bots in bracket `b` by calling `IncreaseLevel(bot)` (+1 level, `PlayerbotFactory.Randomize(true)` re-gear) until `budget` is exhausted.
-
-A bot's level is never lowered. `budget = 0` when the population is already well-distributed.
-
-### 3. Top-Prune — `PruneTop`
-
-**Goal:** recycle surplus level-80 bots when bracket 8 is over-target.
-
-**Algorithm:** per faction, if `census.count[f][8] > targets[8]/2`, remove up to `MaxPromotionsPerCycle` safe level-80 bots via `sRandomPlayerbotMgr.Remove(bot)` (immediate delete + slot recycle). The same `MaxPromotionsPerCycle` constant is reused as the ceiling.
-
-**Thrash prevention:** drift and prune operate on the same census snapshot taken before either runs. Drift only promotes bots in brackets 0–7 when higher brackets are in deficit; prune only removes bots in bracket 8 when that bracket is in surplus. The conditions are mutually exclusive on any given census, so bracket 8 cannot be simultaneously promoted-into and pruned in one tick.
+> Implementation note for a future lane: if reaping fully-offline orphan groups is ever needed, the right move is a separate charter adding a public `GroupMgr::GetGroupStore()` core accessor — **out of scope here.**
 
 ---
 
-## `IsSafeBot` Predicate
+## 6. Orphan predicate
 
-A bot is eligible for drift promotion or top-prune only if all of the following hold:
+Disband group `g` **iff ALL** hold:
 
-- Session exists and is not logging out; not during `RemoveFromWorld`.
-- `IsInWorld() && IsAlive()`.
-- Not in combat.
-- Not in a battleground, arena, random LFG dungeon, or battleground queue.
-- Not in flight.
-- Not on a dungeon/instance map (catches raid-sim parked bots).
-- Not tracked as actively raiding by `sRaidSimulationMgr.IsRaiding(guid)`.
-- Not in a group that contains at least one real (non-bot) online player.
+1. **Normal party/raid** — `!g->isLFGGroup() && !g->isBGGroup() && !g->isBFGroup()`. (LFG/BG/BF groups are dungeon-finder/battleground machinery, never RaidSim's.)
+2. **All-random-bot** — for **every** `MemberSlot ms` in `g->GetMemberSlots()`: `sPlayerbotAIConfig.IsInRandomAccountList(sCharacterCache->GetCharacterAccountIdByGuid(ms.guid))` is true. The first member whose account is NOT in the random list → the group is **never** touched. (Works for offline members too, unlike `IsRandomBot(LowType)` which needs `currentBots`.) An empty member list (degenerate) is treated as NOT all-bot → skip.
+3. **Not a live run** — `g->GetGUID()` is NOT in the snapshotted active-run group-GUID set (§5 step 1).
 
-**Deliberate simplification:** guild adjacency (whether a bot shares a guild with a real player) was part of the removed `mod-player-bot-level-brackets` module's original design. The implementation reduces this to GROUP adjacency only (the load-bearing real-player guard). A guild check can be added later if live testing shows real players guilded with bots experiencing unwanted re-levelling.
+All three are pure in-memory lookups; no DB query per member.
 
 ---
 
-## Wiring in `Playerbots.cpp`
+## 7. `ActiveRun.groupGuid` — record the live group
 
-| Hook | What it does |
-|---|---|
-| `PlayerbotsWorldScript::OnWorldInit` | Calls `sPopulationDynamicsMgr.LoadFromDB()` at world startup (alongside `sRaidSimulationMgr.LoadFromDB()`). |
-| `PlayerbotsWorldScript::OnUpdate(diff)` | Calls `sPopulationDynamicsMgr.Update(diff)` every world tick. |
-| `PlayerbotsScript::OnPlayerLogin` | If `!IsBot()`, calls `sPopulationDynamicsMgr.ConsiderPlayerLevel(player)`. |
-| `PlayerbotsScript::OnPlayerLevelChanged` | If `!IsBot()`, calls `sPopulationDynamicsMgr.ConsiderPlayerLevel(player)`. |
+Add `ObjectGuid groupGuid;` to `struct ActiveRun` (`RaidSimulationMgr.h:69-82`).
 
----
+- **Set it** in `RaidSimFormationOperation::Execute` (`RaidSimulationMgr.cpp:248`) **right after** the successful `group->Create(leader)` + `sGroupMgr->AddGroup(group)` (`:280-286`), by writing the new group's GUID back into the run. Because the formation op runs asynchronously on the world-thread processor (queued from `LaunchRun`), the op must reach the run via the manager: give `RaidSimulationMgr` a small setter `void SetRunGroupGuid(uint32 guildId, ObjectGuid groupGuid);` (locks `_mutex`, finds `_runs[guildId]` if present, sets `groupGuid`) and pass `guildId` into the formation op so it can call `sRaidSimulationMgr.SetRunGroupGuid(m_guildId, group->GetGUID())`. The op already has the leader; thread `guildId` through its ctor.
+  - Predicate rule 3 (§6) reads `groupGuid` from each `_runs` entry to build the active-run GUID set.
+- **Use it to harden teardown** (§8).
 
-## Verification Log Lines
+> Why the async setter is required: `groupGuid` cannot be set synchronously in `LaunchRun` because the `Group` does not exist until the formation op runs on the world-thread processor. Keep `guildId` (not a raw `ActiveRun*`) across the async boundary to avoid a dangling pointer.
 
-All lines are logged at `LOG_INFO("playerbots", ...)` → `Playerbots.log`.
-
-| Event | Log line pattern |
-|---|---|
-| Config loaded | `PopDyn: config loaded — enable=.. Pmax=.. headroom=.. minCap=.. period=..s drift=.. maxPromo=.. profile=[..] sum=100` |
-| Frontier loaded | `PopDyn: loaded frontier=N.` |
-| Frontier row absent | `PopDyn: playerbots_population_state row absent; frontier defaulting to 0.` |
-| Frontier advanced | `PopDyn: frontier advanced to N.` |
-| Tick fired | `PopDyn tick: F=.. C=.. P=.. targets=[b0,b1,b2,b3,b4,b5,b6,b7,b8]` |
-| Census taken | `PopDyn census: total=.. A=[b0..b8] H=[b0..b8]` |
-| Drift result | `PopDyn drift: promoted=.. (driftRate=.. cycleCap=..)` |
-| Prune result | `PopDyn prune: removed=.. (target80=..)` |
+The active-run GUID set for rule 3 = `{ run.groupGuid : run in _runs, run.groupGuid not empty }`. A run whose formation op has not yet executed has an empty `groupGuid` and thus no group to confuse the reaper with — excluding empty is correct.
 
 ---
 
-## Master Integration Actions (not this lane)
+## 8. Teardown hardening (disband-by-GUID)
 
-The following steps are performed by the master after merging this branch:
+In `RaidSimTeardownOperation::Execute` (`RaidSimulationMgr.cpp:349-373`), the current disband is:
 
-1. Add `PopulationDynamics.*` conf block to `asp-server-config` and apply to live `run/configs/modules/playerbots.conf`.
-2. Set `AiPlayerbot.SyncLevelWithPlayers = 0` (conveyors conflicts with native level-sync).
-3. Set wide `MinRandomBots` / `MaxRandomBots` envelope so `SetPopulationTarget` has room to operate.
-4. Remove `mod-player-bot-level-brackets`: delete from clone-list, remove `acore/modules/mod-player-bot-level-brackets/`, reconfigure CMake (`cmake acore/build`), remove its conf file.
-5. `DROP TABLE bot_level_brackets_guild_tracker` (if exists) in `pbtest_characters`.
-6. Build: `cmake --build acore/build --config Release --target worldserver --parallel`.
-7. Deploy: stop worldserver, copy binary to `run/`, restart.
-8. Verify via log lines above + in-game census.
-9. Merge branch, push, update integration log.
+```cpp
+if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
+    if (Group* g = leader->GetGroup())
+        g->Disband(true);
+```
+
+This silently no-ops if the leader is momentarily unresolved (logged out / mid-teleport). Harden it to disband by recorded group GUID, falling back to the leader path:
+
+```cpp
+Group* g = nullptr;
+if (m_groupGuid)
+    g = sGroupMgr->GetGroupByGUID(m_groupGuid.GetCounter());
+if (!g)
+    if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
+        g = leader->GetGroup();
+if (g)
+    g->Disband(true);
+```
+
+`GetGroupByGUID` takes `ObjectGuid::LowType` → pass `m_groupGuid.GetCounter()`. Thread the recorded `run.groupGuid` into `RaidSimTeardownOperation` (new ctor param `ObjectGuid groupGuid`); `EndRun` (`:684-688`) builds the op and already has the full `ActiveRun run`, so it passes `run.groupGuid`. Null-guard everything (`GetGroupByGUID` can return null; `FindPlayer` can return null).
+
+---
+
+## 9. Reaper wiring in `Update()`
+
+`RaidSimulationMgr::Update(uint32 diff)` (`:856-894`) **holds `_mutex` across its whole body** (`std::lock_guard` at `:861`) and has early `return`s (`:893`). The reaper must NOT call `Group::Disband` under that lock, and must run regardless of the scheduler's early returns.
+
+Chosen structure — **call `ReconcileOrphans(diff)` at the very top of `Update()`**, after the `raidSimEnable` check (`:858-859`) and before the existing `lock_guard` (`:861`). This keeps the reaper's timer and lock fully independent of the scheduler, leaves the existing scheduler body byte-unchanged, and is unaffected by the scheduler's early returns.
+
+`ReconcileOrphans(uint32 diff)`:
+
+1. If `!sPlayerbotAIConfig.raidSimOrphanReaper` return.
+2. **Lock scope (short):** take `std::lock_guard<std::mutex> lock(_mutex);` in an inner block:
+   - `_reaperTimerMs += diff;`
+   - `if (_reaperTimerMs < sPlayerbotAIConfig.raidSimReaperInterval * 1000u) return;` (returns out of the function — the lock releases on the way out; fine).
+   - `_reaperTimerMs = 0;`
+   - Build `std::unordered_set<ObjectGuid> activeGroupGuids;` from `_runs`: insert each `run.groupGuid` that is not empty.
+   - End the inner block → **lock released.**
+3. **Lock-free scan:** build a candidate-group set from online bots — iterate `ObjectAccessor::GetPlayers()`; for each `Player* bot` that `IsInWorld()` and has `GET_PLAYERBOT_AI(bot)`, take `Group* grp = bot->GetGroup()`; if `grp` and its `GetGUID()` not already seen (dedupe via a local `std::unordered_set<ObjectGuid>`), evaluate the predicate (§6) with `activeGroupGuids` for rule 3. Collect orphan `Group*` into a vector; **stop collecting once it reaches `ReaperBatch`** (bounds the work).
+4. **Disband (lock-free):** `uint32 disbanded = 0; for (Group* g : orphans) { g->Disband(true); ++disbanded; }` (`orphans.size() <= ReaperBatch`).
+5. **Log** (§11) only when `disbanded > 0`.
+
+Add a private field `uint32 _reaperTimerMs = 0;` next to `_schedTimerMs` (`RaidSimulationMgr.h:117`), and a private decl `void ReconcileOrphans(uint32 diff);` in the private-helpers area (near `:84-98`). The reaper's interval is fully independent of the 60 s scheduler.
+
+> Lock-discipline note for the reviewer: the only lock the reaper holds is the inner scope in step 2, which contains zero `Group`/`Player` mutation. Steps 3-4 (scan + `Disband`) run with no lock held. `_runs` is read only inside the locked snapshot. This satisfies the charter's "no lock held across disband."
+
+---
+
+## 10. Config keys
+
+Three new keys, read in `PlayerbotAIConfig::Initialize()` next to the existing `raidSim*` block (`PlayerbotAIConfig.cpp:442-457`), with members declared next to the `raidSim*` block in `PlayerbotAIConfig.h` (`:686-702`):
+
+| Key | Type | Default | Member |
+|---|---|---|---|
+| `RaidSim.OrphanReaper` | bool | `true` | `raidSimOrphanReaper` |
+| `RaidSim.ReaperInterval` | int32 (seconds) | `120` | `raidSimReaperInterval` |
+| `RaidSim.ReaperBatch` | int32 (groups/tick) | `3` | `raidSimReaperBatch` |
+
+Read with: `sConfigMgr->GetOption<bool>("RaidSim.OrphanReaper", true)`, `GetOption<int32>("RaidSim.ReaperInterval", 120)`, `GetOption<int32>("RaidSim.ReaperBatch", 3)` (match the existing `int32` style at `:443-452`). Member types: `bool raidSimOrphanReaper; uint32 raidSimReaperInterval; uint32 raidSimReaperBatch;`.
+
+**Conf template** (`conf/playerbots.conf.dist`): the `.dist` template currently has **no RaidSim block at all** (the live `RaidSim.*` keys exist only in the deployed `run/configs/modules/playerbots.conf`). The lane adds a small, self-contained RaidSim-reaper block to the `.dist` so the keys are documented for fresh installs. **AC parser breaks on trailing `#` inline comments** → every comment goes on its own line. Block to add (at the end of the file, or adjacent to other RaidSim/Population sections):
+
+```
+###################################
+#    RAIDSIM ORPHAN REAPER
+###################################
+#
+#    RaidSim.OrphanReaper
+#        Leader-independent reaper that disbands all-random-bot groups left
+#        over from a restart (orphans not backed by a live run).
+#        Default: 1 (enabled)
+
+RaidSim.OrphanReaper = 1
+
+#    RaidSim.ReaperInterval
+#        Seconds between reaper passes.
+#        Default: 120
+
+RaidSim.ReaperInterval = 120
+
+#    RaidSim.ReaperBatch
+#        Max orphan groups disbanded per reaper pass (drip; keeps the boot
+#        drain off the world-tick spike).
+#        Default: 3
+
+RaidSim.ReaperBatch = 3
+```
+
+> **Master-only deploy note (NOT this lane):** the live `run/configs/modules/playerbots.conf` (and the Y: copy `C:/server/w/configs/modules/playerbots.conf`) should get the same 3 keys appended to their RaidSim section. The coded defaults equal these values, so a missing key is safe (falls back to default + logs `Missing property`), but the keys should be present for tuning. Recorded as the final PLAN task.
+
+---
+
+## 11. Log line (boot-grep verify gate)
+
+In `ReconcileOrphans`, after disbanding, emit (only when `disbanded > 0`):
+
+```cpp
+LOG_INFO("playerbots", "RaidSim: reaper disbanded {} orphan group(s) ({} remaining)",
+         disbanded, remaining);
+```
+
+- Use fmt `{}` placeholders, NOT `%d`/`%u` (the maintenance-gear-floor lesson).
+- `disbanded` = groups disbanded this pass; `remaining` = orphan candidates found this pass beyond the batch (i.e. backlog still to drain — computed as the count of orphans discovered minus `disbanded`; since scanning stops at `ReaperBatch`, track whether more were found by continuing a cheap count OR report `remaining` as best-effort). Simplest correct form: keep scanning to count all orphans found this pass (the predicate is cheap), but only disband the first `ReaperBatch`; then `remaining = totalOrphansFound - disbanded`. This makes the drip visible in `Playerbots.log` and is the perf-pacing proof for acceptance criterion 4.
+
+> Implementer choice: counting ALL orphans (for an accurate `remaining`) vs. stopping at `ReaperBatch` (cheaper) is a minor trade. Because the predicate is pure in-memory and the candidate set is bounded by online-bot count, **count all orphans** so `remaining` is accurate; still disband only `ReaperBatch`. This keeps the log honest about drain progress at negligible cost.
+
+---
+
+## 12. Scope — OUT (do NOT touch)
+
+- The `RandomPlayerbotMgr` per-bot update loop / the `:1477` guard / `ProcessBot` / `RandomBotUpdateAction`. Do NOT try to fix the starvation there. Leave the existing `:1573-1578` auto-disband as-is.
+- Any change to run scheduling, formation, loot, or eligibility logic.
+- Persisting `_runs`/`_raiding` across restarts.
+- Off-thread disband / async DB (Player + Group mutation is world-thread-bound; the drip is the perf answer).
+- Core repo edits (no `GetGroupStore()` accessor — §5).
+- No new source files → no CMake reconfigure.
+
+---
+
+## 13. Acceptance criteria → how met
+
+1. **Builds clean Release** (no new files / no reconfigure; no C2xxx/LNK; warnings OK, no /WX). All edits in existing `.cpp`/`.h`; new include `CharacterCache.h`. — Tasks 1-5; verified by master Task 6.
+2. **Predicate correctness on review** — §6: a group is disbanded only when all 3 rules hold; any group with a non-random account is never touched; an active in-flight run (its `groupGuid` recorded, §7) is never disbanded.
+3. **Functional (live Y:)** — after a restart taken with runs in-flight, the orphan backlog drains to ≈ live run count within a few reaper intervals (§9 drip); `.playerbots raidsim status runs=N` stays consistent (the reaper never touches `_runs`); in-flight runs survive (rule 3 + recorded `groupGuid`). — master Task 6.
+4. **PERFORMANCE (live Y: Perf.log)** — during the boot drain of a large backlog, no correlated world-tick spike; drain visibly paced via the `disbanded {} ({} remaining)` log (§11) and the `ReaperBatch`/`ReaperInterval` budget (§3, §9). — master Task 6.
+5. **Teardown disbands even when `leader->GetGroup()` is null** — §8 disband-by-GUID path with leader fallback.

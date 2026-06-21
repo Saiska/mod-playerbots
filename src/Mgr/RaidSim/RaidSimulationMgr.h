@@ -79,6 +79,7 @@ private:
         std::string label;
         uint32 elapsedMs = 0;
         uint32 lootTimerMs = 0;
+        ObjectGuid groupGuid;             // the formed Group's GUID (set async by formation op)
     };
 
     // helpers (defined in the .cpp)
@@ -96,6 +97,8 @@ private:
     // (all npc_vendor edges) + chest mining (chest instances only), deduped. Logs composition.
     std::vector<uint32> BuildPool(RaidSimInstance const& inst);
     void  PersistBaseIlvl();
+    void  SetRunGroupGuid(uint32 guildId, ObjectGuid groupGuid);  // formation op -> record live group
+    void  ReconcileOrphans(uint32 diff);  // leader-independent orphan-group reaper (drip)
 
     std::mutex _mutex;
     uint16 _baseIlvl = 0;
@@ -115,6 +118,7 @@ private:
     std::unordered_map<uint32, uint32> _cooldownMs;         // guildId -> remaining cooldown ms
     std::unordered_set<ObjectGuid> _raiding;
     uint32 _schedTimerMs = 0;
+    uint32 _reaperTimerMs = 0;  // raidsim-orphan-reaper cadence
     std::unordered_set<uint32> _seenGuilds;  // guilds given a boot-spread initial cooldown already
 };
 

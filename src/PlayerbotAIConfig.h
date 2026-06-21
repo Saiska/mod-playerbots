@@ -700,6 +700,11 @@ public:
     bool   raidSimBroadcastStartStop;  // "sets out for X" / "returns from X" lines
     bool   raidSimBroadcastLoot;       // "<bot> receives <item>" lines
     bool   raidSimAnnounce;            // server-wide SendWorldText announce (debug/flavor; orthogonal)
+    // Orphan reaper (raidsim-orphan-reaper): leader-independent teardown of all-random-bot groups
+    // left over from a restart (orphans not backed by a live run). Budgeted drip; off the world tick.
+    bool   raidSimOrphanReaper;    // master switch for the reaper
+    uint32 raidSimReaperInterval;  // seconds between reaper passes
+    uint32 raidSimReaperBatch;     // max orphan groups disbanded per pass (drip budget)
 
     // Population dynamics (server-population-dynamics). Per-LEVEL targeting: each 10-level band has one
     // "bots per level" knob (populationBracket[b]); level 80 is the remainder (MaxPopulation - sum of bands).
