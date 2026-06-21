@@ -38,6 +38,7 @@
 #include "BroadcastHelper.h"
 #include "WorldSessionMgr.h"
 #include "DatabaseEnv.h"
+#include "DBCStores.h"
 
 class BotInitGuard
 {
@@ -530,10 +531,38 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
     }
     PlayerbotRepository::instance().Load(botAI);
 
-    if (master && !master->HasUnitState(UNIT_STATE_IN_FLIGHT))
+    if (!master || !master->HasUnitState(UNIT_STATE_IN_FLIGHT))
     {
-        bot->GetMotionMaster()->MovementExpired();
-        bot->CleanupAfterTaxiFlight();
+        // taxi-flight-stuck-login-cleanup: a masterless (random) bot that was mid-taxi-flight
+        // at restart reloads still UNIT_STATE_IN_FLIGHT with a persisted pending path. Plain
+        // CleanupAfterTaxiFlight() dismounts but does NOT relocate, so it would hover. Land it
+        // on the ground at the flight's destination node via the core's canonical TeleportTo
+        // (Player::TeleportTo does the full taxi teardown + relocate). Mastered bots keep the
+        // existing path unchanged (a mastered bot is summoned to its master right after login).
+        if (!master && !bot->m_taxi.empty())
+        {
+            // Capture the landing node BEFORE cleanup — CleanupAfterTaxiFlight clears m_taxi.
+            uint32 const landNode = bot->m_taxi.GetPath().back();
+            TaxiNodesEntry const* node = sTaxiNodesStore.LookupEntry(landNode);
+            if (node)
+            {
+                bot->TeleportTo(node->map_id, node->x, node->y, node->z, bot->GetOrientation());
+                LOG_DEBUG("playerbots",
+                    "Bot {} cleaned up stale taxi flight on login, landed at node {}",
+                    bot->GetName(), landNode);
+            }
+            else
+            {
+                // Path id didn't resolve — degrade to plain teardown (no worse than before).
+                bot->GetMotionMaster()->MovementExpired();
+                bot->CleanupAfterTaxiFlight();
+            }
+        }
+        else
+        {
+            bot->GetMotionMaster()->MovementExpired();
+            bot->CleanupAfterTaxiFlight();
+        }
     }
 
     // check activity
