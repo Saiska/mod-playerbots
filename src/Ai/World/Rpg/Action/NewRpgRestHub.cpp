@@ -41,30 +41,6 @@ const RestSubtypeDef kRestTable[RS_COUNT] =
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// C5 — real-player witness check. Iterates the bot's MAP player list and treats
-// only NON-bot players (null PlayerbotAI) within `range` of `pos` as witnesses.
-// Iterator form verified against core: Map::GetPlayers() -> MapRefMgr; each
-// MapReference exposes Player* GetSource() const (Reference<>::GetSource()).
-// ───────────────────────────────────────────────────────────────────────────
-bool NewRpgStatusUpdateAction::IsRealPlayerNear(WorldPosition const& pos, float range) const
-{
-    Map* map = bot->GetMap();
-    if (!map)
-        return false;
-    for (auto const& ref : map->GetPlayers())
-    {
-        Player* p = ref.GetSource();
-        if (!p || p == bot)
-            continue;
-        if (GET_PLAYERBOT_AI(p))
-            continue;   // skip bots; only real players witness
-        if (p->GetExactDist(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ()) <= range)
-            return true;
-    }
-    return false;
-}
-
-// ───────────────────────────────────────────────────────────────────────────
 // C1/R1 — witness-gated hub travel, tri-state. NEVER uses MoveFarTo's return as
 // an arrival predicate: arrival is driven purely by an explicit distance check
 // (10y, mirroring the TravelMount arrive test at NewRpgAction.cpp:363).

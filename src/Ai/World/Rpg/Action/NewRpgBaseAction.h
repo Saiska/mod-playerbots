@@ -20,6 +20,12 @@ struct POIInfo
     uint32 mapId{0};
 };
 
+// Tri-state result of the witness-gated travel primitive DriveTravel().
+//   EN_ROUTE  — bot is moving toward the target (MoveFarTo issued).
+//   ARRIVED   — bot is within arrive radius OR teleported when unwitnessed.
+//   GAVE_UP   — witnessed + beyond rpgTravelBudget (caller should pick a nearer goal).
+enum class TravelResult : uint8 { EN_ROUTE, ARRIVED, GAVE_UP };
+
 /// A base (composition) class for all new rpg actions
 /// All functions that may be shared by multiple actions should be declared here
 /// And we should make all actions composable instead of inheritable
@@ -34,6 +40,14 @@ protected:
     bool MoveWorldObjectTo(ObjectGuid guid, float distance = INTERACTION_DISTANCE);
     bool MoveRandomNear(float moveStep = 50.0f, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, WorldObject* center = nullptr);
     bool ForceToWait(uint32 duration, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
+
+    // Witness-gated travel primitive.  Teleports when unwitnessed; walks/mounts
+    // via MoveFarTo when witnessed + within budget; gives up if too far.
+    // Ground-z safety of the target is the CALLER's responsibility.
+    TravelResult DriveTravel(WorldPosition const& target);
+
+    // True if any non-bot player is within `range` yards of `pos` on the bot's map.
+    bool IsRealPlayerNear(WorldPosition const& pos, float range) const;
 
     /* EMOTE CADENCE (occupation-emote-palettes) */
     // Re-assert the behavior's sustained pose + fire a timed, jittered, non-repeating

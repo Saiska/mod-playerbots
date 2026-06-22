@@ -347,6 +347,59 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
     return false;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Witness check: true if any real (non-bot) player is within `range` yards
+// of `pos` on the bot's current map. Promoted to NewRpgBaseAction so both
+// DriveTravel and the RPG_REST hub helpers can share the single definition.
+// ───────────────────────────────────────────────────────────────────────────
+bool NewRpgBaseAction::IsRealPlayerNear(WorldPosition const& pos, float range) const
+{
+    Map* map = bot->GetMap();
+    if (!map)
+        return false;
+    for (auto const& ref : map->GetPlayers())
+    {
+        Player* p = ref.GetSource();
+        if (!p || p == bot)
+            continue;
+        if (GET_PLAYERBOT_AI(p))
+            continue;   // skip bots; only real players witness
+        if (p->GetExactDist(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ()) <= range)
+            return true;
+    }
+    return false;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Witness-gated travel primitive used by T5 UPKEEP and T6 occupation travel.
+// Mirrors the tri-state logic of TravelToHubOrTeleport, but target-parameterized.
+//   ARRIVED   — within arrive radius (10y), OR teleported when unwitnessed.
+//   EN_ROUTE  — witnessed + within budget: MoveFarTo issued (walk/mount handled internally).
+//   GAVE_UP   — witnessed + beyond rpgTravelBudget: caller should choose a nearer goal.
+// Ground-z safety of `target` is the CALLER's responsibility (as DoQuest already does).
+// ───────────────────────────────────────────────────────────────────────────
+TravelResult NewRpgBaseAction::DriveTravel(WorldPosition const& target)
+{
+    float const arrive = 10.0f;                       // cf. TravelMount :494
+    float const dist = bot->GetExactDist(&target);
+    if (dist <= arrive)
+        return TravelResult::ARRIVED;
+    bool const witnessed = IsRealPlayerNear(WorldPosition(bot), sPlayerbotAIConfig.rpgTravelWitnessRange)
+                        || IsRealPlayerNear(target, sPlayerbotAIConfig.rpgTravelWitnessRange);
+    if (!witnessed)                                   // empty world → cheap jump (ground-z by caller)
+    {
+        bot->TeleportTo(target.GetMapId(), target.GetPositionX(), target.GetPositionY(),
+                        target.GetPositionZ(), bot->GetOrientation());
+        return TravelResult::ARRIVED;
+    }
+    if (dist > sPlayerbotAIConfig.rpgTravelBudget)
+        return TravelResult::GAVE_UP;
+    MoveFarTo(target);                                // auto-mounts long hauls (existing behavior)
+    if (sPlayerbotAIConfig.rpgMachineDebugLog)
+        LOG_DEBUG("playerbots", "[RpgMachine] {} travel en-route d={:.0f}", bot->GetName(), dist);
+    return TravelResult::EN_ROUTE;
+}
+
 bool NewRpgBaseAction::MoveWorldObjectTo(ObjectGuid guid, float distance)
 {
     if (IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL))
