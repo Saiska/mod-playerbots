@@ -1275,6 +1275,22 @@ AiPlayerbot.HealSayMinIntervalSec = 240
 #
 AiPlayerbot.LowPriorityQuestDecayMs = 1800000
 
+#    AiPlayerbot.DoQuestSuppressScatter
+# When enabled (1), the random 1-5h scatter teleport is suppressed while a bot is actively in
+# an RPG_DO_QUEST episode. Without this the scatter teleport fights the cross-zone travel leg
+# added by the DoQuest zone-travel feature.
+# Default: 1 (enabled).
+#
+AiPlayerbot.DoQuestSuppressScatter = 1
+
+#    AiPlayerbot.DoQuestMaxConcurrentTravel
+# Maximum number of bots that may perform a cross-zone quest teleport in the same world tick.
+# Acts as a burst limiter to avoid a sudden spike of mass teleports when many bots all pick
+# up a new quest in the same cycle. The counter is thread-safe (atomic).
+# Default: 50.
+#
+AiPlayerbot.DoQuestMaxConcurrentTravel = 50
+
 # Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
 # Social.Radius: yards to search for a companion bot (also the leash - partner beyond this is dropped).

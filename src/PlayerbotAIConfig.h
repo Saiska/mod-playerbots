@@ -541,6 +541,9 @@ public:
     float rpgNearHubRadius{60.0f};
     // --- occupation-rebalance: lowPriorityQuest decay (Task 8) ---
     uint32 lowPriorityQuestDecayMs{1800000};  // ms a stalled quest stays skipped (also clears on zone change); 0 = disabled
+    // --- occupation-rebalance: doquest zone-travel guards (Task 9) ---
+    bool   doQuestSuppressScatter{true};      // suppress random scatter-teleport while a bot is in RPG_DO_QUEST
+    uint32 doQuestMaxConcurrentTravel{50};    // max bots performing a cross-zone quest teleport in the same tick
     bool healSayOncePerEpisode{true};      // announce "need heal" once per low-health descent, not in a row
     uint32 healSayMinIntervalSec{240};     // min seconds between heal-says (low health / critical health only)
     // --- more-activities-occupations (pipe 2b) ---

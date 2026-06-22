@@ -1687,6 +1687,12 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
     if (sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
         return;
 
+    // doquest-zone-travel: don't yank a bot out of an active quest episode.
+    if (sPlayerbotAIConfig.doQuestSuppressScatter)
+        if (PlayerbotAI* ai = GET_PLAYERBOT_AI(bot))
+            if (ai->rpgInfo.GetStatus() == RPG_DO_QUEST)
+                return;
+
     // ignore when alrdy teleported or not in the world yet.
     if (bot->IsBeingTeleported() || !bot->IsInWorld())
         return;
@@ -3188,6 +3194,23 @@ void RandomPlayerbotMgr::RandomTeleportForRpg(Player* bot)
     LOG_DEBUG("playerbots", "Random teleporting bot {} for RPG ({} locations available)", bot->GetName().c_str(),
               rpgLocsCacheLevel[race].size());
     RandomTeleport(bot, rpgLocsCacheLevel[race][level], true);
+}
+
+// doquest-zone-travel: thread-safe burst limiter for concurrent cross-zone quest teleports.
+// Uses a lock-free atomic so that bots on parallel MapUpdater worker threads never race.
+bool RandomPlayerbotMgr::TryBeginQuestTravel([[maybe_unused]] ObjectGuid guid)
+{
+    if (_questTravelInFlight.fetch_add(1) >= sPlayerbotAIConfig.doQuestMaxConcurrentTravel)
+    {
+        _questTravelInFlight.fetch_sub(1);
+        return false;
+    }
+    return true;
+}
+
+void RandomPlayerbotMgr::EndQuestTravel([[maybe_unused]] ObjectGuid guid)
+{
+    _questTravelInFlight.fetch_sub(1);
 }
 
 void RandomPlayerbotMgr::Remove(Player* bot)

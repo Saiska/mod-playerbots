@@ -11,6 +11,7 @@
 #include "PlayerbotMgr.h"
 #include "GameTime.h"
 #include "PlayerbotCommandServer.h"
+#include <atomic>
 
 struct BattlegroundInfo
 {
@@ -146,6 +147,11 @@ public:
     // Wraps the internal "bot_count" event so the native UpdateAIInternal drives the pool toward it,
     // provided the value is within [minRandomBots, maxRandomBots].
     void SetPopulationTarget(uint32 target);
+    // doquest-zone-travel: burst-limiter for concurrent cross-zone quest teleports.
+    // TryBeginQuestTravel returns false (and does not increment) when already at the cap.
+    // EndQuestTravel must be called exactly once for every successful TryBeginQuestTravel.
+    bool TryBeginQuestTravel(ObjectGuid guid);
+    void EndQuestTravel(ObjectGuid guid);
     ObjectGuid GetBattleMasterGUID(Player* bot, BattlegroundTypeId bgTypeId);
     CreatureData const* GetCreatureDataByEntry(uint32 entry);
     void LoadBattleMastersCache();
@@ -217,6 +223,8 @@ private:
     RandomPlayerbotMgr(RandomPlayerbotMgr&&) = delete;
     RandomPlayerbotMgr& operator=(RandomPlayerbotMgr&&) = delete;
 
+    // doquest-zone-travel: thread-safe count of bots currently mid quest cross-zone teleport.
+    std::atomic<uint32> _questTravelInFlight{0};
     // pid values are set in constructor
     botPID pid = botPID(1, 50, -50, 0, 0, 0);
     float activityMod = 0.25;
