@@ -1967,16 +1967,17 @@ bool NewRpgBaseAction::EnemyNearForPvp()
 
 bool NewRpgBaseAction::RecoverNeeded()
 {
-    // TODO(T5): real RECOVER need-detection (HealthLow/ManaLow + recover gating) lands in Task 5.
-    // Stubbed to false for the green build so NEEDS stay inert until then.
-    return false;
+    // LAYER-1 survival need. HealthLow()/ManaLow() already qualify non-combat internally, so
+    // a bot mid-fight never trips RECOVER. ManaLow() self-gates to mana-using classes
+    // (GetMaxPower(POWER_MANA) > 0), so the "caster" qualifier is folded into the predicate.
+    return HealthLow() || ManaLow();
 }
 
 bool NewRpgBaseAction::UpkeepNeeded()
 {
-    // TODO(T5): real UPKEEP need-detection (DurabilityLow/BagsFull/MissingTools/MaintenanceOverdue)
-    // lands in Task 5. Stubbed to false for the green build so NEEDS stay inert until then.
-    return false;
+    // LAYER-1 logistics need. Any one trigger sends the bot on a town errand (UPKEEP):
+    // worn gear, full bags, missing gather tool, or the maintenance window elapsed.
+    return DurabilityLow() || BagsFull() || MissingToolsOrReagents() || MaintenanceOverdue();
 }
 
 bool NewRpgBaseAction::OccupationFeasible(NewRpgStatus status)

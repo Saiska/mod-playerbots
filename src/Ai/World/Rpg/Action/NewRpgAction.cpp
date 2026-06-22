@@ -478,6 +478,129 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             }
             break;
         }
+        case RPG_RECOVER:
+        {
+            // occupation-state-machine Task 5 — LAYER-1 RECOVER (in place, no travel).
+            // CRASH RULE: get_if + null-guard; every Decide()/ChangeTo* is followed by an
+            // immediate return and touches no variant data afterward.
+            auto* recp = std::get_if<NewRpgInfo::Recover>(&info.data);
+            if (!recp)
+                return true;
+            auto& rec = *recp;
+
+            // EXIT — recovered (or a non-mana class with HP restored). ManaLow() self-gates to
+            // mana-using classes, so this naturally ignores mana on warriors/rogues/etc.
+            if (!HealthLow() && !ManaLow())
+            {
+                Decide();
+                return true;   // CRASH RULE: nothing reads rec after Decide()
+            }
+
+            // Bounded dwell so a bot that cannot recover (no food/drink/bandage) does not spin
+            // forever in RECOVER — after the window, hand back to Decide() regardless.
+            if (rec.dwellMs == 0)
+                rec.dwellMs = 30000;   // ~30s recovery window
+            if (GetMSTimeDiffToNow(info.startT) >= rec.dwellMs)
+            {
+                Decide();
+                return true;   // CRASH RULE
+            }
+
+            // Perform ONE recovery step this tick (reuse existing arms — invent no healing logic):
+            //   "try emergency" → bandage (out of combat) or a healing consumable (ImbueAction.cpp:202).
+            //   "food"  → eat to regen HP out of combat (ActionContext.h:120).
+            //   "drink" → drink to regen mana (ActionContext.h:121).
+            if (HealthLow())
+            {
+                botAI->DoSpecificAction("try emergency");
+                botAI->DoSpecificAction("food");
+            }
+            if (ManaLow())
+                botAI->DoSpecificAction("drink");
+            return true;
+        }
+        case RPG_UPKEEP:
+        {
+            // occupation-state-machine Task 5 — LAYER-1 UPKEEP (town errand; first DriveTravel consumer).
+            // CRASH RULE: get_if + null-guard; every Decide()/ChangeTo* immediately returns.
+            auto* upkp = std::get_if<NewRpgInfo::Upkeep>(&info.data);
+            if (!upkp)
+                return true;
+            auto& up = *upkp;
+
+            switch (up.step)
+            {
+                case 0:   // ACQUIRE — pick a curated hub (capital/major town when reachable).
+                {
+                    WorldPosition hub = SelectRandomCampPos(bot);
+                    if (hub == WorldPosition())
+                    {
+                        // §12.1: no silent fallback. A free bot with no reachable hub is an
+                        // observability event — record it, then do the maintenance in place as a
+                        // last-ditch so the bot is not stranded, and hand back to Decide().
+                        LOG_ERROR("playerbots",
+                                  "[RpgMachine] {} #{} map={} zone={} pos=({:.0f},{:.0f},{:.0f}) — "
+                                  "UPKEEP found NO reachable hub; in-place maintenance + Decide()",
+                                  bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(),
+                                  bot->GetZoneId(), bot->GetPositionX(), bot->GetPositionY(),
+                                  bot->GetPositionZ());
+                        botAI->DoSpecificAction("maintenance");
+                        info.lastUpkeepMs = getMSTime();   // flat field — safe to stamp pre-Decide
+                        Decide();
+                        return true;   // CRASH RULE
+                    }
+                    up.hubPos = hub;
+                    up.step = 1;
+                    return true;
+                }
+                case 1:   // TRAVEL — drive to the hub via the shared witness-gated primitive.
+                {
+                    TravelResult tr = DriveTravel(up.hubPos);
+                    if (tr == TravelResult::EN_ROUTE)
+                        return true;
+                    if (tr == TravelResult::GAVE_UP)
+                    {
+                        LOG_WARN("playerbots",
+                                 "[RpgMachine] {} #{} map={} zone={} — UPKEEP can't reach town "
+                                 "(beyond travel budget); in-place maintenance + Decide()",
+                                 bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(),
+                                 bot->GetZoneId());
+                        botAI->DoSpecificAction("maintenance");
+                        info.lastUpkeepMs = getMSTime();
+                        Decide();
+                        return true;   // CRASH RULE
+                    }
+                    // ARRIVED
+                    up.step = 2;
+                    return true;
+                }
+                case 2:   // PERFORM — on arrival, run the town errands (reuse arms verbatim).
+                default:
+                {
+                    // repair + sell — mirrors the RS_VENDOR arm (NewRpgRestHub.cpp:377-380). The
+                    // "sell" path also auto-fires the guild-bank DEPOSIT (SellAction →
+                    // TryDepositLootToGuildBank), so no direct guild-bank hook is needed here.
+                    if (SelectVendorNpc().IsEmpty())
+                        LOG_WARN("playerbots",
+                                 "[RpgMachine] {} #{} map={} zone={} — UPKEEP at hub but NO vendor NPC in range",
+                                 bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), bot->GetZoneId());
+                    botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);
+                    botAI->DoSpecificAction("repair", Event(), true);
+
+                    // maintenance — ALSO performs guild-bank WITHDRAW (TrainerAction →
+                    // WithdrawUpgradesFromGuildBank), gems/enchants/glyphs/spells, provisioning
+                    // (InitBandages/fishing pole), and the GearFloorMgr enqueue (occupation-rebalance).
+                    // So sell+maintenance covers both guild-bank sides + restock — no duplicate calls.
+                    botAI->DoSpecificAction("maintenance");
+
+                    // EXIT — stamp the maintenance window BEFORE Decide() (flat field, safe), then
+                    // hand back to the occupation resolver.
+                    info.lastUpkeepMs = getMSTime();
+                    Decide();
+                    return true;   // CRASH RULE: nothing reads up after Decide()
+                }
+            }
+        }
         default:
             break;
     }
