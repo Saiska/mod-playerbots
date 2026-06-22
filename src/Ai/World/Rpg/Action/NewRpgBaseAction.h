@@ -80,6 +80,12 @@ protected:
     // bot-rpg-bleed-suppression: allowlist guard — a bot may run autonomous NewRpg ONLY when free.
     bool IsFreeToIdle();
     bool ShouldSuppressRpg();
+    // --- occupation-rebalance: context-aware fallback (Task 2) ---
+    // Returns true if the bot is within `radius` yards of any travel hub on its current map.
+    bool IsNearRestHub(float radius);
+    // Last-resort fallback: near a hub -> rest in place; in the wild -> farm in place (GoGrind
+    // anchored to current pos, which is always non-empty so the commit cannot fail). Never Idle.
+    bool FallToFarmOrRest();
 
 protected:
     /* FOR MOVE FAR */

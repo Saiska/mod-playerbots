@@ -1238,6 +1238,14 @@ AiPlayerbot.LowHealthSelfPreservation = 1
 #
 AiPlayerbot.RpgSuppressWhenHurt = 1
 #
+#    AiPlayerbot.RpgNearHubRadius
+#        Distance (yards) within which a bot that fails occupation selection is considered "at a hub"
+#        and rests locally instead of farming in place. Beyond this radius the bot farms (kills in
+#        place via GoGrind anchored to its current position) rather than sitting in the open world.
+#        Default: 60
+#
+AiPlayerbot.RpgNearHubRadius = 60
+#
 #    AiPlayerbot.HealSayOncePerEpisode
 #        Announce "need heal" once when health drops into the low band, then stay quiet until health
 #        recovers above AiPlayerbot.AlmostFullHealth and drops again (no back-to-back spam). 1 = on, 0 = legacy.

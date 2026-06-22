@@ -1652,6 +1652,34 @@ bool NewRpgBaseAction::ShouldSuppressRpg()
     return !IsFreeToIdle();
 }
 
+// --- occupation-rebalance Task 2: context-aware fallback helpers ---
+
+bool NewRpgBaseAction::IsNearRestHub(float radius)
+{
+    for (WorldLocation const& hub : sTravelMgr.GetTravelHubs(bot))
+    {
+        if (hub.GetMapId() != bot->GetMapId())
+            continue;
+        if (bot->GetExactDist(hub) <= radius)
+            return true;
+    }
+    return false;
+}
+
+bool NewRpgBaseAction::FallToFarmOrRest()
+{
+    if (IsNearRestHub(sPlayerbotAIConfig.rpgNearHubRadius))
+    {
+        botAI->rpgInfo.ChangeToRest();
+        bot->SetStandState(UNIT_STAND_STATE_SIT);
+        return true;
+    }
+    // Farm in place: anchor GoGrind to the bot's current position, which is always non-empty
+    // so the commit cannot fail — this is the guarantee that breaks the Idle leak.
+    botAI->rpgInfo.ChangeToGoGrind(WorldPosition(bot));
+    return true;
+}
+
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
 {
     std::vector<NewRpgStatus> availableStatus;
@@ -1682,13 +1710,9 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         statusWeight.push_back(weight);
         probSum += weight;
     }
-    // Safety check. Default to "rest" if nothing is eligible.
+    // Safety check. No eligible status — use the context-aware fallback (never Idle).
     if (availableStatus.empty() || probSum == 0)
-    {
-        botAI->rpgInfo.ChangeToRest();
-        bot->SetStandState(UNIT_STAND_STATE_SIT);
-        return true;
-    }
+        return FallToFarmOrRest();
     uint32 rand = urand(1, probSum);
     uint32 accumulate = 0;
     NewRpgStatus chosenStatus = RPG_STATUS_END;
@@ -1730,7 +1754,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 botAI->rpgInfo.ChangeToGoGrind(pos);
                 return true;
             }
-            return false;
+            return FallToFarmOrRest();
         }
         case RPG_DO_QUEST:
         {
@@ -1757,7 +1781,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                     return true;
                 }
             }
-            return false;
+            return FallToFarmOrRest();
         }
         case RPG_TRAVEL_FLIGHT:
         {
@@ -1769,7 +1793,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 botAI->rpgInfo.ChangeToTravelFlight(flightMasterEntry, flightMasterPos, path);
                 return true;
             }
-            return false;
+            return FallToFarmOrRest();
         }
         case RPG_IDLE:
         {
@@ -1796,7 +1820,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 botAI->rpgInfo.ChangeToTravelMount(pos);
                 return true;
             }
-            return false;
+            return FallToFarmOrRest();
         }
         case RPG_GATHERING_CIRCUIT:
         {

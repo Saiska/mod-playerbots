@@ -836,6 +836,7 @@ bool PlayerbotAIConfig::Initialize()
     rpgSuppressWhenHurt = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenHurt", true);
     healSayOncePerEpisode = sConfigMgr->GetOption<bool>("AiPlayerbot.HealSayOncePerEpisode", true);
     healSayMinIntervalSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.HealSayMinIntervalSec", 240);
+    rpgNearHubRadius = sConfigMgr->GetOption<float>("AiPlayerbot.RpgNearHubRadius", 60.0f);
     LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={} lowHpSelfPres={} rpgSuppressHurt={} healSayOnce={} healSayMinSec={}",
              rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,
              rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat, gatherHarvestHoldMs,
