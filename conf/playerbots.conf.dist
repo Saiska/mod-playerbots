@@ -1269,11 +1269,9 @@ AiPlayerbot.HealSayOncePerEpisode = 1
 AiPlayerbot.HealSayMinIntervalSec = 240
 #
 #    AiPlayerbot.LowPriorityQuestDecayMs
-#        Milliseconds a stalled quest stays on a bot's low-priority (skip) list after it fails to
-#        make progress at a quest POI. After this interval the quest becomes eligible again.
-#        The list also clears automatically whenever the bot changes zone.
-#        0 keeps the legacy never-clear behavior (once stalled, always skipped this session).
-#        Default: 1800000 (30 minutes)
+# Milliseconds a stalled quest stays on a bot's low-priority skip list before it
+# becomes eligible again; the list also clears on zone change. Default 1800000 (30 min).
+# 0 = feature disabled (entries decay immediately on read, so no quest is ever skipped).
 #
 AiPlayerbot.LowPriorityQuestDecayMs = 1800000
 
