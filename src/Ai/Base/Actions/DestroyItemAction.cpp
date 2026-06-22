@@ -29,6 +29,9 @@ void DestroyItemAction::DestroyItem(FindItemVisitor* visitor)
     std::vector<Item*> items = visitor->GetResult();
     for (Item* item : items)
     {
+        if (botAI->TryDepositLootToGuildBank(item))
+            continue;
+
         std::ostringstream out;
         out << chat->FormatItem(item->GetTemplate()) << " destroyed";
         botAI->TellMaster(out);

@@ -100,6 +100,9 @@ void SellAction::Sell(FindItemVisitor* visitor)
 
 void SellAction::Sell(Item* item)
 {
+    if (botAI->TryDepositLootToGuildBank(item))
+        return;
+
     std::ostringstream out;
 
     GuidVector vendors = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();

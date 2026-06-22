@@ -6082,6 +6082,57 @@ bool PlayerbotAI::IsInRealGuild()
     return PlayerbotGuildMgr::instance().IsRealGuild(bot->GetGuildId());
 }
 
+bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
+{
+    if (!item)
+        return false;
+
+    if (!sPlayerbotAIConfig.guildBankDepositEnable)
+        return false;
+
+    if (!IsInRealGuild())
+        return false;
+
+    ItemTemplate const* proto = item->GetTemplate();
+    if (!proto)
+        return false;
+
+    // Quality floor (default white) — greys are never banked.
+    if (proto->Quality < sPlayerbotAIConfig.guildBankDepositMinQuality)
+        return false;
+
+    // Soulbound or BoP items cannot enter a guild bank — hard game rule.
+    if (!item->CanBeTraded())
+        return false;
+
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
+    if (!guild)
+        return false;
+
+    uint8 tab = 0;
+    if (!guild->FindDepositTabForEntry(item->GetEntry(), bot->GetGUID(), tab))
+        return false;
+
+    // Capture identity before the move (the Item* may be invalidated by the swap).
+    uint8 bag = item->GetBagSlot();
+    uint8 slot = item->GetSlot();
+    uint32 count = item->GetCount();
+    std::string const& name = proto->Name1;
+
+    // Direct deposit (slot 255 = auto-place / stack within the tab). Bypasses the proximity-
+    // gated packet handler — mirrors GuildBankAction::MoveFromCharToBank (GuildBankAction.cpp:73).
+    guild->SwapItemsWithInventory(bot, false, tab, 255, bag, slot, 0);
+
+    // Post-check: a clean full move empties the source slot. If the slot still holds an item,
+    // treat as not-deposited (e.g. tab filled in a race) and let the caller sell/destroy it.
+    if (bot->GetItemByPos(bag, slot))
+        return false;
+
+    LOG_INFO("playerbots", "Bots guildbank deposit: {} -> {} x{} (tab {})",
+             bot->GetName(), name, count, tab);
+    return true;
+}
+
 void PlayerbotAI::QueueChatResponse(const ChatQueuedReply chatReply) { chatReplies.push_back(std::move(chatReply)); }
 
 bool PlayerbotAI::EqualLowercaseName(std::string s1, std::string s2)
