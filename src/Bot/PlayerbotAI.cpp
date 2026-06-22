@@ -6101,7 +6101,7 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
     if (proto->Quality < sPlayerbotAIConfig.guildBankDepositMinQuality)
         return false;
 
-    // Soulbound / BoP / conjured cannot enter a guild bank — hard game rule.
+    // Soulbound or BoP items cannot enter a guild bank — hard game rule.
     if (!item->CanBeTraded())
         return false;
 
@@ -6116,9 +6116,8 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
     // Capture identity before the move (the Item* may be invalidated by the swap).
     uint8 bag = item->GetBagSlot();
     uint8 slot = item->GetSlot();
-    uint32 entry = item->GetEntry();
     uint32 count = item->GetCount();
-    std::string name = proto->Name1;
+    std::string const& name = proto->Name1;
 
     // Direct deposit (slot 255 = auto-place / stack within the tab). Bypasses the proximity-
     // gated packet handler — mirrors GuildBankAction::MoveFromCharToBank (GuildBankAction.cpp:73).
