@@ -1344,7 +1344,7 @@ static std::vector<float> GenerateRandomWeights(int n)
     return weights;
 }
 
-bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete)
+bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete, bool requireInZone)
 {
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
     if (!quest)
@@ -1362,7 +1362,7 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
     {
         for (const QuestPOI& qPoi : *poiVector)
         {
-            if (qPoi.MapId != bot->GetMapId())
+            if (requireInZone && qPoi.MapId != bot->GetMapId())
                 continue;
 
             // not the poi pos to reward quest
@@ -1381,18 +1381,20 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
                 dy += point.y * weights[i];
             }
 
-            if (bot->GetDistance2d(dx, dy) >= 1500.0f)
+            if (requireInZone && bot->GetDistance2d(dx, dy) >= 1500.0f)
                 continue;
 
-            float dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+            float dz = 0.0f;
+            if (qPoi.MapId == bot->GetMapId())
+            {
+                dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+                if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
+                    continue;
+                if (requireInZone && bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
+                    continue;
+            }
 
-            if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
-                continue;
-
-            if (bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
-                continue;
-
-            poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex});
+            poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex, qPoi.MapId});
         }
 
         if (poiInfo.empty())
@@ -1428,7 +1430,7 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
     // Get POIs to go
     for (const QuestPOI& qPoi : *poiVector)
     {
-        if (qPoi.MapId != bot->GetMapId())
+        if (requireInZone && qPoi.MapId != bot->GetMapId())
             continue;
 
         bool inComplete = false;
@@ -1453,18 +1455,20 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
             dy += point.y * weights[i];
         }
 
-        if (bot->GetDistance2d(dx, dy) >= 1500.0f)
+        if (requireInZone && bot->GetDistance2d(dx, dy) >= 1500.0f)
             continue;
 
-        float dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+        float dz = 0.0f;
+        if (qPoi.MapId == bot->GetMapId())
+        {
+            dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+            if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
+                continue;
+            if (requireInZone && bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
+                continue;
+        }
 
-        if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
-            continue;
-
-        if (bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
-            continue;
-
-        poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex});
+        poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex, qPoi.MapId});
     }
 
     if (poiInfo.size() == 0)
@@ -1865,7 +1869,7 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
                     continue;
 
                 std::vector<POIInfo> poiInfo;
-                if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true))
+                if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true, /*requireInZone=*/false))
                 {
                     return true;
                 }
