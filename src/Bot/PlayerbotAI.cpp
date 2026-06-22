@@ -942,6 +942,16 @@ void PlayerbotAI::Reset(bool full)
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setStatus(TRAVEL_STATUS_EXPIRED);
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setExpireIn(1000);
         rpgInfo = NewRpgInfo();
+        // occupation-state-machine: stagger the first UPKEEP across the overdue window so a
+        // fresh boot/relog does not send every bot to maintenance at once (the boot wave).
+        // Back-date lastUpkeepMs by up to maintenanceOverdueMs, CLAMPED to getMSTime() to avoid
+        // uint32 underflow early in server uptime, and floored at 1 so it is never mistaken for
+        // the never-maintained (0) sentinel that forces an immediate UPKEEP.
+        {
+            uint32 const nowMs = getMSTime();
+            uint32 const maxBack = std::min(nowMs, sPlayerbotAIConfig.maintenanceOverdueMs);
+            rpgInfo.lastUpkeepMs = std::max<uint32>(1u, nowMs - urand(0, maxBack));
+        }
     }
 
     aiObjectContext->GetValue<GuidSet&>("ignore rpg target")->Get().clear();
