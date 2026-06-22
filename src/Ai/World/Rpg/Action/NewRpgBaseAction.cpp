@@ -1344,7 +1344,7 @@ static std::vector<float> GenerateRandomWeights(int n)
     return weights;
 }
 
-bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete)
+bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete, bool requireInZone)
 {
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
     if (!quest)
@@ -1362,7 +1362,7 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
     {
         for (const QuestPOI& qPoi : *poiVector)
         {
-            if (qPoi.MapId != bot->GetMapId())
+            if (requireInZone && qPoi.MapId != bot->GetMapId())
                 continue;
 
             // not the poi pos to reward quest
@@ -1381,18 +1381,20 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
                 dy += point.y * weights[i];
             }
 
-            if (bot->GetDistance2d(dx, dy) >= 1500.0f)
+            if (requireInZone && bot->GetDistance2d(dx, dy) >= 1500.0f)
                 continue;
 
-            float dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+            float dz = 0.0f;
+            if (qPoi.MapId == bot->GetMapId())
+            {
+                dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+                if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
+                    continue;
+                if (requireInZone && bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
+                    continue;
+            }
 
-            if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
-                continue;
-
-            if (bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
-                continue;
-
-            poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex});
+            poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex, qPoi.MapId});
         }
 
         if (poiInfo.empty())
@@ -1428,7 +1430,7 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
     // Get POIs to go
     for (const QuestPOI& qPoi : *poiVector)
     {
-        if (qPoi.MapId != bot->GetMapId())
+        if (requireInZone && qPoi.MapId != bot->GetMapId())
             continue;
 
         bool inComplete = false;
@@ -1453,18 +1455,20 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
             dy += point.y * weights[i];
         }
 
-        if (bot->GetDistance2d(dx, dy) >= 1500.0f)
+        if (requireInZone && bot->GetDistance2d(dx, dy) >= 1500.0f)
             continue;
 
-        float dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+        float dz = 0.0f;
+        if (qPoi.MapId == bot->GetMapId())
+        {
+            dz = std::max(bot->GetMap()->GetHeight(dx, dy, MAX_HEIGHT), bot->GetMap()->GetWaterLevel(dx, dy));
+            if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
+                continue;
+            if (requireInZone && bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
+                continue;
+        }
 
-        if (dz == INVALID_HEIGHT || dz == VMAP_INVALID_HEIGHT_VALUE)
-            continue;
-
-        if (bot->GetZoneId() != bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dx, dy, dz))
-            continue;
-
-        poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex});
+        poiInfo.push_back({{dx, dy}, qPoi.ObjectiveIndex, qPoi.MapId});
     }
 
     if (poiInfo.size() == 0)
@@ -1652,6 +1656,43 @@ bool NewRpgBaseAction::ShouldSuppressRpg()
     return !IsFreeToIdle();
 }
 
+// --- occupation-rebalance Task 2: context-aware fallback helpers ---
+
+bool NewRpgBaseAction::IsNearRestHub(float radius)
+{
+    for (WorldLocation const& hub : sTravelMgr.GetTravelHubs(bot))
+    {
+        if (hub.GetMapId() != bot->GetMapId())
+            continue;
+        if (bot->GetExactDist(hub) <= radius)
+            return true;
+    }
+    return false;
+}
+
+// doquest-zone-travel: same-map planar distance to a POI, or a large constant for cross-map POIs
+// so that same-map targets sort before cross-map targets (keeps teleports rarer).
+float NewRpgBaseAction::DistToPoi(POIInfo const& poi)
+{
+    if (poi.mapId != bot->GetMapId())
+        return 1000000.0f;
+    return bot->GetDistance2d(poi.pos.x, poi.pos.y);
+}
+
+bool NewRpgBaseAction::FallToFarmOrRest()
+{
+    if (IsNearRestHub(sPlayerbotAIConfig.rpgNearHubRadius))
+    {
+        botAI->rpgInfo.ChangeToRest();
+        bot->SetStandState(UNIT_STAND_STATE_SIT);
+        return true;
+    }
+    // Farm in place: anchor GoGrind to the bot's current position, which is always non-empty
+    // so the commit cannot fail — this is the guarantee that breaks the Idle leak.
+    botAI->rpgInfo.ChangeToGoGrind(WorldPosition(bot));
+    return true;
+}
+
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
 {
     std::vector<NewRpgStatus> availableStatus;
@@ -1682,13 +1723,9 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         statusWeight.push_back(weight);
         probSum += weight;
     }
-    // Safety check. Default to "rest" if nothing is eligible.
+    // Safety check. No eligible status — use the context-aware fallback (never Idle).
     if (availableStatus.empty() || probSum == 0)
-    {
-        botAI->rpgInfo.ChangeToRest();
-        bot->SetStandState(UNIT_STAND_STATE_SIT);
-        return true;
-    }
+        return FallToFarmOrRest();
     uint32 rand = urand(1, probSum);
     uint32 accumulate = 0;
     NewRpgStatus chosenStatus = RPG_STATUS_END;
@@ -1730,34 +1767,38 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 botAI->rpgInfo.ChangeToGoGrind(pos);
                 return true;
             }
-            return false;
+            return FallToFarmOrRest();
         }
         case RPG_DO_QUEST:
         {
-            std::vector<uint32> availableQuests;
+            struct Cand { uint32 questId; const Quest* quest; POIInfo poi; bool complete; };
+            std::vector<Cand> cands;
             for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
             {
                 uint32 questId = bot->GetQuestSlotQuestId(slot);
-                if (botAI->lowPriorityQuest.find(questId) != botAI->lowPriorityQuest.end())
+                if (!questId || botAI->IsQuestLowPriority(questId))
                     continue;
-
                 std::vector<POIInfo> poiInfo;
-                if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true))
-                {
-                    availableQuests.push_back(questId);
-                }
+                if (!GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true, /*requireInZone=*/false))
+                    continue;
+                Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+                if (!quest)
+                    continue;
+                bool complete = bot->GetQuestStatus(questId) == QUEST_STATUS_COMPLETE;
+                cands.push_back({questId, quest, poiInfo.front(), complete});
             }
-            if (availableQuests.size())
+            if (cands.empty())
+                return FallToFarmOrRest();
+            std::sort(cands.begin(), cands.end(), [this](Cand const& a, Cand const& b)
             {
-                uint32 questId = availableQuests[urand(0, availableQuests.size() - 1)];
-                const Quest* quest = sObjectMgr->GetQuestTemplate(questId);
-                if (quest)
-                {
-                    botAI->rpgInfo.ChangeToDoQuest(questId, quest);
-                    return true;
-                }
-            }
-            return false;
+                if (a.complete != b.complete)
+                    return a.complete;                          // turn-ins first
+                return DistToPoi(a.poi) < DistToPoi(b.poi);    // then nearest
+            });
+            Cand const& pick = cands.front();
+            botAI->rpgInfo.ChangeToDoQuest(pick.questId, pick.quest,
+                WorldPosition(pick.poi.mapId, pick.poi.pos.x, pick.poi.pos.y, 0.0f));
+            return true;                                        // CRASH RULE: return now, touch nothing
         }
         case RPG_TRAVEL_FLIGHT:
         {
@@ -1769,7 +1810,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 botAI->rpgInfo.ChangeToTravelFlight(flightMasterEntry, flightMasterPos, path);
                 return true;
             }
-            return false;
+            return FallToFarmOrRest();
         }
         case RPG_IDLE:
         {
@@ -1796,7 +1837,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 botAI->rpgInfo.ChangeToTravelMount(pos);
                 return true;
             }
-            return false;
+            return FallToFarmOrRest();
         }
         case RPG_GATHERING_CIRCUIT:
         {
@@ -1837,11 +1878,11 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
             {
                 uint32 questId = bot->GetQuestSlotQuestId(slot);
-                if (botAI->lowPriorityQuest.find(questId) != botAI->lowPriorityQuest.end())
+                if (botAI->IsQuestLowPriority(questId))
                     continue;
 
                 std::vector<POIInfo> poiInfo;
-                if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true))
+                if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true, /*requireInZone=*/false))
                 {
                     return true;
                 }
@@ -1872,7 +1913,7 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             return SelectFarTaxiDest(pos);
         }
         case RPG_GATHERING_CIRCUIT:
-            return BotHasGatheringProfession(bot);
+            return BotHasGatheringProfession(bot) && !SelectGatherNode().IsEmpty();
         default:
             return false;
     }

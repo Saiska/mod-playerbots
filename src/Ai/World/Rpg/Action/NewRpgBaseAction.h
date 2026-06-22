@@ -17,6 +17,7 @@ struct POIInfo
 {
     G3D::Vector2 pos;
     int32 objectiveIdx;
+    uint32 mapId{0};
 };
 
 /// A base (composition) class for all new rpg actions
@@ -71,7 +72,9 @@ protected:
     bool OrganizeQuestLog();
 
 protected:
-    bool GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete = false);
+    bool GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete = false, bool requireInZone = true);
+    // doquest-zone-travel: same-map planar distance to a POI, or a large constant for cross-map POIs.
+    float DistToPoi(POIInfo const& poi);
     static WorldPosition SelectRandomGrindPos(Player* bot);
     static WorldPosition SelectRandomCampPos(Player* bot);
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);
@@ -80,6 +83,12 @@ protected:
     // bot-rpg-bleed-suppression: allowlist guard — a bot may run autonomous NewRpg ONLY when free.
     bool IsFreeToIdle();
     bool ShouldSuppressRpg();
+    // --- occupation-rebalance: context-aware fallback (Task 2) ---
+    // Returns true if the bot is within `radius` yards of any travel hub on its current map.
+    bool IsNearRestHub(float radius);
+    // Last-resort fallback: near a hub -> rest in place; in the wild -> farm in place (GoGrind
+    // anchored to current pos, which is always non-empty so the commit cannot fail). Never Idle.
+    bool FallToFarmOrRest();
 
 protected:
     /* FOR MOVE FAR */

@@ -521,6 +521,8 @@ public:
     float rpgSatiationDecayRatePerSec{0.0015f};  // meter loss/sec otherwise (~670s to empty)
     float rpgSatiationSuppressExponent{1.5f};    // steepness of (1-meter)^k
     float rpgSatiationMinAppealFrac{0.05f};      // floor as fraction of base weight
+    // short idle dwell — bot waits this many ms before re-running the occupation-availability sweep
+    uint32 rpgIdleDwellMs{2000};
     // bot-rpg-bleed-suppression: gate autonomous NewRpg off when a bot is on-task
     bool rpgSuppressWhenBusy{true};
     bool rpgSuppressInstance{true};
@@ -533,6 +535,15 @@ public:
     // low-health self-preservation knobs
     bool lowHealthSelfPreservation{true};  // low-band (45%) potion-in-combat / bandage-out-of-combat
     bool rpgSuppressWhenHurt{true};        // stop NewRpg wandering while below lowHealth so the bot recovers
+    // --- occupation-rebalance: context-aware fallback (Task 2) ---
+    // Radius (yards) within which a bot is considered "at a rest hub" and rests in place instead of
+    // farming in place. Beyond this the bot farms (kill in place) rather than sitting in the open world.
+    float rpgNearHubRadius{60.0f};
+    // --- occupation-rebalance: lowPriorityQuest decay (Task 8) ---
+    uint32 lowPriorityQuestDecayMs{1800000};  // ms a stalled quest stays skipped (also clears on zone change); 0 = disabled
+    // --- occupation-rebalance: doquest zone-travel guards (Task 9) ---
+    bool   doQuestSuppressScatter{true};      // suppress random scatter-teleport while a bot is in RPG_DO_QUEST
+    uint32 doQuestMaxConcurrentTravel{50};    // max bots performing a cross-zone quest teleport in the same tick
     bool healSayOncePerEpisode{true};      // announce "need heal" once per low-health descent, not in a row
     uint32 healSayMinIntervalSec{240};     // min seconds between heal-says (low health / critical health only)
     // --- more-activities-occupations (pipe 2b) ---
@@ -540,7 +551,7 @@ public:
     float  travelMountDistMax{2000.0f};
     uint32 gatheringCircuitMinNodes{3};
     uint32 gatheringCircuitMaxNodes{6};
-    float  gatheringCircuitRadius{60.0f};
+    float  gatheringCircuitRadius{120.0f};
     uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
@@ -723,6 +734,9 @@ public:
     uint32 populationSinkBatch;          // bots promoted 79->80 per faction per sink tick
     std::array<uint32, 8> populationBracket;   // bots-per-level for bands 0..7 (levels 1-9 .. 70-79)
     bool   populationClassFavor;               // favor most under-represented class when promoting
+
+    // Provision First-Aid bandages (and the fishing pole) to bots that have the matching skill.
+    bool botProvisionConsumables{true};
 
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)

@@ -193,6 +193,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
         factory.InitReagents();
         factory.InitConsumables();
         factory.InitPotions();
+        factory.InitBandages();
         factory.InitTalentsTree(true);
         factory.InitPet();
         factory.InitPetTalents();
@@ -229,6 +230,9 @@ bool MaintenanceAction::Execute(Event /*event*/)
 
         if (sPlayerbotAIConfig.altMaintenancePotions)
             factory.InitPotions();
+
+        if (sPlayerbotAIConfig.altMaintenancePotions)
+            factory.InitBandages();
 
         if (sPlayerbotAIConfig.altMaintenanceTalentTree)
             factory.InitTalentsTree(true);

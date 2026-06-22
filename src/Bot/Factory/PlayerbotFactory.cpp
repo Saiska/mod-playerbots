@@ -816,6 +816,7 @@ void PlayerbotFactory::Randomize(bool incremental)
     pmo = sPerfMonitor.start(PERF_MON_RNDBOT, "PlayerbotFactory_Potions");
     LOG_DEBUG("playerbots", "Initializing potions...");
     InitPotions();
+    InitBandages();
     if (pmo)
         pmo->finish();
 
@@ -948,6 +949,7 @@ void PlayerbotFactory::Refresh()
     InitReagents();
     InitConsumables();
     InitPotions();
+    InitBandages();
     InitPet();
     InitPetTalents();
     InitSkills();
@@ -4993,6 +4995,46 @@ void PlayerbotFactory::InitInventorySkill()
 
     if (bot->HasSkill(SKILL_SKINNING) && !bot->HasItemCount(7005, 1, true))
         StoreItem(7005, 1);  // Skinning Knife
+
+    if (bot->HasSkill(SKILL_FISHING) && !bot->HasItemCount(6256, 1, true))
+        StoreItem(6256, 1);  // Fishing Pole
+}
+
+void PlayerbotFactory::InitBandages()
+{
+    if (!sPlayerbotAIConfig.botProvisionConsumables)
+        return;
+    if (!bot->HasSkill(SKILL_FIRST_AID))
+        return;
+
+    uint32 skill = bot->GetSkillValue(SKILL_FIRST_AID);
+    // best heal-bandage whose required First-Aid skill the bot meets (descending)
+    static const std::vector<std::pair<uint32 /*reqSkill*/, uint32 /*itemId*/>> kBandages = {
+        {400, 34722}, // Heavy Frostweave Bandage
+        {360, 21991}, // Heavy Netherweave Bandage
+        {330, 21990}, // Netherweave Bandage
+        {300, 14530}, // Heavy Runecloth Bandage
+        {260, 14529}, // Runecloth Bandage
+        {240, 8545},  // Heavy Mageweave Bandage
+        {210, 8544},  // Mageweave Bandage
+        {180, 6451},  // Heavy Silk Bandage
+        {150, 6450},  // Silk Bandage
+        {115, 3531},  // Heavy Wool Bandage
+        {80,  3530},  // Wool Bandage
+        {55,  2581},  // Heavy Linen Bandage
+        {30,  1251},  // Linen Bandage
+        {1,   1251},  // floor
+    };
+    uint32 itemId = 0;
+    for (auto const& [reqSkill, id] : kBandages)
+        if (skill >= reqSkill) { itemId = id; break; }
+    if (!itemId)
+        return;
+
+    uint32 const want = 20;
+    int count = (int)want - (int)bot->GetItemCount(itemId);
+    if (count > 0)
+        StoreItem(itemId, count);
 }
 
 Item* PlayerbotFactory::StoreItem(uint32 itemId, uint32 count)

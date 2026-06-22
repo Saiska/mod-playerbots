@@ -32,6 +32,7 @@ struct NewRpgInfo
         int32 objectiveIdx{0};
         WorldPosition pos{};
         uint32 lastReachPOI{0};
+        WorldPosition targetPos{};   // doquest-zone-travel: cross-zone/map travel target (empty = in-zone, no travel)
     };
     // RPG_TRAVEL_FLIGHT
     struct TravelFlight
@@ -81,10 +82,12 @@ struct NewRpgInfo
     };
     struct Idle
     {
+        uint32 dwellMs{0};
     };
 
     uint32 startT{0};  // start timestamp of the current status
     uint8  lastRestSubtype{RS_NONE};  // cross-episode: subtype of the previous Rest episode (survives variant reset)
+    uint32 lastZoneId{0};            // zone at last Execute tick; clears lowPriorityQuest on zone change
 
     BotBehaviorId lastEmittedBehaviorId{BEH_NONE};  // last behaviorId we emitted a lifecycle event for (central emitter)
 
@@ -113,7 +116,7 @@ struct NewRpgInfo
     NewRpgStatus GetStatus();
     bool HasStatusPersisted(uint32 maxDuration) { return GetMSTimeDiffToNow(startT) > maxDuration; }
     void ChangeToGoGrind(WorldPosition pos);
-    void ChangeToDoQuest(uint32 questId, const Quest* quest);
+    void ChangeToDoQuest(uint32 questId, const Quest* quest, WorldPosition targetPos = WorldPosition());
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
     void ChangeToTravelMount(WorldPosition pos);

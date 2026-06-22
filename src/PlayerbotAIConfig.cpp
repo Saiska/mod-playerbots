@@ -670,6 +670,7 @@ bool PlayerbotAIConfig::Initialize()
     altMaintenanceReagents = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceReagents", true);
     altMaintenanceConsumables = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceConsumables", true);
     altMaintenancePotions = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePotions", true);
+    botProvisionConsumables = sConfigMgr->GetOption<bool>("AiPlayerbot.BotProvisionConsumables", true);
     altMaintenanceTalentTree = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceTalentTree", true);
     altMaintenancePet = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePet", true);
     altMaintenancePetTalents = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePetTalents", true);
@@ -752,7 +753,7 @@ bool PlayerbotAIConfig::Initialize()
     autoDoQuests = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoDoQuests", true);
     enableNewRpgStrategy = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableNewRpgStrategy", true);
 
-    RpgStatusProbWeight[RPG_GO_GRIND] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoGrind", 15);
+    RpgStatusProbWeight[RPG_GO_GRIND] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoGrind", 25);
     RpgStatusProbWeight[RPG_DO_QUEST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoQuest", 60);
     RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 60);
@@ -801,7 +802,7 @@ bool PlayerbotAIConfig::Initialize()
              restHubEnable, (uint32)RS_COUNT, restHubHubRange, restHubWitnessRange);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);
-    RpgStatusProbWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GatheringCircuit", 15);
+    RpgStatusProbWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GatheringCircuit", 30);
 
     travelMountDistMin = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMin", 300.0f);
     travelMountDistMax = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMax", 2000.0f);
@@ -809,7 +810,7 @@ bool PlayerbotAIConfig::Initialize()
     gatheringCircuitMinNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MinNodes", 3);
     gatheringCircuitMaxNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MaxNodes", 6);
     if (gatheringCircuitMaxNodes < gatheringCircuitMinNodes) std::swap(gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
-    gatheringCircuitRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.Radius", 60.0f);
+    gatheringCircuitRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.Radius", 120.0f);
     LOG_INFO("playerbots", "[MoreOccupations] travelMount={} gatheringCircuit={} (mountDist={}-{} circuitNodes={}-{})",
              RpgStatusProbWeight[RPG_TRAVEL_MOUNT], RpgStatusProbWeight[RPG_GATHERING_CIRCUIT],
              travelMountDistMin, travelMountDistMax,
@@ -824,6 +825,7 @@ bool PlayerbotAIConfig::Initialize()
              rpgSatiationEnable, rpgSatiationRiseRatePerSec, rpgSatiationDecayRatePerSec,
              rpgSatiationSuppressExponent, rpgSatiationMinAppealFrac);
 
+    rpgIdleDwellMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgIdleDwellMs", 2000);
     rpgSuppressWhenBusy = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenBusy", true);
     rpgSuppressInstance = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Instance", true);
     rpgSuppressGroupedWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.GroupedWithPlayer", true);
@@ -835,6 +837,10 @@ bool PlayerbotAIConfig::Initialize()
     rpgSuppressWhenHurt = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenHurt", true);
     healSayOncePerEpisode = sConfigMgr->GetOption<bool>("AiPlayerbot.HealSayOncePerEpisode", true);
     healSayMinIntervalSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.HealSayMinIntervalSec", 240);
+    rpgNearHubRadius = sConfigMgr->GetOption<float>("AiPlayerbot.RpgNearHubRadius", 60.0f);
+    lowPriorityQuestDecayMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.LowPriorityQuestDecayMs", 1800000);
+    doQuestSuppressScatter = sConfigMgr->GetOption<bool>("AiPlayerbot.DoQuestSuppressScatter", true);
+    doQuestMaxConcurrentTravel = sConfigMgr->GetOption<uint32>("AiPlayerbot.DoQuestMaxConcurrentTravel", 50);
     LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={} lowHpSelfPres={} rpgSuppressHurt={} healSayOnce={} healSayMinSec={}",
              rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,
              rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat, gatherHarvestHoldMs,

@@ -598,6 +598,10 @@ AiPlayerbot.AltMaintenanceReagents = 1
 AiPlayerbot.AltMaintenanceConsumables = 1
 AiPlayerbot.AltMaintenancePotions = 1
 
+# Provision First-Aid bandages (and the fishing pole) to bots that have the matching skill, at
+# initial gear and topped up at maintenance. Tools (pickaxe/knife) are provisioned separately.
+AiPlayerbot.BotProvisionConsumables = 1
+
 AiPlayerbot.AltMaintenanceBags = 1
 AiPlayerbot.AltMaintenanceMounts = 1
 AiPlayerbot.AltMaintenanceSkills = 1
@@ -1140,19 +1144,20 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 
 # Control probability weights for RPG status of bots. Takes effect only when the status meets its premise.
 # Sum of weights need not be 100. Set to 0 to disable the status.
+# These occupation-selection weights are live-reloadable (reload config) and provisional — tune after measuring the live mix.
 #
 # GoGrind       (Default: 15  Go to nearby level-appropriate locations to grind for killing mobs)
 # DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion)
 # TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
 # Rest          (Default: 60  umbrella: travel to a hub and do one activity 5-10 min)
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
-AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
+AiPlayerbot.RpgStatusProbWeight.GoGrind = 25
 AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 60
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
-AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
+AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 30
 
 #    AiPlayerbot.Rest.DwellMin / .DwellMax
 #        Seated dwell at the inn, in seconds (per-bot jittered, measured from arrival). Long dwell is
@@ -1209,12 +1214,15 @@ AiPlayerbot.RpgSuppress.Combat = 1
 # travel_mount picks a taxi-node position on the bot's current map within
 # [DistMin,DistMax] yards. gathering_circuit harvests MinNodes..MaxNodes nodes
 # (bot needs a mining/herbalism skill). Node ranges auto-swap if inverted.
-# GatheringCircuit.Radius: yards to search for a harvestable node per hop.
+# GatheringCircuit.Radius: search radius (yards) for a harvestable mining/herb node when the bot
+# considers the gathering_circuit occupation AND when advancing between circuit hops. The occupation
+# is only offered when at least one node is actually reachable within this radius (honest gate — no
+# instant idle-bounce for profession-holders with no nearby nodes). Default: 120
 AiPlayerbot.TravelMount.DistMin = 300.0
 AiPlayerbot.TravelMount.DistMax = 2000.0
 AiPlayerbot.GatheringCircuit.MinNodes = 3
 AiPlayerbot.GatheringCircuit.MaxNodes = 6
-AiPlayerbot.GatheringCircuit.Radius = 60.0
+AiPlayerbot.GatheringCircuit.Radius = 120.0
 #
 #    AiPlayerbot.Gather.HarvestHoldMs
 #        How long (ms) a bot on the gathering_circuit occupation holds at a node for its mining/herb
@@ -1238,6 +1246,14 @@ AiPlayerbot.LowHealthSelfPreservation = 1
 #
 AiPlayerbot.RpgSuppressWhenHurt = 1
 #
+#    AiPlayerbot.RpgNearHubRadius
+#        Distance (yards) within which a bot that fails occupation selection is considered "at a hub"
+#        and rests locally instead of farming in place. Beyond this radius the bot farms (kills in
+#        place via GoGrind anchored to its current position) rather than sitting in the open world.
+#        Default: 60
+#
+AiPlayerbot.RpgNearHubRadius = 60
+#
 #    AiPlayerbot.HealSayOncePerEpisode
 #        Announce "need heal" once when health drops into the low band, then stay quiet until health
 #        recovers above AiPlayerbot.AlmostFullHealth and drops again (no back-to-back spam). 1 = on, 0 = legacy.
@@ -1252,6 +1268,29 @@ AiPlayerbot.HealSayOncePerEpisode = 1
 #        Default: 240
 #
 AiPlayerbot.HealSayMinIntervalSec = 240
+#
+#    AiPlayerbot.LowPriorityQuestDecayMs
+# Milliseconds a stalled quest stays on a bot's low-priority skip list before it
+# becomes eligible again; the list also clears on zone change. Default 1800000 (30 min).
+# 0 = feature disabled (entries decay immediately on read, so no quest is ever skipped).
+#
+AiPlayerbot.LowPriorityQuestDecayMs = 1800000
+
+#    AiPlayerbot.DoQuestSuppressScatter
+# When enabled (1), the random 1-5h scatter teleport is suppressed while a bot is actively in
+# an RPG_DO_QUEST episode. Without this the scatter teleport fights the cross-zone travel leg
+# added by the DoQuest zone-travel feature.
+# Default: 1 (enabled).
+#
+AiPlayerbot.DoQuestSuppressScatter = 1
+
+#    AiPlayerbot.DoQuestMaxConcurrentTravel
+# Maximum number of bots that may perform a cross-zone quest teleport in the same world tick.
+# Acts as a burst limiter to avoid a sudden spike of mass teleports when many bots all pick
+# up a new quest in the same cycle. The counter is thread-safe (atomic).
+# Default: 50.
+#
+AiPlayerbot.DoQuestMaxConcurrentTravel = 50
 
 # Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
@@ -2818,3 +2857,15 @@ RaidSim.BroadcastRealmWide = 1
 #        Default: 3 (Rare/blue and above)
 
 RaidSim.BroadcastLootMinQuality = 3
+
+###################################
+#    IDLE DWELL
+###################################
+#
+#    AiPlayerbot.RpgIdleDwellMs
+#        Minimum milliseconds an idle bot waits before re-running the occupation-availability scan.
+#        Forced-suppression bots are the main Idle population after the fall-to-rest fix; this caps their
+#        per-tick scan cost. 0 = re-roll every tick (legacy).
+#        Default: 2000
+
+AiPlayerbot.RpgIdleDwellMs = 2000

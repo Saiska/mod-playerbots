@@ -13,6 +13,8 @@
 #include "GossipDef.h"
 #include "IVMapMgr.h"
 #include "LootObjectStack.h"
+#include "MapMgr.h"
+#include "RandomPlayerbotMgr.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "Object.h"
@@ -229,6 +231,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
 
+    // zone-change clear: wipe the lowPriorityQuest blacklist when the bot moves to a new zone so
+    // stalls in the old zone don't permanently haunt quests that may be completable in the new area.
+    uint32 const curZone = bot->GetZoneId();
+    if (info.lastZoneId != curZone)
+    {
+        if (info.lastZoneId != 0)
+            botAI->ClearLowPriorityQuests();
+        info.lastZoneId = curZone;
+    }
+
     // comedy-hold-dance: stale held-pose sweep. ANY exit from the social pastime (dwell end, partner
     // lost, OR an external yank — the bot-rpg-bleed-suppression guard below calls ChangeToIdle, which
     // does NOT clear emote-state) leaves status != RPG_PASTIME with our social emote-state still on the
@@ -309,8 +321,13 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
+        {
+            if (NewRpgInfo::Idle* idle = std::get_if<NewRpgInfo::Idle>(&info.data))
+                if (idle->dwellMs && GetMSTimeDiffToNow(info.startT) < idle->dwellMs)
+                    return true;   // still dwelling — skip the 7-status availability sweep
             return RandomChangeStatus({RPG_GO_GRIND, RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST,
                                        RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT, RPG_GATHERING_CIRCUIT});
+        }
 
         case RPG_GO_GRIND:
         {
@@ -523,6 +540,42 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
     if (!dataPtr)
         return false;
     auto& data = *dataPtr;
+
+    // doquest-zone-travel: if a cross-zone/map target is set, teleport there first, then let
+    // the in-zone questing loop take over next tick.
+    if (data.targetPos != WorldPosition())
+    {
+        uint32 const tMap = data.targetPos.GetMapId();
+        float const tx = data.targetPos.GetPositionX();
+        float const ty = data.targetPos.GetPositionY();
+        if (bot->GetMapId() != tMap || bot->GetDistance2d(tx, ty) >= 1500.0f)
+        {
+            Map* tmap = sMapMgr->FindMap(tMap, 0);
+            if (!tmap)
+            {
+                info.ChangeToIdle();   // destination map not loaded; give up, let the spine re-roll
+                return true;           // CRASH RULE: return now, touch no `data` after this
+            }
+            float const ground = tmap->GetHeight(bot->GetPhaseMask(), tx, ty, MAX_HEIGHT);
+            if (ground <= INVALID_HEIGHT)
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            if (!sRandomPlayerbotMgr.TryBeginQuestTravel(bot->GetGUID()))
+                return true;           // over the per-tick burst cap; retry next tick (target retained)
+            bot->TeleportTo(tMap, tx, ty, ground + 0.05f, 0.0f);
+            sRandomPlayerbotMgr.EndQuestTravel(bot->GetGUID());
+            // target consumed via teleport; next tick the bot is in-zone. Update through the live
+            // variant only if it is still DoQuest (TeleportTo does not change rpg status):
+            if (NewRpgInfo::DoQuest* dq = std::get_if<NewRpgInfo::DoQuest>(&info.data))
+                dq->targetPos = WorldPosition();
+            return true;
+        }
+        // already on/near the target map+zone — clear the travel target and quest in-zone
+        data.targetPos = WorldPosition();
+    }
+
     uint32 questId = data.questId;
     uint8 questStatus = bot->GetQuestStatus(questId);
     switch (questStatus)
@@ -637,7 +690,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
             // we has reach the poi for more than 5 mins but no progession
             // may not be able to complete this quest, marked as abandoned
             /// @TODO: It may be better to make lowPriorityQuest a global set shared by all bots (or saved in db)
-            botAI->lowPriorityQuest.insert(questId);
+            botAI->lowPriorityQuest[questId] = getMSTime();
             botAI->rpgStatistic.questAbandoned++;
             LOG_DEBUG("playerbots", "[New RPG] {} marked as abandoned quest {}", bot->GetName(), questId);
             botAI->rpgInfo.ChangeToIdle();
@@ -712,7 +765,7 @@ bool NewRpgDoQuestAction::DoCompletedQuest(NewRpgInfo::DoQuest& data)
     {
         // e.g. Can not reward quest to gameobjects
         /// @TODO: It may be better to make lowPriorityQuest a global set shared by all bots (or saved in db)
-        botAI->lowPriorityQuest.insert(questId);
+        botAI->lowPriorityQuest[questId] = getMSTime();
         botAI->rpgStatistic.questAbandoned++;
         LOG_DEBUG("playerbots", "[New RPG] {} marked as abandoned quest {}", bot->GetName(), questId);
         botAI->rpgInfo.ChangeToIdle();
