@@ -1766,7 +1766,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
             {
                 uint32 questId = bot->GetQuestSlotQuestId(slot);
-                if (botAI->lowPriorityQuest.find(questId) != botAI->lowPriorityQuest.end())
+                if (botAI->IsQuestLowPriority(questId))
                     continue;
 
                 std::vector<POIInfo> poiInfo;
@@ -1865,7 +1865,7 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
             {
                 uint32 questId = bot->GetQuestSlotQuestId(slot);
-                if (botAI->lowPriorityQuest.find(questId) != botAI->lowPriorityQuest.end())
+                if (botAI->IsQuestLowPriority(questId))
                     continue;
 
                 std::vector<POIInfo> poiInfo;

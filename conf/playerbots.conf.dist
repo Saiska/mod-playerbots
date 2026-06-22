@@ -1267,6 +1267,15 @@ AiPlayerbot.HealSayOncePerEpisode = 1
 #        Default: 240
 #
 AiPlayerbot.HealSayMinIntervalSec = 240
+#
+#    AiPlayerbot.LowPriorityQuestDecayMs
+#        Milliseconds a stalled quest stays on a bot's low-priority (skip) list after it fails to
+#        make progress at a quest POI. After this interval the quest becomes eligible again.
+#        The list also clears automatically whenever the bot changes zone.
+#        0 keeps the legacy never-clear behavior (once stalled, always skipped this session).
+#        Default: 1800000 (30 minutes)
+#
+AiPlayerbot.LowPriorityQuestDecayMs = 1800000
 
 # Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).

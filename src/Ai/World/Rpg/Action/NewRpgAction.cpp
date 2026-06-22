@@ -229,6 +229,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
 
+    // zone-change clear: wipe the lowPriorityQuest blacklist when the bot moves to a new zone so
+    // stalls in the old zone don't permanently haunt quests that may be completable in the new area.
+    uint32 const curZone = bot->GetZoneId();
+    if (info.lastZoneId != curZone)
+    {
+        if (info.lastZoneId != 0)
+            botAI->ClearLowPriorityQuests();
+        info.lastZoneId = curZone;
+    }
+
     // comedy-hold-dance: stale held-pose sweep. ANY exit from the social pastime (dwell end, partner
     // lost, OR an external yank — the bot-rpg-bleed-suppression guard below calls ChangeToIdle, which
     // does NOT clear emote-state) leaves status != RPG_PASTIME with our social emote-state still on the
@@ -642,7 +652,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
             // we has reach the poi for more than 5 mins but no progession
             // may not be able to complete this quest, marked as abandoned
             /// @TODO: It may be better to make lowPriorityQuest a global set shared by all bots (or saved in db)
-            botAI->lowPriorityQuest.insert(questId);
+            botAI->lowPriorityQuest[questId] = getMSTime();
             botAI->rpgStatistic.questAbandoned++;
             LOG_DEBUG("playerbots", "[New RPG] {} marked as abandoned quest {}", bot->GetName(), questId);
             botAI->rpgInfo.ChangeToIdle();
@@ -717,7 +727,7 @@ bool NewRpgDoQuestAction::DoCompletedQuest(NewRpgInfo::DoQuest& data)
     {
         // e.g. Can not reward quest to gameobjects
         /// @TODO: It may be better to make lowPriorityQuest a global set shared by all bots (or saved in db)
-        botAI->lowPriorityQuest.insert(questId);
+        botAI->lowPriorityQuest[questId] = getMSTime();
         botAI->rpgStatistic.questAbandoned++;
         LOG_DEBUG("playerbots", "[New RPG] {} marked as abandoned quest {}", bot->GetName(), questId);
         botAI->rpgInfo.ChangeToIdle();

@@ -539,6 +539,10 @@ public:
     // Radius (yards) within which a bot is considered "at a rest hub" and rests in place instead of
     // farming in place. Beyond this the bot farms (kill in place) rather than sitting in the open world.
     float rpgNearHubRadius{60.0f};
+    // --- occupation-rebalance: lowPriorityQuest decay (Task 8) ---
+    // Milliseconds a stalled quest stays on the skip-list before it becomes eligible again.
+    // The list also clears whenever the bot changes zone. 0 = legacy never-clear (always eligible).
+    uint32 lowPriorityQuestDecayMs{1800000};
     bool healSayOncePerEpisode{true};      // announce "need heal" once per low-health descent, not in a row
     uint32 healSayMinIntervalSec{240};     // min seconds between heal-says (low health / critical health only)
     // --- more-activities-occupations (pipe 2b) ---

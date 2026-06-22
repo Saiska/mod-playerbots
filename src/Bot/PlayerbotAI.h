@@ -21,6 +21,7 @@
 #include "PlayerbotSecurity.h"
 #include "PlayerbotTextMgr.h"
 #include "SpellAuras.h"
+#include "Timer.h"
 #include "Util.h"
 #include "WorldPacket.h"
 
@@ -610,7 +611,20 @@ public:
     static const char* BehaviorKey(BotBehaviorId id);
     NewRpgInfo rpgInfo;
     NewRpgStatistic rpgStatistic;
-    std::unordered_set<uint32> lowPriorityQuest;
+    std::unordered_map<uint32, uint32> lowPriorityQuest;   // questId -> getMSTime() when blacklisted
+    bool IsQuestLowPriority(uint32 questId)
+    {
+        auto it = lowPriorityQuest.find(questId);
+        if (it == lowPriorityQuest.end())
+            return false;
+        if (GetMSTimeDiffToNow(it->second) >= sPlayerbotAIConfig.lowPriorityQuestDecayMs)
+        {
+            lowPriorityQuest.erase(it);
+            return false;
+        }
+        return true;
+    }
+    void ClearLowPriorityQuests() { lowPriorityQuest.clear(); }
     time_t bgReleaseAttemptTime = 0;
 
     // Schedules a callback to run once after <delayMs> milliseconds.
