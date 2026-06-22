@@ -90,6 +90,7 @@ public:
     void InitReagents();
     void InitConsumables();
     void InitPotions();
+    void InitBandages();
     void InitGlyphs(bool increment = false);
     void InitFood();
     void InitMounts();

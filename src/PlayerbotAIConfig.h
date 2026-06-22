@@ -730,6 +730,9 @@ public:
     std::array<uint32, 8> populationBracket;   // bots-per-level for bands 0..7 (levels 1-9 .. 70-79)
     bool   populationClassFavor;               // favor most under-represented class when promoting
 
+    // Provision First-Aid bandages (and the fishing pole) to bots that have the matching skill.
+    bool botProvisionConsumables{true};
+
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)
     {
