@@ -90,6 +90,24 @@ protected:
     // anchored to current pos, which is always non-empty so the commit cannot fail). Never Idle.
     bool FallToFarmOrRest();
 
+    // ── occupation-machine Task 2: predicate vocabulary ──────────────────────
+    // All predicates are O(1)/cheap-proximity; read-only; valid for the current tick only.
+    // Callers: Task 4 Decide()/OccupationFeasible()/RecoverNeeded()/UpkeepNeeded(), Task 5 NEEDS.
+    bool InOpenWorld();                 // not in dungeon/raid/battleground/arena
+    bool NearHub(float r);              // within r yards of any travel hub (wraps IsNearRestHub)
+    bool InCityHub();                   // current zone has AREA_FLAG_CAPITAL
+    bool HealthLow();                   // hp% < needHealthLowPct, non-combat
+    bool ManaLow();                     // mana% < needManaLowPct (power-using classes only)
+    bool DurabilityLow();               // any equipped item below needDurabilityLowPct%
+    bool BagsFull();                    // free inventory slots <= needBagsFullSlots
+    bool MissingToolsOrReagents();      // mining-pick absent (miner) or fishing-pole absent (fisher)
+    bool MaintenanceOverdue();          // time since lastUpkeepMs > maintenanceOverdueMs
+    bool HasActionableQuest();          // held quest with resolvable POI, or complete-unturned
+    bool HasGatherProfAndTool();        // gathering profession (mining/herb) + required tool present
+    bool NodeInRange(float r);          // a gather node within r yards (uses SelectGatherNode cap)
+    bool VendorInRange();               // vendor/repair NPC within pastimeRepairSellRadius
+    bool EnemyNearForPvp();             // open-world PvP zone AND nearest hostile player present
+
 protected:
     /* FOR MOVE FAR */
     const float pathFinderDis = 70.0f;

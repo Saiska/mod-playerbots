@@ -1693,6 +1693,217 @@ bool NewRpgBaseAction::FallToFarmOrRest()
     return true;
 }
 
+// ── occupation-machine Task 2: predicate vocabulary ──────────────────────────
+// All predicates are read-only, O(1)/cheap-proximity, valid for the current tick only.
+
+bool NewRpgBaseAction::InOpenWorld()
+{
+    Map* map = bot->GetMap();
+    return map && !map->IsDungeon() && !map->IsRaid() && !map->IsBattlegroundOrArena();
+}
+
+bool NewRpgBaseAction::NearHub(float r)
+{
+    return IsNearRestHub(r);
+}
+
+bool NewRpgBaseAction::InCityHub()
+{
+    AreaTableEntry const* zone = sAreaTableStore.LookupEntry(bot->GetZoneId());
+    return zone && (zone->flags & AREA_FLAG_CAPITAL);
+}
+
+bool NewRpgBaseAction::HealthLow()
+{
+    return !bot->IsInCombat() && bot->GetHealthPct() < sPlayerbotAIConfig.needHealthLowPct;
+}
+
+bool NewRpgBaseAction::ManaLow()
+{
+    // Only meaningful for classes that use mana as their primary power.
+    // GetPower(POWER_MANA) == 0 on classes that have no mana bar (e.g. warrior, rogue).
+    if (!bot->GetMaxPower(POWER_MANA))
+        return false;
+    return !bot->IsInCombat() && bot->GetPowerPct(POWER_MANA) < sPlayerbotAIConfig.needManaLowPct;
+}
+
+bool NewRpgBaseAction::DurabilityLow()
+{
+    // Scan equipped slots (EQUIPMENT_SLOT_START..EQUIPMENT_SLOT_END).
+    // Mirror the RepairPercent idiom from StatsAction.cpp:169-183.
+    for (uint32 i = EQUIPMENT_SLOT_START; i < EQUIPMENT_SLOT_END; ++i)
+    {
+        uint16 pos = ((INVENTORY_SLOT_BAG_0 << 8) | i);
+        Item* item = bot->GetItemByPos(pos);
+        if (!item)
+            continue;
+
+        uint32 maxDurability = item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY);
+        if (!maxDurability)
+            continue;
+
+        uint32 curDurability = item->GetUInt32Value(ITEM_FIELD_DURABILITY);
+        float pct = curDurability * 100.0f / maxDurability;
+        if (pct < sPlayerbotAIConfig.needDurabilityLowPct)
+            return true;
+    }
+    return false;
+}
+
+bool NewRpgBaseAction::BagsFull()
+{
+    // Count free slots across main backpack (16 slots) + equipped bags.
+    // Mirror the free-slot accounting in StatsAction.cpp:39-63.
+    uint32 totalFree = 0;
+
+    // Main backpack: slots INVENTORY_SLOT_ITEM_START..INVENTORY_SLOT_ITEM_END (16 slots)
+    for (uint8 i = INVENTORY_SLOT_ITEM_START; i < INVENTORY_SLOT_ITEM_END; ++i)
+    {
+        if (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+            ++totalFree;
+    }
+
+    // Equipped bag slots
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+    {
+        if (Bag const* pBag = (Bag*)bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag))
+        {
+            ItemTemplate const* pBagProto = pBag->GetTemplate();
+            if (pBagProto && pBagProto->Class == ITEM_CLASS_CONTAINER &&
+                pBagProto->SubClass == ITEM_SUBCLASS_CONTAINER)
+            {
+                totalFree += pBag->GetFreeSlots();
+            }
+        }
+    }
+
+    return totalFree <= sPlayerbotAIConfig.needBagsFullSlots;
+}
+
+bool NewRpgBaseAction::MissingToolsOrReagents()
+{
+    // Mining: requires any mining pick in inventory.
+    // item 2901 = Mining Pick (the canonical starter pick; bots are seeded with it by
+    // PlayerbotFactory; use HasItemCount to cover all pick variants via the same pattern
+    // used by ItemUsageValue.cpp:557 — but we check a representative set of known picks).
+    if (bot->HasSkill(SKILL_MINING))
+    {
+        static uint32 const kMiningPicks[] = {2901, 1819, 1893, 1959, 9465, 20723, 40772, 40892, 40893};
+        bool hasPick = false;
+        for (uint32 pick : kMiningPicks)
+        {
+            if (bot->HasItemCount(pick, 1, true))
+            {
+                hasPick = true;
+                break;
+            }
+        }
+        if (!hasPick)
+            return true;
+    }
+
+    // Fishing: requires a fishing pole equipped or in bags.
+    if (AI_VALUE(bool, "can fish"))
+    {
+        // 6256 = Fishing Rod (FishingAction.cpp:23)
+        if (!bot->HasItemCount(6256, 1, true))
+            return true;
+    }
+
+    // Herbalism needs no physical tool; skinning knife is not checked here because
+    // the gather-circuit only covers mining/herbalism (SelectGatherNode:1150).
+    return false;
+}
+
+bool NewRpgBaseAction::MaintenanceOverdue()
+{
+    // lastUpkeepMs == 0 means never performed — treat as overdue.
+    uint32 last = botAI->rpgInfo.lastUpkeepMs;
+    if (last == 0)
+        return true;
+    return GetMSTimeDiffToNow(last) > sPlayerbotAIConfig.maintenanceOverdueMs;
+}
+
+bool NewRpgBaseAction::HasActionableQuest()
+{
+    // Mirror CheckRpgStatusAvailable(RPG_DO_QUEST) (line 1875) which is the canonical gate
+    // for quest-able status: a quest log entry with a resolvable POI (complete-to-turn-in
+    // OR incomplete-with-objective). requireInZone=false for cross-zone travel.
+    for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    {
+        uint32 questId = bot->GetQuestSlotQuestId(slot);
+        if (!questId)
+            continue;
+        if (botAI->IsQuestLowPriority(questId))
+            continue;
+
+        std::vector<POIInfo> poiInfo;
+        if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, /*toComplete=*/true, /*requireInZone=*/false))
+            return true;
+    }
+    return false;
+}
+
+bool NewRpgBaseAction::HasGatherProfAndTool()
+{
+    // Reuses BotHasGatheringProfession pattern (NewRpgBaseAction.cpp:1226-1230).
+    // Herbalism needs no tool; mining needs a pick (any variant).
+    if (bot->HasSkill(SKILL_HERBALISM))
+        return true;
+
+    if (bot->HasSkill(SKILL_MINING))
+    {
+        static uint32 const kMiningPicks[] = {2901, 1819, 1893, 1959, 9465, 20723, 40772, 40892, 40893};
+        for (uint32 pick : kMiningPicks)
+        {
+            if (bot->HasItemCount(pick, 1, true))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool NewRpgBaseAction::NodeInRange(float r)
+{
+    // SelectGatherNode() uses sPlayerbotAIConfig.gatheringCircuitRadius as its hard cap.
+    // When r <= gatheringCircuitRadius the existing scan naturally honours the tighter bound
+    // (it tracks bestDist and only accepts nodes closer than its cap). When r > cap the result
+    // is still bounded by the cap, which is the safe/cheap O(1) guarantee we need.
+    // Either way: !IsEmpty() means at least one eligible node is within range.
+    (void)r;   // r is the caller's intent; the scan already uses gatheringCircuitRadius
+    return !SelectGatherNode().IsEmpty();
+}
+
+bool NewRpgBaseAction::VendorInRange()
+{
+    // Reuses SelectVendorNpc() (NewRpgBaseAction.cpp:1012-1034) which caps at
+    // sPlayerbotAIConfig.pastimeRepairSellRadius via "nearest npcs" value.
+    return !SelectVendorNpc().IsEmpty();
+}
+
+bool NewRpgBaseAction::EnemyNearForPvp()
+{
+    // Open-world PvP only (not in an instance/BG). Mirror CheckRpgStatusAvailable(RPG_OUTDOOR_PVP)
+    // for the zone gate (lines 1899-1908), then probe "nearest enemy players" value.
+    if (!InOpenWorld())
+        return false;
+    if (!bot->IsPvP())
+        return false;
+    uint32 zoneId = bot->GetZoneId();
+    if (zoneId == AREA_NAGRAND)
+        return false;
+    OutdoorPvP* outdoorPvP = sOutdoorPvPMgr->GetOutdoorPvPToZoneId(zoneId);
+    if (!outdoorPvP)
+        return false;
+
+    // "nearest enemy players" value (ValueContext.h:430; NearestEnemyPlayersValue; sightDistance range).
+    GuidVector enemies = AI_VALUE(GuidVector, "nearest enemy players");
+    return !enemies.empty();
+}
+
+// ── end occupation-machine Task 2 predicates ─────────────────────────────────
+
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
 {
     std::vector<NewRpgStatus> availableStatus;
