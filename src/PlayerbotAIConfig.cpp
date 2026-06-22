@@ -812,8 +812,7 @@ bool PlayerbotAIConfig::Initialize()
     occupationWeight[RPG_DO_QUEST]          = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.DoQuest",   25);
     occupationWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.Gather",    30);
     occupationWeight[RPG_OUTDOOR_PVP]       = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.OutdoorPvP", 7);
-    occupationWeight[RPG_PASTIME]           = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.HubLife",   20);
-    occupationWeight[RPG_REST]              = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.RestAtHub", 12);
+    occupationWeight[RPG_REST]              = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.HubLife",   20);
     occupationWeight[RPG_GO_GRIND]          = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.Grind",     15);
 
     // Cooldowns in seconds (converted to ms); OutdoorPvP is exempt (0).
@@ -821,8 +820,7 @@ bool PlayerbotAIConfig::Initialize()
         {RPG_DO_QUEST,          "AiPlayerbot.OccupationCooldownSec.DoQuest"},
         {RPG_GATHERING_CIRCUIT, "AiPlayerbot.OccupationCooldownSec.Gather"},
         {RPG_OUTDOOR_PVP,       "AiPlayerbot.OccupationCooldownSec.OutdoorPvP"},
-        {RPG_PASTIME,           "AiPlayerbot.OccupationCooldownSec.HubLife"},
-        {RPG_REST,              "AiPlayerbot.OccupationCooldownSec.RestAtHub"},
+        {RPG_REST,              "AiPlayerbot.OccupationCooldownSec.HubLife"},
         {RPG_GO_GRIND,          "AiPlayerbot.OccupationCooldownSec.Grind"},
     };
     for (auto const& k : kCooldownKeys)
@@ -840,10 +838,10 @@ bool PlayerbotAIConfig::Initialize()
     needDurabilityLowPct    = sConfigMgr->GetOption<float>("AiPlayerbot.NeedDurabilityLowPct",  25.0f);
     needBagsFullSlots       = sConfigMgr->GetOption<uint32>("AiPlayerbot.NeedBagsFullSlots",     2);
     LOG_INFO("playerbots",
-             "[RpgMachine] config loaded — weights[Q{} Ga{} Pvp{} Hub{} Rest{} Gr{}] cooldownFrac={} maintOverdueSec={} travelBudget={} debug={}",
+             "[RpgMachine] config loaded — weights[Q{} Ga{} Pvp{} Hub{} Gr{}] cooldownFrac={} maintOverdueSec={} travelBudget={} debug={}",
              occupationWeight[RPG_DO_QUEST], occupationWeight[RPG_GATHERING_CIRCUIT],
-             occupationWeight[RPG_OUTDOOR_PVP], occupationWeight[RPG_PASTIME],
-             occupationWeight[RPG_REST], occupationWeight[RPG_GO_GRIND],
+             occupationWeight[RPG_OUTDOOR_PVP], occupationWeight[RPG_REST],
+             occupationWeight[RPG_GO_GRIND],
              occupationCooldownFrac, maintenanceOverdueMs / 1000u,
              rpgTravelBudget, rpgMachineDebugLog);
 

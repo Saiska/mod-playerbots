@@ -341,6 +341,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             if (fp->inFlight && !bot->IsInFlight())
             {
+                if (sPlayerbotAIConfig.rpgSuppressWhenBusy && ShouldSuppressRpg())
+                {
+                    info.ChangeToIdle();
+                    return true;   // suppressed: freeze at IDLE; the IDLE boundary re-Decides when free
+                }
                 Decide();
                 return true;
             }
@@ -468,6 +473,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             if (bot->GetExactDist(mp->pos) < 10.0f || info.HasStatusPersisted(statusTravelMountDuration))
             {
+                if (sPlayerbotAIConfig.rpgSuppressWhenBusy && ShouldSuppressRpg())
+                {
+                    info.ChangeToIdle();
+                    return true;   // suppressed: freeze at IDLE; the IDLE boundary re-Decides when free
+                }
                 Decide();
                 return true;
             }

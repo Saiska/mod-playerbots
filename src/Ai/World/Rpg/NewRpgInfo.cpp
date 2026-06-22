@@ -1,5 +1,6 @@
 #include "NewRpgInfo.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "Timer.h"

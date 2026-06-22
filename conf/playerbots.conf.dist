@@ -1150,14 +1150,12 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 # DoQuest   — select a quest and travel to it
 # Gather    — multi-node herbalism/mining circuit
 # OutdoorPvP — capture-point participation (always cooldown-exempt)
-# HubLife   — leisure/pastime activity at a city hub
-# RestAtHub — sit-down rest episode at a hub
+# HubLife   — visit a city hub (leisure or sit-rest; the leisure-vs-rest subtype is chosen by AiPlayerbot.RestHub.Weight.*)
 # Grind     — kill mobs at a level-appropriate location
 AiPlayerbot.OccupationWeight.DoQuest = 25
 AiPlayerbot.OccupationWeight.Gather = 30
 AiPlayerbot.OccupationWeight.OutdoorPvP = 7
 AiPlayerbot.OccupationWeight.HubLife = 20
-AiPlayerbot.OccupationWeight.RestAtHub = 12
 AiPlayerbot.OccupationWeight.Grind = 15
 
 # --- Occupation cooldowns (seconds) ----------------------------------------------
@@ -1169,7 +1167,6 @@ AiPlayerbot.OccupationCooldownSec.DoQuest = 0
 AiPlayerbot.OccupationCooldownSec.Gather = 0
 AiPlayerbot.OccupationCooldownSec.OutdoorPvP = 0
 AiPlayerbot.OccupationCooldownSec.HubLife = 0
-AiPlayerbot.OccupationCooldownSec.RestAtHub = 0
 AiPlayerbot.OccupationCooldownSec.Grind = 0
 AiPlayerbot.OccupationCooldownFrac = 0.25
 
