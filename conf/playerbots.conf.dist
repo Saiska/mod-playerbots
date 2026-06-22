@@ -1240,10 +1240,18 @@ AiPlayerbot.RpgSuppressWhenHurt = 1
 #
 #    AiPlayerbot.HealSayOncePerEpisode
 #        Announce "need heal" once when health drops into the low band, then stay quiet until health
-#        recovers above AiPlayerbot.MediumHealth and drops again (no back-to-back spam). 1 = on, 0 = legacy.
+#        recovers above AiPlayerbot.AlmostFullHealth and drops again (no back-to-back spam). 1 = on, 0 = legacy.
 #        Default: 1
 #
 AiPlayerbot.HealSayOncePerEpisode = 1
+#
+#    AiPlayerbot.HealSayMinIntervalSec
+#        Minimum seconds between "low health" / "critical health" barks (heal qualifiers only).
+#        Non-heal says (low mana, taunt, aoe) keep their default ~30 s cadence unaffected.
+#        Only active when HealSayOncePerEpisode = 1. Live-tunable via reload config + rndbot reload.
+#        Default: 240
+#
+AiPlayerbot.HealSayMinIntervalSec = 240
 
 # Pastime / social-activity tuning (used by the Pastime RPG status above; activities = social, loiter, fish, craft, duel).
 # Social.Weight: relative weight of the social activity within the pastime registry (future activities add more).
