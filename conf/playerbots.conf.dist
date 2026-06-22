@@ -1144,19 +1144,20 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 
 # Control probability weights for RPG status of bots. Takes effect only when the status meets its premise.
 # Sum of weights need not be 100. Set to 0 to disable the status.
+# These occupation-selection weights are live-reloadable (reload config) and provisional — tune after measuring the live mix.
 #
 # GoGrind       (Default: 15  Go to nearby level-appropriate locations to grind for killing mobs)
 # DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion)
 # TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
 # Rest          (Default: 60  umbrella: travel to a hub and do one activity 5-10 min)
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
-AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
+AiPlayerbot.RpgStatusProbWeight.GoGrind = 25
 AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
 AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 60
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
-AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 15
+AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 30
 
 #    AiPlayerbot.Rest.DwellMin / .DwellMax
 #        Seated dwell at the inn, in seconds (per-bot jittered, measured from arrival). Long dwell is
