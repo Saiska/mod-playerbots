@@ -534,6 +534,7 @@ public:
     bool lowHealthSelfPreservation{true};  // low-band (45%) potion-in-combat / bandage-out-of-combat
     bool rpgSuppressWhenHurt{true};        // stop NewRpg wandering while below lowHealth so the bot recovers
     bool healSayOncePerEpisode{true};      // announce "need heal" once per low-health descent, not in a row
+    uint32 healSayMinIntervalSec{240};     // min seconds between heal-says (low health / critical health only)
     // --- more-activities-occupations (pipe 2b) ---
     float  travelMountDistMin{300.0f};
     float  travelMountDistMax{2000.0f};
