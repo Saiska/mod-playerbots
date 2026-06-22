@@ -254,36 +254,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         info.heldSocialEmote = 0;
     }
 
-    // --- occupation satiation: integrate meters (dt-based; runs every tick) ---
-    // Current category rises; all others decay. IDLE -> CategoryOf == CAT_COUNT,
-    // so no category matches and everything decays.
-    if (sPlayerbotAIConfig.rpgSatiationEnable)
-    {
-        uint32 nowMs = getMSTime();
-        if (info.lastSatiationUpdateMs == 0)
-        {
-            info.lastSatiationUpdateMs = nowMs;
-        }
-        else
-        {
-            uint32 elapsedMs = GetMSTimeDiffToNow(info.lastSatiationUpdateMs);  // wrap-safe
-            info.lastSatiationUpdateMs = nowMs;
-            if (elapsedMs > 60000)
-                elapsedMs = 60000;  // clamp long idle gaps so meters don't jump
-            float dt = elapsedMs / 1000.0f;
-            BotActivityCategory cur = CategoryOf(info.GetStatus());
-            for (uint8 c = 0; c < CAT_COUNT; ++c)
-            {
-                if (c == static_cast<uint8>(cur))
-                    info.satiation[c] =
-                        std::min(1.0f, info.satiation[c] + sPlayerbotAIConfig.rpgSatiationRiseRatePerSec * dt);
-                else
-                    info.satiation[c] =
-                        std::max(0.0f, info.satiation[c] - sPlayerbotAIConfig.rpgSatiationDecayRatePerSec * dt);
-            }
-        }
-    }
-
     // --- occupation lifecycle events: emit on any behaviorId edge (once-only by construction) ---
     // GetCurrentBehaviorId() is BEH_NONE while a pastime is still converging (start-only-when-real)
     // and the real BEH_* only once engaged; statuses report at intent. One diff per tick catches every edge.
@@ -324,9 +294,10 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             if (NewRpgInfo::Idle* idle = std::get_if<NewRpgInfo::Idle>(&info.data))
                 if (idle->dwellMs && GetMSTimeDiffToNow(info.startT) < idle->dwellMs)
-                    return true;   // still dwelling — skip the 7-status availability sweep
-            return RandomChangeStatus({RPG_GO_GRIND, RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST,
-                                       RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT, RPG_GATHERING_CIRCUIT});
+                    return true;   // still dwelling — skip the occupation-availability sweep
+            // NEEDS→DECIDE resolver (occupation-state-machine Task 4) replaces the satiation roulette.
+            Decide();
+            return true;
         }
 
         case RPG_GO_GRIND:

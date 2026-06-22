@@ -1957,82 +1957,54 @@ bool NewRpgBaseAction::EnemyNearForPvp()
 
 // ── end occupation-machine Task 2 predicates ─────────────────────────────────
 
-bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
+// ── occupation-state-machine Task 4: NEEDS→DECIDE resolver ───────────────────
+// Decide() runs ONLY at occupation boundaries (the IDLE case in NewRpgStatusUpdateAction::Execute
+// and occupation exits). It is NOT a per-tick call. All predicates are O(1)/cheap-proximity.
+//
+// CRASH RULE (the #1 risk here): a bad_variant_access on a MapUpdater worker = world terminate.
+// Every ChangeTo* call below is followed by an immediate `return` and we touch no variant data
+// afterwards. Any rpgInfo.data read uses std::get_if + a null-guard, never throwing std::get<>.
+
+bool NewRpgBaseAction::RecoverNeeded()
 {
-    std::vector<NewRpgStatus> availableStatus;
-    std::vector<uint32> statusWeight;
-    uint32 probSum = 0;
-    for (NewRpgStatus status : candidateStatus)
-    {
-        uint32 base = sPlayerbotAIConfig.RpgStatusProbWeight[status];
-        if (base == 0)
-            continue;
-        if (!CheckRpgStatusAvailable(status))
-            continue;
+    // TODO(T5): real RECOVER need-detection (HealthLow/ManaLow + recover gating) lands in Task 5.
+    // Stubbed to false for the green build so NEEDS stay inert until then.
+    return false;
+}
 
-        uint32 weight = base;  // Enable=0 -> weight==base -> legacy roulette byte-for-byte
-        if (sPlayerbotAIConfig.rpgSatiationEnable)
-        {
-            BotActivityCategory cat = CategoryOf(status);
-            float sat = (cat < CAT_COUNT) ? botAI->rpgInfo.satiation[cat] : 0.0f;
-            float appeal = base * RpgSatiationSuppress(sat, sPlayerbotAIConfig.rpgSatiationSuppressExponent);
-            float floorAppeal = base * sPlayerbotAIConfig.rpgSatiationMinAppealFrac;
-            if (appeal < floorAppeal)
-                appeal = floorAppeal;
-            // scale to integer so we keep the existing urand roulette; never 0 for an eligible status
-            weight = std::max<uint32>(1u, static_cast<uint32>(std::lround(appeal * 1000.0f)));
-        }
+bool NewRpgBaseAction::UpkeepNeeded()
+{
+    // TODO(T5): real UPKEEP need-detection (DurabilityLow/BagsFull/MissingTools/MaintenanceOverdue)
+    // lands in Task 5. Stubbed to false for the green build so NEEDS stay inert until then.
+    return false;
+}
 
-        availableStatus.push_back(status);
-        statusWeight.push_back(weight);
-        probSum += weight;
-    }
-    // Safety check. No eligible status — use the context-aware fallback (never Idle).
-    if (availableStatus.empty() || probSum == 0)
-        return FallToFarmOrRest();
-    uint32 rand = urand(1, probSum);
-    uint32 accumulate = 0;
-    NewRpgStatus chosenStatus = RPG_STATUS_END;
-    for (size_t i = 0; i < availableStatus.size(); ++i)
+bool NewRpgBaseAction::OccupationFeasible(NewRpgStatus status)
+{
+    // Precondition ONLY (spec §5.1). Weight / cooldown shaping happens in Decide().
+    switch (status)
     {
-        accumulate += statusWeight[i];
-        if (accumulate >= rand)
-        {
-            chosenStatus = availableStatus[i];
-            break;
-        }
-    }
-
-    if (sPlayerbotAIConfig.rpgSatiationEnable && chosenStatus != RPG_STATUS_END)
-    {
-        NewRpgInfo const& ri = botAI->rpgInfo;
-        LOG_DEBUG("playerbots",
-                  "[RpgSatiation] Bot #{} sat[ADV,SOC,WORK,TRV,PVP]=[{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}] chose={}",
-                  bot->GetGUID().GetCounter(),
-                  ri.satiation[CAT_ADVENTURE], ri.satiation[CAT_SOCIAL], ri.satiation[CAT_WORK],
-                  ri.satiation[CAT_TRAVEL], ri.satiation[CAT_PVP],
-                  static_cast<uint32>(chosenStatus));
-    }
-
-    switch (chosenStatus)
-    {
-        case RPG_WANDER_RANDOM:
-        case RPG_WANDER_NPC:
-        case RPG_PASTIME:
-            // Deleted statuses (rest-hub-unification Task 9): types/ChangeTo* removed.
-            // These enum values remain so the weight-load lines compile; roulette will
-            // never pick them once the IDLE candidate list is pruned in Task 10.
-            return false;
+        case RPG_DO_QUEST:
+            return HasActionableQuest();
+        case RPG_GATHERING_CIRCUIT:
+            return HasGatherProfAndTool() && NodeInRange(sPlayerbotAIConfig.gatheringCircuitRadius);
+        case RPG_OUTDOOR_PVP:
+            return EnemyNearForPvp();
+        case RPG_REST:
+            // HubLife is now hub-gated: a far bot never strands in FISH/FIELD_REST.
+            return NearHub(sPlayerbotAIConfig.rpgNearHubRadius);
         case RPG_GO_GRIND:
-        {
-            WorldPosition pos = SelectRandomGrindPos(bot);
-            if (pos != WorldPosition())
-            {
-                botAI->rpgInfo.ChangeToGoGrind(pos);
-                return true;
-            }
-            return FallToFarmOrRest();
-        }
+            // Always-feasible wild default; EnterOccupation does the Grind-vs-RestAtHub split.
+            return InOpenWorld();
+        default:
+            return false;
+    }
+}
+
+void NewRpgBaseAction::EnterOccupation(NewRpgStatus status)
+{
+    switch (status)
+    {
         case RPG_DO_QUEST:
         {
             struct Cand { uint32 questId; const Quest* quest; POIInfo poi; bool complete; };
@@ -2052,7 +2024,10 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 cands.push_back({questId, quest, poiInfo.front(), complete});
             }
             if (cands.empty())
-                return FallToFarmOrRest();
+            {
+                FallToFarmOrRest();   // acquire-fail → always commits, never a silent Idle
+                return;
+            }
             std::sort(cands.begin(), cands.end(), [this](Cand const& a, Cand const& b)
             {
                 if (a.complete != b.complete)
@@ -2062,124 +2037,102 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             Cand const& pick = cands.front();
             botAI->rpgInfo.ChangeToDoQuest(pick.questId, pick.quest,
                 WorldPosition(pick.poi.mapId, pick.poi.pos.x, pick.poi.pos.y, 0.0f));
-            return true;                                        // CRASH RULE: return now, touch nothing
-        }
-        case RPG_TRAVEL_FLIGHT:
-        {
-            uint32 flightMasterEntry = 0;
-            WorldPosition flightMasterPos;
-            std::vector<uint32> path;
-            if (SelectRandomFlightTaxiNode(flightMasterEntry, flightMasterPos, path))
-            {
-                botAI->rpgInfo.ChangeToTravelFlight(flightMasterEntry, flightMasterPos, path);
-                return true;
-            }
-            return FallToFarmOrRest();
-        }
-        case RPG_IDLE:
-        {
-            botAI->rpgInfo.ChangeToIdle();
-            return true;
-        }
-        case RPG_REST:
-        {
-            // InnPull retired (rest-hub-unification Task 9): hub selection + travel now handled
-            // by the five-phase state machine (P0/P1 in NewRpgStatusUpdateAction::Execute).
-            botAI->rpgInfo.ChangeToRest();
-            return true;
-        }
-        case RPG_OUTDOOR_PVP:
-        {
-            botAI->rpgInfo.ChangeToOutdoorPvp();
-            return true;
-        }
-        case RPG_TRAVEL_MOUNT:
-        {
-            WorldPosition pos;
-            if (SelectFarTaxiDest(pos))
-            {
-                botAI->rpgInfo.ChangeToTravelMount(pos);
-                return true;
-            }
-            return FallToFarmOrRest();
+            return;                                             // CRASH RULE: return now, touch nothing
         }
         case RPG_GATHERING_CIRCUIT:
         {
             uint32 maxNodes = urand(sPlayerbotAIConfig.gatheringCircuitMinNodes,
                                     sPlayerbotAIConfig.gatheringCircuitMaxNodes);
             botAI->rpgInfo.ChangeToGatheringCircuit(maxNodes);
-            return true;
-        }
-        default:
-        {
-            botAI->rpgInfo.ChangeToRest();
-            bot->SetStandState(UNIT_STAND_STATE_SIT);
-            return true;
-        }
-    }
-    return false;
-}
-
-bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
-{
-    switch (status)
-    {
-        case RPG_IDLE:
-        case RPG_REST:
-            return true;
-        case RPG_WANDER_RANDOM:
-        case RPG_WANDER_NPC:
-        case RPG_PASTIME:
-            return false; // deleted in rest-hub-unification
-        case RPG_GO_GRIND:
-        {
-            WorldPosition pos = SelectRandomGrindPos(bot);
-            return pos != WorldPosition();
-        }
-        case RPG_DO_QUEST:
-        {
-            std::vector<uint32> availableQuests;
-            for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
-            {
-                uint32 questId = bot->GetQuestSlotQuestId(slot);
-                if (botAI->IsQuestLowPriority(questId))
-                    continue;
-
-                std::vector<POIInfo> poiInfo;
-                if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true, /*requireInZone=*/false))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-        case RPG_TRAVEL_FLIGHT:
-        {
-            uint32 flightMasterEntry = 0;
-            WorldPosition flightMasterPos;
-            std::vector<uint32> path;
-            return SelectRandomFlightTaxiNode(flightMasterEntry, flightMasterPos, path);
+            return;                                             // CRASH RULE
         }
         case RPG_OUTDOOR_PVP:
         {
-            if (!bot->IsPvP())
-                return false;
-            uint32 zoneId = bot->GetZoneId();
-            if (zoneId == AREA_NAGRAND)
-                return false;
-
-            OutdoorPvP* outdoorPvP = sOutdoorPvPMgr->GetOutdoorPvPToZoneId(zoneId);
-            return outdoorPvP != nullptr;
+            botAI->rpgInfo.ChangeToOutdoorPvp();
+            return;                                             // CRASH RULE
         }
-        case RPG_TRAVEL_MOUNT:
+        case RPG_REST:
         {
-            WorldPosition pos;
-            return SelectFarTaxiDest(pos);
+            botAI->rpgInfo.ChangeToRest();
+            return;                                             // CRASH RULE
         }
-        case RPG_GATHERING_CIRCUIT:
-            return BotHasGatheringProfession(bot) && !SelectGatherNode().IsEmpty();
+        case RPG_GO_GRIND:
+        {
+            // Grind-vs-RestAtHub default split (FallToFarmOrRest semantics): near a hub → rest in
+            // place; else grind at a real grind pos, falling back to the current-pos anchor (always
+            // non-empty so the commit cannot fail). Never dead-ends to Idle.
+            if (NearHub(sPlayerbotAIConfig.rpgNearHubRadius))
+            {
+                botAI->rpgInfo.ChangeToRest();
+                return;                                         // CRASH RULE
+            }
+            WorldPosition pos = SelectRandomGrindPos(bot);
+            if (pos != WorldPosition())
+            {
+                botAI->rpgInfo.ChangeToGoGrind(pos);
+                return;                                         // CRASH RULE
+            }
+            botAI->rpgInfo.ChangeToGoGrind(WorldPosition(bot));   // current-pos anchor, non-empty
+            return;                                             // CRASH RULE
+        }
         default:
-            return false;
+        {
+            // Unknown / unsupported pick: never dead-end to Idle — commit a safe occupation.
+            FallToFarmOrRest();
+            return;
+        }
     }
-    return false;
+}
+
+void NewRpgBaseAction::Decide()
+{
+    // LAYER 1 — NEEDS (strict priority). Inert until Task 5 fills the bodies.
+    if (RecoverNeeded())  { botAI->rpgInfo.ChangeToRecover(); return; }   // RECOVER first (survival)
+    if (UpkeepNeeded())   { botAI->rpgInfo.ChangeToUpkeep();  return; }
+
+    // LAYER 2 — DECIDE (weighted-random over the FEASIBLE productive set).
+    struct Cand { NewRpgStatus s; uint32 w; };
+    std::vector<Cand> feasible;
+    uint32 sum = 0;
+    for (NewRpgStatus s : {RPG_DO_QUEST, RPG_GATHERING_CIRCUIT, RPG_OUTDOOR_PVP,
+                           RPG_REST /*HubLife*/, RPG_GO_GRIND /*+RestAtHub default*/})
+    {
+        if (!OccupationFeasible(s))
+            continue;                                       // precondition ONLY (spec §5.1)
+        uint32 w = sPlayerbotAIConfig.occupationWeight[s];
+        if (w == 0)
+            continue;
+        uint32 cdMs = sPlayerbotAIConfig.occupationCooldownMs[s];
+        if (cdMs && GetMSTimeDiffToNow(botAI->rpgInfo.lastFinished[s]) < cdMs)
+            w = std::max<uint32>(1u, static_cast<uint32>(std::lround(w * sPlayerbotAIConfig.occupationCooldownFrac)));
+        feasible.push_back({s, w});
+        sum += w;
+    }
+    if (feasible.empty() || sum == 0)
+    {
+        // true last resort — should be near-impossible (Grind/RestAtHub are always-feasible defaults).
+        LOG_ERROR("playerbots",
+                  "[RpgMachine] {} #{} map={} zone={} — DECIDE found ZERO feasible "
+                  "(openWorld={} nearHub={}); entering Idle",
+                  bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), bot->GetZoneId(),
+                  InOpenWorld(), NearHub(sPlayerbotAIConfig.rpgNearHubRadius));
+        botAI->rpgInfo.ChangeToIdle();   // short dwell set in ChangeToIdle
+        return;                          // CRASH RULE
+    }
+    uint32 roll = urand(1, sum);
+    uint32 acc = 0;
+    NewRpgStatus pick = feasible.back().s;
+    for (auto const& c : feasible)
+    {
+        acc += c.w;
+        if (acc >= roll)
+        {
+            pick = c.s;
+            break;
+        }
+    }
+    if (sPlayerbotAIConfig.rpgMachineDebugLog)
+        LOG_DEBUG("playerbots", "[RpgMachine] {} DECIDE pick={} (nFeasible={})",
+                  bot->GetName(), static_cast<uint32>(pick), feasible.size());
+    EnterOccupation(pick);   // ChangeTo* + ACQUIRE seed
 }

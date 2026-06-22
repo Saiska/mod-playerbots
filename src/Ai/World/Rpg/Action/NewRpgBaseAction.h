@@ -92,8 +92,22 @@ protected:
     static WorldPosition SelectRandomGrindPos(Player* bot);
     static WorldPosition SelectRandomCampPos(Player* bot);
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);
-    bool RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus);
-    bool CheckRpgStatusAvailable(NewRpgStatus status);
+    // ── occupation-state-machine Task 4: NEEDS→DECIDE resolver ───────────────
+    // Run only at occupation boundaries (from the IDLE case / occupation exits), never every tick.
+    // LAYER 1 NEEDS (strict priority RECOVER>UPKEEP), then LAYER 2 weighted-random over the
+    // FEASIBLE productive set. Replaces the deleted satiation-roulette RandomChangeStatus.
+    void Decide();
+    // Maps a candidate status to its Task-2 precondition (precondition ONLY — weights/cooldowns
+    // are applied by Decide()). Deliberately changes behaviour vs the old CheckRpgStatusAvailable
+    // (e.g. RPG_REST is now hub-gated, so a far bot never strands in field-rest).
+    bool OccupationFeasible(NewRpgStatus status);
+    // Wraps the per-status ChangeTo* + ACQUIRE seed. CRASH RULE: every ChangeTo* is followed by an
+    // immediate return; acquire-fail paths route to FallToFarmOrRest(), never a silent ChangeToIdle.
+    void EnterOccupation(NewRpgStatus status);
+    // LAYER 1 NEEDS predicates. Bodies land in Task 5; for now they are inert (return false) so
+    // NEEDS never fire and the build stays green.
+    bool RecoverNeeded();
+    bool UpkeepNeeded();
     // bot-rpg-bleed-suppression: allowlist guard — a bot may run autonomous NewRpg ONLY when free.
     bool IsFreeToIdle();
     bool ShouldSuppressRpg();
