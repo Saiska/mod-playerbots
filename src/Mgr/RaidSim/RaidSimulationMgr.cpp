@@ -1195,29 +1195,56 @@ void RaidSimulationMgr::AwardLoot(RaidSimulationMgr::ActiveRun const& run)
     if (present.empty())
         return;
 
+    // Build one calculator per present bot once and reuse across all rolls. The ctor inspects
+    // spec/talents (invariant within a pass); CalculateItem re-reads live player state each call, so
+    // reuse stays correct even after a bot equips an item mid-pass.
+    std::vector<std::unique_ptr<StatsWeightCalculator>> calcs;
+    calcs.reserve(present.size());
+    for (Player* p : present)
+        calcs.push_back(std::make_unique<StatsWeightCalculator>(p));
+
     uint32 rolls = std::min<uint32>(sPlayerbotAIConfig.raidSimRollsPerInterval, present.size());
     for (uint32 r = 0; r < rolls; ++r)
     {
-        Player* bot = present[(r + urand(0, present.size() - 1)) % present.size()];
         uint32 itemId = pool[urand(0, pool.size() - 1)];
 
-        // swap=true so an OCCUPIED slot still resolves a valid dest (a geared L80 bot has every
-        // slot full; swap=false would reject every upgrade — the steady-state case we exist for).
-        uint16 dest = 0;
-        InventoryResult can = bot->CanEquipNewItem(NULL_SLOT, dest, itemId, true);
-        if (can != EQUIP_ERR_OK)
-            continue;  // bot's class/spec/proficiency can't use this item at all
+        // Pick the present bot that gains the most from this item (max upgrade delta). swap=true so an
+        // OCCUPIED slot still resolves a valid dest (a geared L80 bot has every slot full).
+        Player* bot = nullptr;
+        uint16  dest = 0;
+        float   bestDelta = 0.0f;
+        bool    haveCandidate = false;
+        for (size_t i = 0; i < present.size(); ++i)
+        {
+            Player* cand = present[i];
+            uint16 candDest = 0;
+            if (cand->CanEquipNewItem(NULL_SLOT, candDest, itemId, true) != EQUIP_ERR_OK)
+                continue;  // this bot's class/spec/proficiency can't use the item at all
+
+            uint8 candSlot = uint8(candDest & 255);
+            StatsWeightCalculator& calc = *calcs[i];
+            float newScore = calc.CalculateItem(itemId, 0, int32(candSlot));
+            float curScore = 0.0f;
+            if (Item* current = cand->GetItemByPos(INVENTORY_SLOT_BAG_0, candSlot))
+                curScore = calc.CalculateItem(current->GetTemplate()->ItemId,
+                                              current->GetItemRandomPropertyId(), int32(candSlot));
+
+            float delta = newScore - curScore;
+            if (!haveCandidate || delta > bestDelta)
+            {
+                haveCandidate = true;
+                bot = cand;
+                dest = candDest;
+                bestDelta = delta;
+            }
+        }
+
+        if (!haveCandidate)
+            continue;  // no present bot can equip this item
+        if (sPlayerbotAIConfig.raidSimOnlyUpgrades && bestDelta <= 0.0f)
+            continue;  // best candidate still isn't an upgrade — skip (present-only sim, never downgrades)
 
         uint8 slot = uint8(dest & 255);
-        StatsWeightCalculator calc(bot);
-        float newScore = calc.CalculateItem(itemId, 0, int32(slot));
-        float curScore = 0.0f;
-        if (Item* current = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
-            curScore = calc.CalculateItem(current->GetTemplate()->ItemId, current->GetItemRandomPropertyId(),
-                                          int32(slot));
-
-        if (sPlayerbotAIConfig.raidSimOnlyUpgrades && newScore <= curScore)
-            continue;  // not an upgrade for this slot; skip (present-only sim, never downgrades)
 
         // Replace whatever is in the slot. Destroy the displaced item (no bag hoarding) BEFORE equipping
         // into the now-free slot — CanEquipNewItem(swap=true) already validated usability.
