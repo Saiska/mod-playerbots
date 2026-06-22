@@ -3027,12 +3027,13 @@ void RandomPlayerbotMgr::PrintStats()
     {
         LOG_INFO("playerbots", "Bots rpg status:");
         LOG_INFO("playerbots",
-                 "    Idle: {}, Rest: {}, GoGrind: {}, DoQuest: {}, TravelFlight: {}, "
-                 "OutdoorPvP: {}, TravelMount: {}, GatheringCircuit: {}",
-                 rpgStatusCount[RPG_IDLE], rpgStatusCount[RPG_REST], rpgStatusCount[RPG_GO_GRIND],
-                 rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_TRAVEL_FLIGHT],
-                 rpgStatusCount[RPG_OUTDOOR_PVP], rpgStatusCount[RPG_TRAVEL_MOUNT],
-                 rpgStatusCount[RPG_GATHERING_CIRCUIT]);
+                 "    Idle: {}, Recover: {}, Upkeep: {}, Rest: {}, GoGrind: {}, DoQuest: {}, "
+                 "OutdoorPvP: {}, GatheringCircuit: {} | inTransit(Flight/Mount): {}/{}",
+                 rpgStatusCount[RPG_IDLE], rpgStatusCount[RPG_RECOVER], rpgStatusCount[RPG_UPKEEP],
+                 rpgStatusCount[RPG_REST], rpgStatusCount[RPG_GO_GRIND],
+                 rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_OUTDOOR_PVP],
+                 rpgStatusCount[RPG_GATHERING_CIRCUIT],
+                 rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_TRAVEL_MOUNT]);
 
         {
             std::ostringstream ss;

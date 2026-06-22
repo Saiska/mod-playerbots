@@ -320,25 +320,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             }
             break;
         }
-        case RPG_WANDER_RANDOM:
-        {
-            // Deleted status — force IDLE immediately (rest-hub-unification Task 9).
-            info.ChangeToIdle();
-            return true;
-        }
-        case RPG_WANDER_NPC:
-        {
-            // Deleted status — force IDLE immediately (rest-hub-unification Task 9).
-            info.ChangeToIdle();
-            return true;
-        }
-        case RPG_PASTIME:
-        {
-            // Deleted status — force IDLE immediately (rest-hub-unification Task 9).
-            EndSocialPastime(bot);
-            info.ChangeToIdle();
-            return true;
-        }
         case RPG_DO_QUEST:
         {
             // DO_QUEST finish — Task 6: stamp lastFinished + re-Decide (flat field pre-Decide; CRASH RULE).
@@ -555,7 +536,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 
             switch (up.step)
             {
-                case 0:   // ACQUIRE — pick a curated hub (capital/major town when reachable).
+                case 0:   // ACQUIRE — pick a curated hub (capital-tier preference is a deferred refinement).
                 {
                     WorldPosition hub = SelectRandomCampPos(bot);
                     if (hub == WorldPosition())
