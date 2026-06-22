@@ -73,6 +73,8 @@ protected:
 
 protected:
     bool GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete = false, bool requireInZone = true);
+    // doquest-zone-travel: same-map planar distance to a POI, or a large constant for cross-map POIs.
+    float DistToPoi(POIInfo const& poi);
     static WorldPosition SelectRandomGrindPos(Player* bot);
     static WorldPosition SelectRandomCampPos(Player* bot);
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);

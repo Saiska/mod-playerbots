@@ -13,6 +13,8 @@
 #include "GossipDef.h"
 #include "IVMapMgr.h"
 #include "LootObjectStack.h"
+#include "MapMgr.h"
+#include "RandomPlayerbotMgr.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "Object.h"
@@ -538,6 +540,42 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
     if (!dataPtr)
         return false;
     auto& data = *dataPtr;
+
+    // doquest-zone-travel: if a cross-zone/map target is set, teleport there first, then let
+    // the in-zone questing loop take over next tick.
+    if (data.targetPos != WorldPosition())
+    {
+        uint32 const tMap = data.targetPos.GetMapId();
+        float const tx = data.targetPos.GetPositionX();
+        float const ty = data.targetPos.GetPositionY();
+        if (bot->GetMapId() != tMap || bot->GetDistance2d(tx, ty) >= 1500.0f)
+        {
+            Map* tmap = sMapMgr->FindMap(tMap, 0);
+            if (!tmap)
+            {
+                info.ChangeToIdle();   // destination map not loaded; give up, let the spine re-roll
+                return true;           // CRASH RULE: return now, touch no `data` after this
+            }
+            float const ground = tmap->GetHeight(bot->GetPhaseMask(), tx, ty, MAX_HEIGHT);
+            if (ground <= INVALID_HEIGHT)
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            if (!sRandomPlayerbotMgr.TryBeginQuestTravel(bot->GetGUID()))
+                return true;           // over the per-tick burst cap; retry next tick (target retained)
+            bot->TeleportTo(tMap, tx, ty, ground + 0.05f, 0.0f);
+            sRandomPlayerbotMgr.EndQuestTravel(bot->GetGUID());
+            // target consumed via teleport; next tick the bot is in-zone. Update through the live
+            // variant only if it is still DoQuest (TeleportTo does not change rpg status):
+            if (NewRpgInfo::DoQuest* dq = std::get_if<NewRpgInfo::DoQuest>(&info.data))
+                dq->targetPos = WorldPosition();
+            return true;
+        }
+        // already on/near the target map+zone — clear the travel target and quest in-zone
+        data.targetPos = WorldPosition();
+    }
+
     uint32 questId = data.questId;
     uint8 questStatus = bot->GetQuestStatus(questId);
     switch (questStatus)

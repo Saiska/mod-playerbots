@@ -1670,6 +1670,15 @@ bool NewRpgBaseAction::IsNearRestHub(float radius)
     return false;
 }
 
+// doquest-zone-travel: same-map planar distance to a POI, or a large constant for cross-map POIs
+// so that same-map targets sort before cross-map targets (keeps teleports rarer).
+float NewRpgBaseAction::DistToPoi(POIInfo const& poi)
+{
+    if (poi.mapId != bot->GetMapId())
+        return 1000000.0f;
+    return bot->GetDistance2d(poi.pos.x, poi.pos.y);
+}
+
 bool NewRpgBaseAction::FallToFarmOrRest()
 {
     if (IsNearRestHub(sPlayerbotAIConfig.rpgNearHubRadius))
@@ -1762,30 +1771,34 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         }
         case RPG_DO_QUEST:
         {
-            std::vector<uint32> availableQuests;
+            struct Cand { uint32 questId; const Quest* quest; POIInfo poi; bool complete; };
+            std::vector<Cand> cands;
             for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
             {
                 uint32 questId = bot->GetQuestSlotQuestId(slot);
-                if (botAI->IsQuestLowPriority(questId))
+                if (!questId || botAI->IsQuestLowPriority(questId))
                     continue;
-
                 std::vector<POIInfo> poiInfo;
-                if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true))
-                {
-                    availableQuests.push_back(questId);
-                }
+                if (!GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true, /*requireInZone=*/false))
+                    continue;
+                Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+                if (!quest)
+                    continue;
+                bool complete = bot->GetQuestStatus(questId) == QUEST_STATUS_COMPLETE;
+                cands.push_back({questId, quest, poiInfo.front(), complete});
             }
-            if (availableQuests.size())
+            if (cands.empty())
+                return FallToFarmOrRest();
+            std::sort(cands.begin(), cands.end(), [this](Cand const& a, Cand const& b)
             {
-                uint32 questId = availableQuests[urand(0, availableQuests.size() - 1)];
-                const Quest* quest = sObjectMgr->GetQuestTemplate(questId);
-                if (quest)
-                {
-                    botAI->rpgInfo.ChangeToDoQuest(questId, quest);
-                    return true;
-                }
-            }
-            return FallToFarmOrRest();
+                if (a.complete != b.complete)
+                    return a.complete;                          // turn-ins first
+                return DistToPoi(a.poi) < DistToPoi(b.poi);    // then nearest
+            });
+            Cand const& pick = cands.front();
+            botAI->rpgInfo.ChangeToDoQuest(pick.questId, pick.quest,
+                WorldPosition(pick.poi.mapId, pick.poi.pos.x, pick.poi.pos.y, 0.0f));
+            return true;                                        // CRASH RULE: return now, touch nothing
         }
         case RPG_TRAVEL_FLIGHT:
         {

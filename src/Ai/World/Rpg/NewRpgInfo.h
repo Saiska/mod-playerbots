@@ -32,6 +32,7 @@ struct NewRpgInfo
         int32 objectiveIdx{0};
         WorldPosition pos{};
         uint32 lastReachPOI{0};
+        WorldPosition targetPos{};   // doquest-zone-travel: cross-zone/map travel target (empty = in-zone, no travel)
     };
     // RPG_TRAVEL_FLIGHT
     struct TravelFlight
@@ -115,7 +116,7 @@ struct NewRpgInfo
     NewRpgStatus GetStatus();
     bool HasStatusPersisted(uint32 maxDuration) { return GetMSTimeDiffToNow(startT) > maxDuration; }
     void ChangeToGoGrind(WorldPosition pos);
-    void ChangeToDoQuest(uint32 questId, const Quest* quest);
+    void ChangeToDoQuest(uint32 questId, const Quest* quest, WorldPosition targetPos = WorldPosition());
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
     void ChangeToTravelMount(WorldPosition pos);

@@ -10,12 +10,13 @@ void NewRpgInfo::ChangeToGoGrind(WorldPosition pos)
     data = GoGrind{pos};
 }
 
-void NewRpgInfo::ChangeToDoQuest(uint32 questId, const Quest* quest)
+void NewRpgInfo::ChangeToDoQuest(uint32 questId, const Quest* quest, WorldPosition targetPos)
 {
     startT = getMSTime();
     DoQuest do_quest;
     do_quest.questId = questId;
     do_quest.quest = quest;
+    do_quest.targetPos = targetPos;
     data = do_quest;
 }
 
