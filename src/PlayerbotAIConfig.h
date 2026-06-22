@@ -546,7 +546,7 @@ public:
     float  travelMountDistMax{2000.0f};
     uint32 gatheringCircuitMinNodes{3};
     uint32 gatheringCircuitMaxNodes{6};
-    float  gatheringCircuitRadius{60.0f};
+    float  gatheringCircuitRadius{120.0f};
     uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;

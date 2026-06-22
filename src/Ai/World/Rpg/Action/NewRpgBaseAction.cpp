@@ -1896,7 +1896,7 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             return SelectFarTaxiDest(pos);
         }
         case RPG_GATHERING_CIRCUIT:
-            return BotHasGatheringProfession(bot);
+            return BotHasGatheringProfession(bot) && !SelectGatherNode().IsEmpty();
         default:
             return false;
     }
