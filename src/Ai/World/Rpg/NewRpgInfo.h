@@ -84,6 +84,18 @@ struct NewRpgInfo
     {
         uint32 dwellMs{0};
     };
+    // RPG_RECOVER — bot heals/regens before picking the next occupation
+    struct Recover
+    {
+        uint32 dwellMs{0};
+    };
+    // RPG_UPKEEP — bot performs maintenance (repair, restock, train)
+    struct Upkeep
+    {
+        uint8         step{0};       // which upkeep sub-step the bot is on
+        WorldPosition hubPos{};      // chosen hub/vendor position
+        ObjectGuid    target{};      // resolved vendor/trainer NPC guid
+    };
 
     uint32 startT{0};  // start timestamp of the current status
     uint8  lastRestSubtype{RS_NONE};  // cross-episode: subtype of the previous Rest episode (survives variant reset)
@@ -99,9 +111,9 @@ struct NewRpgInfo
                                  // NewRpgInfo (not the Social variant) so it survives ChangeToIdle's variant
                                  // reset and the Execute-head sweep can clear it after an external yank.
 
-    // --- occupation satiation (pipe 1) — in-memory only, no DB ---
-    float  satiation[CAT_COUNT] = {0.0f};  // [0,1] per BotActivityCategory
-    uint32 lastSatiationUpdateMs{0};       // last meter-integration tick (0 = uninitialised)
+    // --- occupation-machine tracking ---
+    uint32 lastFinished[RPG_STATUS_END] = {0};  // getMSTime() when each occupation last ended; 0=never
+    uint32 lastUpkeepMs{0};                     // getMSTime() of the last completed UPKEEP episode; 0=never
 
     // MOVE_FAR
     float nearestMoveFarDis{FLT_MAX};
@@ -110,7 +122,7 @@ struct NewRpgInfo
     WorldPosition moveFarPos;
     // END MOVE_FAR
 
-    using RpgData = std::variant<Idle, GoGrind, DoQuest, Rest, TravelFlight, OutdoorPvP, TravelMount, GatheringCircuit>;
+    using RpgData = std::variant<Idle, GoGrind, DoQuest, Rest, TravelFlight, OutdoorPvP, TravelMount, GatheringCircuit, Recover, Upkeep>;
     RpgData data;
 
     NewRpgStatus GetStatus();
@@ -122,6 +134,8 @@ struct NewRpgInfo
     void ChangeToTravelMount(WorldPosition pos);
     void ChangeToGatheringCircuit(uint32 maxNodes);
     void ChangeToRest();
+    void ChangeToRecover();
+    void ChangeToUpkeep();
     void ChangeToIdle();
     bool CanChangeTo(NewRpgStatus status);
     void Reset();

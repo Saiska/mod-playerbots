@@ -59,6 +59,24 @@ void NewRpgInfo::ChangeToRest()
     data = Rest{};
 }
 
+void NewRpgInfo::ChangeToRecover()
+{
+    startT = getMSTime();
+    data = Recover{};
+    lastEmoteMs = 0;
+    nextEmoteGapMs = 0;
+    lastEmoteIdx = 0xFF;
+}
+
+void NewRpgInfo::ChangeToUpkeep()
+{
+    startT = getMSTime();
+    data = Upkeep{};
+    lastEmoteMs = 0;
+    nextEmoteGapMs = 0;
+    lastEmoteIdx = 0xFF;
+}
+
 void NewRpgInfo::ChangeToIdle()
 {
     startT = getMSTime();
@@ -74,9 +92,8 @@ void NewRpgInfo::Reset()
 {
     data = Idle{};
     startT = getMSTime();
-    for (uint8 c = 0; c < CAT_COUNT; ++c)
-        satiation[c] = 0.0f;
-    lastSatiationUpdateMs = 0;
+    std::fill(std::begin(lastFinished), std::end(lastFinished), 0u);
+    lastUpkeepMs = 0;
     lastEmoteMs = 0;
     nextEmoteGapMs = 0;
     lastEmoteIdx = 0xFF;
@@ -103,6 +120,8 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
         if constexpr (std::is_same_v<T, TravelMount>) return RPG_TRAVEL_MOUNT;
         if constexpr (std::is_same_v<T, GatheringCircuit>) return RPG_GATHERING_CIRCUIT;
+        if constexpr (std::is_same_v<T, Recover>) return RPG_RECOVER;
+        if constexpr (std::is_same_v<T, Upkeep>) return RPG_UPKEEP;
         return RPG_IDLE;
     }, data);
 }
@@ -163,6 +182,16 @@ std::string NewRpgInfo::ToString()
         {
             out << "GATHERING_CIRCUIT";
             out << "\nvisited: " << arg.visited << "/" << arg.maxNodes;
+        }
+        else if constexpr (std::is_same_v<T, Recover>)
+        {
+            out << "RECOVER";
+            out << "\ndwellMs: " << arg.dwellMs;
+        }
+        else if constexpr (std::is_same_v<T, Upkeep>)
+        {
+            out << "UPKEEP";
+            out << "\nstep: " << static_cast<uint32>(arg.step);
         }
         else
             out << "UNKNOWN";

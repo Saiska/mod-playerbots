@@ -753,10 +753,6 @@ bool PlayerbotAIConfig::Initialize()
     autoDoQuests = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoDoQuests", true);
     enableNewRpgStrategy = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableNewRpgStrategy", true);
 
-    RpgStatusProbWeight[RPG_GO_GRIND] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GoGrind", 25);
-    RpgStatusProbWeight[RPG_DO_QUEST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoQuest", 60);
-    RpgStatusProbWeight[RPG_TRAVEL_FLIGHT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelFlight", 15);
-    RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 60);
     restDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMin", 120);
     restDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMax", 300);
     restSeatRebroadcast = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.SeatRebroadcast", true);
@@ -800,10 +796,6 @@ bool PlayerbotAIConfig::Initialize()
     LOG_INFO("server.loading",
              "[RestHub] enabled={} subtypes={} hubRange={} witnessRange={}",
              restHubEnable, (uint32)RS_COUNT, restHubHubRange, restHubWitnessRange);
-    RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
-    RpgStatusProbWeight[RPG_TRAVEL_MOUNT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.TravelMount", 10);
-    RpgStatusProbWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.GatheringCircuit", 30);
-
     travelMountDistMin = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMin", 300.0f);
     travelMountDistMax = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMax", 2000.0f);
     if (travelMountDistMax < travelMountDistMin) std::swap(travelMountDistMin, travelMountDistMax);
@@ -811,19 +803,48 @@ bool PlayerbotAIConfig::Initialize()
     gatheringCircuitMaxNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MaxNodes", 6);
     if (gatheringCircuitMaxNodes < gatheringCircuitMinNodes) std::swap(gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
     gatheringCircuitRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.Radius", 120.0f);
-    LOG_INFO("playerbots", "[MoreOccupations] travelMount={} gatheringCircuit={} (mountDist={}-{} circuitNodes={}-{})",
-             RpgStatusProbWeight[RPG_TRAVEL_MOUNT], RpgStatusProbWeight[RPG_GATHERING_CIRCUIT],
+    LOG_INFO("playerbots", "[MoreOccupations] mountDist={}-{} circuitNodes={}-{}",
              travelMountDistMin, travelMountDistMax,
              gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
 
-    rpgSatiationEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSatiation.Enable", true);
-    rpgSatiationRiseRatePerSec = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.RiseRatePerSec", 0.0025f);
-    rpgSatiationDecayRatePerSec = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.DecayRatePerSec", 0.0015f);
-    rpgSatiationSuppressExponent = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.SuppressExponent", 1.5f);
-    rpgSatiationMinAppealFrac = sConfigMgr->GetOption<float>("AiPlayerbot.RpgSatiation.MinAppealFrac", 0.05f);
-    LOG_INFO("playerbots", "[RpgSatiation] enabled={} rise={} decay={} exp={} minFrac={}",
-             rpgSatiationEnable, rpgSatiationRiseRatePerSec, rpgSatiationDecayRatePerSec,
-             rpgSatiationSuppressExponent, rpgSatiationMinAppealFrac);
+    // --- occupation-machine config ---
+    occupationWeight[RPG_DO_QUEST]          = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.DoQuest",   25);
+    occupationWeight[RPG_GATHERING_CIRCUIT] = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.Gather",    30);
+    occupationWeight[RPG_OUTDOOR_PVP]       = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.OutdoorPvP", 7);
+    occupationWeight[RPG_PASTIME]           = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.HubLife",   20);
+    occupationWeight[RPG_REST]              = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.RestAtHub", 12);
+    occupationWeight[RPG_GO_GRIND]          = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.Grind",     15);
+
+    // Cooldowns in seconds (converted to ms); OutdoorPvP is exempt (0).
+    static const std::pair<NewRpgStatus, const char*> kCooldownKeys[] = {
+        {RPG_DO_QUEST,          "AiPlayerbot.OccupationCooldownSec.DoQuest"},
+        {RPG_GATHERING_CIRCUIT, "AiPlayerbot.OccupationCooldownSec.Gather"},
+        {RPG_OUTDOOR_PVP,       "AiPlayerbot.OccupationCooldownSec.OutdoorPvP"},
+        {RPG_PASTIME,           "AiPlayerbot.OccupationCooldownSec.HubLife"},
+        {RPG_REST,              "AiPlayerbot.OccupationCooldownSec.RestAtHub"},
+        {RPG_GO_GRIND,          "AiPlayerbot.OccupationCooldownSec.Grind"},
+    };
+    for (auto const& k : kCooldownKeys)
+        occupationCooldownMs[k.first] = sConfigMgr->GetOption<uint32>(k.second, 0) * 1000u;
+    // OutdoorPvP is always cooldown-exempt per spec §5.4.
+    occupationCooldownMs[RPG_OUTDOOR_PVP] = 0;
+
+    occupationCooldownFrac  = sConfigMgr->GetOption<float>("AiPlayerbot.OccupationCooldownFrac", 0.25f);
+    maintenanceOverdueMs    = sConfigMgr->GetOption<uint32>("AiPlayerbot.MaintenanceOverdueSec", 7200) * 1000u;
+    rpgTravelBudget         = sConfigMgr->GetOption<float>("AiPlayerbot.RpgTravelBudget", 2500.0f);
+    rpgTravelWitnessRange   = sConfigMgr->GetOption<float>("AiPlayerbot.RpgTravelWitnessRange", 120.0f);
+    rpgMachineDebugLog      = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgMachineDebugLog", false);
+    needHealthLowPct        = sConfigMgr->GetOption<float>("AiPlayerbot.NeedHealthLowPct",      35.0f);
+    needManaLowPct          = sConfigMgr->GetOption<float>("AiPlayerbot.NeedManaLowPct",        20.0f);
+    needDurabilityLowPct    = sConfigMgr->GetOption<float>("AiPlayerbot.NeedDurabilityLowPct",  25.0f);
+    needBagsFullSlots       = sConfigMgr->GetOption<uint32>("AiPlayerbot.NeedBagsFullSlots",     2);
+    LOG_INFO("playerbots",
+             "[RpgMachine] config loaded — weights[Q{} Ga{} Pvp{} Hub{} Rest{} Gr{}] cooldownFrac={} maintOverdueSec={} travelBudget={} debug={}",
+             occupationWeight[RPG_DO_QUEST], occupationWeight[RPG_GATHERING_CIRCUIT],
+             occupationWeight[RPG_OUTDOOR_PVP], occupationWeight[RPG_PASTIME],
+             occupationWeight[RPG_REST], occupationWeight[RPG_GO_GRIND],
+             occupationCooldownFrac, maintenanceOverdueMs / 1000u,
+             rpgTravelBudget, rpgMachineDebugLog);
 
     rpgIdleDwellMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgIdleDwellMs", 2000);
     rpgSuppressWhenBusy = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenBusy", true);
