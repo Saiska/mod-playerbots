@@ -1641,7 +1641,12 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
         {
             LOG_DEBUG("playerbots", "Bot #{} <{}>: teleport for level and refresh", botId, bot->GetName());
             Refresh(bot);
-            RandomTeleportForLevel(bot);
+            // occupation-state-machine Task 6: the periodic 1-5h scatter relocation is RETIRED by
+            // default. Gate the actual relocation here (reversible — not hard-deleted) so a stale
+            // scheduled "teleport" event becomes a no-op while the reschedule loop keeps running.
+            // Login placement and the max-in-world-time relocation are SEPARATE paths and unaffected.
+            if (sPlayerbotAIConfig.randomTeleportEnable)
+                RandomTeleportForLevel(bot);
             uint32 time = urand(sPlayerbotAIConfig.minRandomBotTeleportInterval,
                                 sPlayerbotAIConfig.maxRandomBotTeleportInterval);
             ScheduleTeleport(botId, time);

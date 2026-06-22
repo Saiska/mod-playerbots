@@ -861,6 +861,7 @@ bool PlayerbotAIConfig::Initialize()
     rpgNearHubRadius = sConfigMgr->GetOption<float>("AiPlayerbot.RpgNearHubRadius", 60.0f);
     lowPriorityQuestDecayMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.LowPriorityQuestDecayMs", 1800000);
     doQuestSuppressScatter = sConfigMgr->GetOption<bool>("AiPlayerbot.DoQuestSuppressScatter", true);
+    randomTeleportEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomTeleportEnable", false);
     doQuestMaxConcurrentTravel = sConfigMgr->GetOption<uint32>("AiPlayerbot.DoQuestMaxConcurrentTravel", 50);
     LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={} lowHpSelfPres={} rpgSuppressHurt={} healSayOnce={} healSayMinSec={}",
              rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,

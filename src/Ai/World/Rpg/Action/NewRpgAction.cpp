@@ -302,13 +302,20 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 
         case RPG_GO_GRIND:
         {
-            auto& data = std::get<NewRpgInfo::GoGrind>(info.data);
-            WorldPosition& originalPos = data.pos;
-            assert(data.pos != WorldPosition());
-            // GO_GRIND -> IDLE (WanderRandom removed in rest-hub-unification Task 9)
+            // CRASH RULE: get_if + null-guard, NEVER a throwing std::get<> — a bad_variant_access
+            // on a MapUpdater worker terminates the world.
+            auto* gp = std::get_if<NewRpgInfo::GoGrind>(&info.data);
+            if (!gp)
+                return true;
+            WorldPosition& originalPos = gp->pos;
+            assert(gp->pos != WorldPosition());
+            // GO_GRIND finish — occupation-state-machine Task 6: stamp lastFinished + re-Decide,
+            // not ChangeToIdle. lastFinished is a flat array field (safe to write pre-Decide);
+            // Decide() reassigns the variant, so return immediately and read no gp->/data after.
             if (bot->GetExactDist(originalPos) < 10.0f)
             {
-                info.ChangeToIdle();
+                info.lastFinished[RPG_GO_GRIND] = getMSTime();
+                Decide();
                 return true;
             }
             break;
@@ -334,21 +341,26 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
         case RPG_DO_QUEST:
         {
-            // DO_QUEST -> IDLE
+            // DO_QUEST finish — Task 6: stamp lastFinished + re-Decide (flat field pre-Decide; CRASH RULE).
             if (info.HasStatusPersisted(statusDoQuestDuration))
             {
-                info.ChangeToIdle();
+                info.lastFinished[RPG_DO_QUEST] = getMSTime();
+                Decide();
                 return true;
             }
             break;
         }
         case RPG_TRAVEL_FLIGHT:
         {
-            auto& data = std::get<NewRpgInfo::TravelFlight>(info.data);
-            if (data.inFlight && !bot->IsInFlight())
+            // Task 6: TRAVEL_FLIGHT is no longer a DECIDE pick — only a travel sub-leg. On arrival
+            // re-Decide (not ChangeToIdle) so the spine immediately picks an occupation. No
+            // lastFinished stamp — a travel leg is not an occupation. CRASH RULE: get_if + null-guard.
+            auto* fp = std::get_if<NewRpgInfo::TravelFlight>(&info.data);
+            if (!fp)
+                return true;
+            if (fp->inFlight && !bot->IsInFlight())
             {
-                // flight arrival
-                info.ChangeToIdle();
+                Decide();
                 return true;
             }
             break;
@@ -439,41 +451,54 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                                      static_cast<uint8>(kRestTable[rest.subtype].poiVariant));
                 }
 
-                // P4 EXIT
+                // P4 EXIT — Task 6: REST is an occupation, so stamp lastFinished[RPG_REST] + re-Decide
+                // (not ChangeToIdle). Read every rest field BEFORE Decide(); lastFinished is a flat
+                // array (safe to write pre-Decide). CRASH RULE: nothing reads rest after Decide().
                 if (GetMSTimeDiffToNow(rest.lastReach) >= rest.dwellMs)
                 {
                     bot->SetStandState(UNIT_STAND_STATE_STAND);
                     bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, 0);
-                    info.lastRestSubtype = rest.subtype;     // read rest BEFORE ChangeToIdle
-                    info.ChangeToIdle();                     // R2: nothing after this touches rest
+                    info.lastRestSubtype = rest.subtype;     // read rest BEFORE Decide()
+                    info.lastFinished[RPG_REST] = getMSTime();
+                    Decide();                                // R2: nothing after this touches rest
+                    return true;
                 }
             }
             return true;
         }
         case RPG_OUTDOOR_PVP:
         {
+            // OutdoorPvp finish — Task 6: stamp lastFinished + re-Decide (flat field; CRASH RULE).
             if (info.HasStatusPersisted(statusOutDoorPvPDuration))
             {
-                info.ChangeToIdle();
+                info.lastFinished[RPG_OUTDOOR_PVP] = getMSTime();
+                Decide();
                 return true;
             }
             break;
         }
         case RPG_TRAVEL_MOUNT:
         {
-            auto& data = std::get<NewRpgInfo::TravelMount>(info.data);
-            if (bot->GetExactDist(data.pos) < 10.0f || info.HasStatusPersisted(statusTravelMountDuration))
+            // Task 6: TRAVEL_MOUNT is no longer a DECIDE pick — only a travel sub-leg. On arrival
+            // (or duration) re-Decide (not ChangeToIdle). No lastFinished stamp — it's a travel leg,
+            // not an occupation. CRASH RULE: get_if + null-guard.
+            auto* mp = std::get_if<NewRpgInfo::TravelMount>(&info.data);
+            if (!mp)
+                return true;
+            if (bot->GetExactDist(mp->pos) < 10.0f || info.HasStatusPersisted(statusTravelMountDuration))
             {
-                info.ChangeToIdle();
+                Decide();
                 return true;
             }
             break;
         }
         case RPG_GATHERING_CIRCUIT:
         {
+            // GatheringCircuit finish — Task 6: stamp lastFinished + re-Decide (flat field; CRASH RULE).
             if (info.HasStatusPersisted(statusGatheringDuration))
             {
-                info.ChangeToIdle();
+                info.lastFinished[RPG_GATHERING_CIRCUIT] = getMSTime();
+                Decide();
                 return true;
             }
             break;
@@ -635,8 +660,8 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
         return false;
     auto& data = *dataPtr;
 
-    // doquest-zone-travel: if a cross-zone/map target is set, teleport there first, then let
-    // the in-zone questing loop take over next tick.
+    // doquest-zone-travel: if a cross-zone/map target is set, travel there first (Task 6: now via
+    // the shared, witness-gated DriveTravel primitive), then let the in-zone questing loop take over.
     if (data.targetPos != WorldPosition())
     {
         uint32 const tMap = data.targetPos.GetMapId();
@@ -644,11 +669,15 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
         float const ty = data.targetPos.GetPositionY();
         if (bot->GetMapId() != tMap || bot->GetDistance2d(tx, ty) >= 1500.0f)
         {
+            // Ground-z safety (parity with the old bespoke block): resolve a valid ground height
+            // BEFORE handing the target to DriveTravel, so an unwitnessed cheap-jump teleport can
+            // never drop the bot into the ground/air. FindMap-null and invalid-height both give up,
+            // exactly as before. CRASH RULE: return now, touch no `data` after a ChangeToIdle.
             Map* tmap = sMapMgr->FindMap(tMap, 0);
             if (!tmap)
             {
                 info.ChangeToIdle();   // destination map not loaded; give up, let the spine re-roll
-                return true;           // CRASH RULE: return now, touch no `data` after this
+                return true;
             }
             float const ground = tmap->GetHeight(bot->GetPhaseMask(), tx, ty, MAX_HEIGHT);
             if (ground <= INVALID_HEIGHT)
@@ -656,12 +685,24 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
                 info.ChangeToIdle();
                 return true;
             }
+            WorldPosition const dest(tMap, tx, ty, ground + 0.05f);
+
+            // Burst cap (parity): bracket the travel attempt with the atomic counter. Over budget →
+            // retry next tick with the target retained.
             if (!sRandomPlayerbotMgr.TryBeginQuestTravel(bot->GetGUID()))
-                return true;           // over the per-tick burst cap; retry next tick (target retained)
-            bot->TeleportTo(tMap, tx, ty, ground + 0.05f, 0.0f);
+                return true;
+            TravelResult const tr = DriveTravel(dest);
             sRandomPlayerbotMgr.EndQuestTravel(bot->GetGUID());
-            // target consumed via teleport; next tick the bot is in-zone. Update through the live
-            // variant only if it is still DoQuest (TeleportTo does not change rpg status):
+
+            if (tr == TravelResult::EN_ROUTE)
+                return true;           // still traveling; target retained for the next tick
+            if (tr == TravelResult::GAVE_UP)
+            {
+                info.ChangeToIdle();   // beyond travel budget; give up, let the spine re-roll
+                return true;           // CRASH RULE: touch no `data` after this
+            }
+            // ARRIVED — clear the travel target so next tick the in-zone questing loop runs. Update
+            // through the live variant only if it is still DoQuest (DriveTravel does not change status):
             if (NewRpgInfo::DoQuest* dq = std::get_if<NewRpgInfo::DoQuest>(&info.data))
                 dq->targetPos = WorldPosition();
             return true;

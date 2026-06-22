@@ -1308,6 +1308,15 @@ AiPlayerbot.LowPriorityQuestDecayMs = 1800000
 #
 AiPlayerbot.DoQuestSuppressScatter = 1
 
+#    AiPlayerbot.RandomTeleportEnable
+# Master switch for the periodic 1-5h random "scatter" relocation that teleports an idle bot to a
+# random level-appropriate spot. The occupation-state-machine replaces this wandering with visible
+# occupations, so it is OFF by default. Set to 1 to restore the legacy periodic scatter teleport.
+# This does NOT affect login placement or the max-in-world-time relocation, which always fire.
+# Default: 0 (disabled).
+#
+AiPlayerbot.RandomTeleportEnable = 0
+
 #    AiPlayerbot.DoQuestMaxConcurrentTravel
 # Maximum number of bots that may perform a cross-zone quest teleport in the same world tick.
 # Acts as a burst limiter to avoid a sudden spike of mass teleports when many bots all pick
