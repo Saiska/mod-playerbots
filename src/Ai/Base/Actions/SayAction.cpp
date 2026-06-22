@@ -158,7 +158,7 @@ bool SayAction::isUseful()
         (qualifier == "low health" || qualifier == "critical health"))
     {
         time_t latched = AI_VALUE2(time_t, "last said", "heal say latch");
-        if (bot->GetHealthPct() >= sPlayerbotAIConfig.mediumHealth)
+        if (bot->GetHealthPct() >= sPlayerbotAIConfig.almostFullHealth)
         {
             if (latched)  // recovered -> clear the latch so the next descent may announce
                 botAI->GetAiObjectContext()->GetValue<time_t>("last said", "heal say latch")->Set(0);
@@ -170,7 +170,10 @@ bool SayAction::isUseful()
     }
 
     time_t lastSaid = AI_VALUE2(time_t, "last said", qualifier);
-    return (time(nullptr) - lastSaid) > 30;
+    uint32 cooldown = 30;
+    if (qualifier == "low health" || qualifier == "critical health")
+        cooldown = sPlayerbotAIConfig.healSayMinIntervalSec;
+    return (time(nullptr) - lastSaid) > cooldown;
 }
 
 void ChatReplyAction::ChatReplyDo(Player* bot, uint32& type, uint32& guid1, std::string& msg, std::string& chanName, std::string& name)

@@ -277,12 +277,12 @@ void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
         return;
 
     // low-health-self-preservation: reset the heal-say episode latch once the bot has recovered
-    // above MediumHealth, so the next descent into the low band may announce "need heal" again.
+    // above AlmostFullHealth, so the next descent into the low band may announce "need heal" again.
     // (The latch is set in SayAction; its own isUseful() only runs while hurt, so the recovery
     // reset must live on this per-tick path.) Cheap: gated by a config bool + IsAlive + one
     // GetHealthPct division before any context lookup.
     if (sPlayerbotAIConfig.healSayOncePerEpisode && bot->IsAlive() &&
-        bot->GetHealthPct() >= sPlayerbotAIConfig.mediumHealth)
+        bot->GetHealthPct() >= sPlayerbotAIConfig.almostFullHealth)
     {
         auto* healSayLatch = GetAiObjectContext()->GetValue<time_t>("last said", "heal say latch");
         if (healSayLatch->Get())
