@@ -576,6 +576,19 @@ AiPlayerbot.GuildBankWithdraw.Enable = 1
 AiPlayerbot.GuildBankWithdraw.MinQuality = 3
 AiPlayerbot.GuildBankWithdraw.IndexTTLSeconds = 300
 
+#
+#    AiPlayerbot.GuildBankDeposit.Enable
+#        Bots in a guild with a real player deposit otherwise-discarded loot into the guild
+#        bank when the guild already stocks that item entry, instead of selling/destroying it.
+#        Default: 1 (enabled)
+#
+#    AiPlayerbot.GuildBankDeposit.MinQuality
+#        Minimum item quality eligible for guild-bank deposit (0=poor/grey, 1=white/normal,
+#        2=uncommon, 3=rare, ...). Default 1 skips grey vendor-trash.
+#
+AiPlayerbot.GuildBankDeposit.Enable = 1
+AiPlayerbot.GuildBankDeposit.MinQuality = 1
+
 # Enable/Disable specific maintenance command functionality for altbots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their altbots
 # Default: 1 (enabled)
