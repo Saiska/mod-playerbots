@@ -770,6 +770,7 @@ bool PlayerbotAIConfig::Initialize()
     restHubStrollPoiCount   = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.Stroll.PoiCount", 3);
     restHubStrollPausePerPoiSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.Stroll.PausePerPoi", 45);
     restHubTrainerTypeFidelity  = sConfigMgr->GetOption<bool>("AiPlayerbot.RestHub.TrainerTypeFidelity", true);
+    restHubPoiRadius            = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.PoiRadius", 150.0f);
 
     static const std::pair<RestSubtype, const char*> kRestHubWeightKeys[] = {
         {RS_TAVERN,"Tavern"}, {RS_CLASS_TRAINER,"ClassTrainer"}, {RS_PROFESSION_CRAFT,"ProfessionCraft"},

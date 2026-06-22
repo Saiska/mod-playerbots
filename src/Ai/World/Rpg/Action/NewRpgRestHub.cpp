@@ -13,6 +13,10 @@
 #include "RandomPlayerbotMgr.h" // sRandomPlayerbotMgr
 #include "Random.h"             // urand
 #include "Timer.h"              // getMSTime
+#include "CellImpl.h"           // Cell::VisitObjects — direct grid scan for SelectNearestNpcWithFlag/Go
+#include "GridNotifiers.h"      // Acore::UnitListSearcher, Acore::AnyUnitInObjectRangeCheck
+#include "GridNotifiersImpl.h"  // searcher template impls
+#include "NearestGameObjects.h" // AnyGameObjectInObjectRangeCheck, Acore::GameObjectListSearcher
 #include <algorithm>
 
 // PlayerbotAIConfig.h cannot include NewRpgRestHub.h (circular), so its
@@ -68,20 +72,40 @@ HubTravel NewRpgStatusUpdateAction::TravelToHubOrTeleport(WorldPosition const& h
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// C4 — fresh target selectors mirroring SelectVendorNpc's nearest-by-dist idiom.
+// C4 — direct grid-scan selectors for hub POI resolution.
+//
+// The old implementation iterated AI_VALUE(GuidVector,"nearest npcs/game objects"),
+// which is bounded by SightDistance (~75y). Banker, auctioneer, trainer,
+// flightmaster, and mailbox all routinely sit >75y from the inn → the list was
+// empty → every TK_NPC_FLAG/TK_GO_TYPE subtype fell back to RS_FIELD_REST.
+//
+// Fix (mirrors SelectTrainingDummy in NewRpgBaseAction.cpp): use Cell::VisitObjects
+// at restHubPoiRadius (default 150y, town-sized, tunable). This runs at acquire-time
+// only (once per rest episode via AcquireSubtypeTarget → P2 on arrival), NOT per tick,
+// so the bounded grid scan cost is acceptable — same as SelectTrainingDummy's pattern.
 // ───────────────────────────────────────────────────────────────────────────
 ObjectGuid NewRpgStatusUpdateAction::SelectNearestNpcWithFlag(uint32 npcFlag) const
 {
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    float const radius = sPlayerbotAIConfig.restHubPoiRadius;
+
+    // Direct creature grid scan at town-sized radius; SightDistance (75y) is too narrow
+    // for hub NPCs (banker/auctioneer/trainer/flightmaster). Pattern from SelectTrainingDummy.
+    std::list<Unit*> targets;
+    Acore::AnyUnitInObjectRangeCheck u_check(bot, radius);
+    Acore::UnitListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(bot, targets, u_check);
+    Cell::VisitObjects(bot, searcher, radius);
+
     Creature* best = nullptr;
-    float bestDist = sPlayerbotAIConfig.pastimeRepairSellRadius;
-    for (ObjectGuid& guid : npcs)
+    float bestDist = radius;
+    for (Unit* u : targets)
     {
-        Creature* c = ObjectAccessor::GetCreature(*bot, guid);
+        Creature* c = u ? u->ToCreature() : nullptr;
         if (!c || !c->IsInWorld())
             continue;
-        if (!c->HasNpcFlag((NPCFlags)npcFlag))   // table stores the flag as uint32; HasNpcFlag wants NPCFlags
+        if (!c->HasNpcFlag((NPCFlags)npcFlag))
             continue;
+        if (!c->IsFriendlyTo(bot))
+            continue;   // never drag the bot toward a hostile-faction guard
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {
@@ -94,13 +118,21 @@ ObjectGuid NewRpgStatusUpdateAction::SelectNearestNpcWithFlag(uint32 npcFlag) co
 
 ObjectGuid NewRpgStatusUpdateAction::SelectNearestGoOfType(uint32 goType) const
 {
-    GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
+    float const radius = sPlayerbotAIConfig.restHubPoiRadius;
+
+    // Direct GO grid scan at town-sized radius; mailbox can sit >75y from the inn.
+    // Pattern mirrors SelectNearestNpcWithFlag above; AnyGameObjectInObjectRangeCheck
+    // already checks isSpawned() + GetGOInfo() inside its operator().
+    std::list<GameObject*> goTargets;
+    AnyGameObjectInObjectRangeCheck go_check(bot, radius);
+    Acore::GameObjectListSearcher<AnyGameObjectInObjectRangeCheck> goSearcher(bot, goTargets, go_check);
+    Cell::VisitObjects(bot, goSearcher, radius);
+
     GameObject* best = nullptr;
-    float bestDist = sPlayerbotAIConfig.pastimeRepairSellRadius;
-    for (ObjectGuid const& guid : gos)
+    float bestDist = radius;
+    for (GameObject* go : goTargets)
     {
-        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
-        if (!go || !go->isSpawned())
+        if (!go->isSpawned())
             continue;
         if (go->GetGoType() != goType)
             continue;

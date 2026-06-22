@@ -1462,6 +1462,9 @@ AiPlayerbot.RestHub.Stroll.PoiCount = 3
 AiPlayerbot.RestHub.Stroll.PausePerPoi = 45
 # Split class vs profession trainer by creature_template.trainer_type.
 AiPlayerbot.RestHub.TrainerTypeFidelity = 1
+# Grid-scan radius (yards) for hub NPC/GO POI resolution (BANK/AH/TRAINER/MAIL/FLIGHT).
+# Must be town-sized; shrinking this below ~100 risks missing distant hub NPCs.
+AiPlayerbot.RestHub.PoiRadius = 150
 # Per-subtype selection weights.
 AiPlayerbot.RestHub.Weight.Tavern = 30
 AiPlayerbot.RestHub.Weight.ClassTrainer = 10

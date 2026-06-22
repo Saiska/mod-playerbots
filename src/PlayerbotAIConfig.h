@@ -570,6 +570,7 @@ public:
     uint8    restHubStrollPoiCount{3};
     uint16   restHubStrollPausePerPoiSec{45};
     bool     restHubTrainerTypeFidelity{true};
+    float    restHubPoiRadius{150.0f};         // grid-scan radius for hub NPC/GO POI resolution (town-sized)
     // --- more-activities-pastimes (pipe 2a) ---
     uint32 pastimeRepairSellWeight{25};
     uint32 pastimeRepairSellDwellMin{5};
