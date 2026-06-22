@@ -61,7 +61,7 @@ void NewRpgInfo::ChangeToRest()
 void NewRpgInfo::ChangeToIdle()
 {
     startT = getMSTime();
-    data = Idle{};
+    data = Idle{ sPlayerbotAIConfig.rpgIdleDwellMs };
 }
 
 bool NewRpgInfo::CanChangeTo(NewRpgStatus)

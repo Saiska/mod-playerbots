@@ -2818,3 +2818,15 @@ RaidSim.BroadcastRealmWide = 1
 #        Default: 3 (Rare/blue and above)
 
 RaidSim.BroadcastLootMinQuality = 3
+
+###################################
+#    IDLE DWELL
+###################################
+#
+#    AiPlayerbot.RpgIdleDwellMs
+#        Minimum milliseconds an idle bot waits before re-running the occupation-availability scan.
+#        Forced-suppression bots are the main Idle population after the fall-to-rest fix; this caps their
+#        per-tick scan cost. 0 = re-roll every tick (legacy).
+#        Default: 2000
+
+AiPlayerbot.RpgIdleDwellMs = 2000

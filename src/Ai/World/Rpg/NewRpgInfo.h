@@ -81,6 +81,7 @@ struct NewRpgInfo
     };
     struct Idle
     {
+        uint32 dwellMs{0};
     };
 
     uint32 startT{0};  // start timestamp of the current status

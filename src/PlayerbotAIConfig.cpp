@@ -824,6 +824,7 @@ bool PlayerbotAIConfig::Initialize()
              rpgSatiationEnable, rpgSatiationRiseRatePerSec, rpgSatiationDecayRatePerSec,
              rpgSatiationSuppressExponent, rpgSatiationMinAppealFrac);
 
+    rpgIdleDwellMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgIdleDwellMs", 2000);
     rpgSuppressWhenBusy = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenBusy", true);
     rpgSuppressInstance = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Instance", true);
     rpgSuppressGroupedWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.GroupedWithPlayer", true);

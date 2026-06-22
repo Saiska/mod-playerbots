@@ -309,8 +309,13 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
+        {
+            if (NewRpgInfo::Idle* idle = std::get_if<NewRpgInfo::Idle>(&info.data))
+                if (idle->dwellMs && GetMSTimeDiffToNow(info.startT) < idle->dwellMs)
+                    return true;   // still dwelling — skip the 7-status availability sweep
             return RandomChangeStatus({RPG_GO_GRIND, RPG_DO_QUEST, RPG_TRAVEL_FLIGHT, RPG_REST,
                                        RPG_OUTDOOR_PVP, RPG_TRAVEL_MOUNT, RPG_GATHERING_CIRCUIT});
+        }
 
         case RPG_GO_GRIND:
         {
