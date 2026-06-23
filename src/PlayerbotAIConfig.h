@@ -223,6 +223,7 @@ public:
     int weightTeleToSilvermoonCity;
     int weightTeleToShattrathCity;
     int weightTeleToDalaran;
+    float raceHomeCapitalWeightMult;
     std::vector<uint32> randomBotMaps;
     std::vector<uint32> randomBotQuestItems;
     std::vector<uint32> randomBotAccounts;
