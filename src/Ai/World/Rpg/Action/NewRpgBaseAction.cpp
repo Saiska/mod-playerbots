@@ -1634,6 +1634,24 @@ WorldPosition NewRpgBaseAction::SelectRandomCampPos(Player* bot)
     return dest;
 }
 
+WorldPosition NewRpgBaseAction::SelectCapitalHub(Player* bot)
+{
+    // Primary: the faction-appropriate capital BANKER coord (map-wide, not zone-filtered). When
+    // EnableWeightTeleToCityBankers is on this is a weighted-capital pick; when off it is the
+    // per-level banker fallback list. Either way it is non-empty whenever this level has bankers.
+    std::vector<WorldLocation> cityLocs = sTravelMgr.GetCityLocations(bot);
+    if (!cityLocs.empty())
+        return WorldPosition(cityLocs[urand(0, cityLocs.size() - 1)]);
+
+    // Fallback: guaranteed nearest faction/neutral capital, resolved directly from the capitals
+    // banker cache (covers an empty per-level banker list). Empty ONLY if the capitals banker cache
+    // failed to populate at boot -- a real boot bug, which is the can't-reach LOG_ERROR's true job.
+    WorldPosition cap = sTravelMgr.GetNearestCapitalPos(bot);
+    LOG_DEBUG("playerbots", "[New RPG] Bot {} SelectCapitalHub fell back to nearest capital Map:{}",
+              bot->GetName(), cap.GetMapId());
+    return cap;
+}
+
 bool NewRpgBaseAction::SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path)
 {
     TravelMgr::FlightMasterInfo const* info = sTravelMgr.GetNearestFlightMasterInfo(bot);

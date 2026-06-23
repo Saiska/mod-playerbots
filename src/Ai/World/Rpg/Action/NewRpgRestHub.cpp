@@ -84,7 +84,7 @@ HubTravel NewRpgStatusUpdateAction::TravelToHubOrTeleport(WorldPosition const& h
 // only (once per rest episode via AcquireSubtypeTarget → P2 on arrival), NOT per tick,
 // so the bounded grid scan cost is acceptable — same as SelectTrainingDummy's pattern.
 // ───────────────────────────────────────────────────────────────────────────
-ObjectGuid NewRpgStatusUpdateAction::SelectNearestNpcWithFlag(uint32 npcFlag) const
+ObjectGuid NewRpgBaseAction::SelectNearestNpcWithFlag(uint32 npcFlag) const
 {
     float const radius = sPlayerbotAIConfig.restHubPoiRadius;
 
@@ -116,7 +116,7 @@ ObjectGuid NewRpgStatusUpdateAction::SelectNearestNpcWithFlag(uint32 npcFlag) co
     return best ? best->GetGUID() : ObjectGuid();
 }
 
-ObjectGuid NewRpgStatusUpdateAction::SelectNearestGoOfType(uint32 goType) const
+ObjectGuid NewRpgBaseAction::SelectNearestGoOfType(uint32 goType) const
 {
     float const radius = sPlayerbotAIConfig.restHubPoiRadius;
 
@@ -144,6 +144,97 @@ ObjectGuid NewRpgStatusUpdateAction::SelectNearestGoOfType(uint32 goType) const
         }
     }
     return best ? best->GetGUID() : ObjectGuid();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// occupation-upkeep-two-tier Task 4 — PoseAtProp.
+//
+// Cosmetic capital city pose: stand at a prop (banker/auctioneer/mailbox/trainer)
+// and emote for `dwellMs`. Pure RP — NO transaction (the bank/AH/mail/trainer steps
+// are poses only). Reuses the SAME per-subtype prop resolution the rest engine uses:
+// kRestTable[restSubtype].target picks the resolver (TK_NPC_FLAG → SelectNearestNpcWithFlag,
+// TK_GO_TYPE → SelectNearestGoOfType) and .npcFlagOrGoType supplies the flag/type. So
+// RS_BANK/RS_AUCTION_HOUSE/RS_CLASS_TRAINER resolve to a creature guid via NPC flag, and
+// RS_MAILBOX resolves to a GameObject guid via GO type — exactly as EngageAndHold does.
+//
+// The mailbox wrinkle: RS_MAILBOX's target is a GameObject, not a creature. ObjectAccessor::
+// GetUnit will NOT resolve it; we re-resolve the prop each tick as a WorldObject via
+// ObjectAccessor::GetWorldObject (a GameObject IS-A WorldObject) and SetFacingToObject takes a
+// WorldObject*. So one facing/position path covers both NPC props and the mailbox GO.
+//
+// Crash discipline: `up` is a live reference into the caller's variant (the caller already did
+// the get_if) — we never re-enter throwing variant access here. We store only the ObjectGuid
+// (up.target) and re-resolve the WorldObject each tick (no cached raw pointers across ticks).
+//
+// Return contract:
+//   true  = still posing (caller `return`s this tick)
+//   false = done OR prop unresolvable (caller advances up.step and clears up.target)
+// ───────────────────────────────────────────────────────────────────────────
+bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo::Upkeep& up)
+{
+    // Guard the kRestTable index up front (both ACQUIRE and PERFORM index it). RS_NONE(0xFF) or any
+    // out-of-range subtype → skip the step rather than read past the table.
+    if (restSubtype >= RS_COUNT)
+    {
+        LOG_WARN("playerbots",
+                 "[RpgMachine] {} #{} map={} — UPKEEP capital pose: bad subtype={}; skipping",
+                 bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), uint32(restSubtype));
+        return false;   // caller advances step
+    }
+
+    // ── ACQUIRE: resolve the prop for this subtype using the rest engine's mapping ──
+    if (up.target.IsEmpty())
+    {
+        RestSubtypeDef const& d = kRestTable[restSubtype];
+        ObjectGuid prop;
+        if (d.target == TK_DUMMY)
+            prop = SelectTrainingDummy();                         // training dummy (Creature, no npcFlag)
+        else if (d.target == TK_GO_TYPE)
+            prop = SelectNearestGoOfType(d.npcFlagOrGoType);     // mailbox (GameObject)
+        else
+            prop = SelectNearestNpcWithFlag(d.npcFlagOrGoType);  // banker/auctioneer/trainer (NPC)
+
+        if (prop.IsEmpty())
+        {
+            LOG_WARN("playerbots",
+                     "[RpgMachine] {} #{} map={} — UPKEEP capital pose subtype={} NO prop; skipping",
+                     bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), uint32(restSubtype));
+            return false;   // caller advances step
+        }
+
+        up.target = prop;
+        // Stamp the prop position (works for both a Unit and a GameObject — both are WorldObjects;
+        // WorldPosition(WorldObject const*) is the idiom used across the rest engine, cf. strollPts).
+        if (WorldObject* propObj = ObjectAccessor::GetWorldObject(*bot, prop))
+            up.posePos = WorldPosition(propObj);
+        up.stepStartMs = getMSTime();
+        up.dwellMs = dwellMs;
+    }
+
+    // ── TRAVEL: short intra-city hop to the prop (witness-gated; teleports when unwitnessed) ──
+    if (bot->GetExactDist(&up.posePos) > INTERACTION_DISTANCE)
+    {
+        TravelResult const tr = DriveTravel(up.posePos);
+        if (tr == TravelResult::GAVE_UP)
+            return false;   // witnessed + beyond budget: give up this pose, caller advances step
+        if (tr != TravelResult::ARRIVED)
+            return true;    // still EN_ROUTE — keep travelling this tick
+        // ARRIVED (teleport or within arrive radius) → fall through and pose this tick
+    }
+
+    // ── PERFORM: face the prop (Unit OR GameObject) + hold the emote pose for the dwell ──
+    if (WorldObject* propObj = ObjectAccessor::GetWorldObject(*bot, up.target))
+        bot->SetFacingToObject(propObj);
+    // Mirror the rest hold phase verbatim (NewRpgAction.cpp:436-437): the (palette, poiVariant)
+    // pair comes from the subtype's kRestTable row, NOT the raw subtype. For the capital props
+    // these rows are BEH_LOITER with POI_BANKER/POI_AUCTIONEER/POI_MAILBOX/POI_TRAINER, so the
+    // per-POI loiter palette is selected exactly as the rest engine selects it.
+    RestSubtypeDef const& pd = kRestTable[restSubtype];
+    TickEmoteCadence(pd.palette, static_cast<uint8>(pd.poiVariant));
+
+    if (GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs)
+        return true;   // still posing
+    return false;      // dwell elapsed → caller advances step (and clears up.target)
 }
 
 // PROFESSION_CRAFT target. NOTE (deviation): a creature's trainer_type is owned by the

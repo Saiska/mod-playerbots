@@ -5,6 +5,7 @@
 
 #include "TravelMgr.h"
 
+#include <cfloat>
 #include <iomanip>
 #include <numeric>
 
@@ -4553,6 +4554,45 @@ std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot)
         return { locIt->second };
     // Fallback if something went wrong
     return fallbackLocations;
+}
+
+WorldPosition TravelMgr::GetNearestCapitalPos(Player* bot)
+{
+    // Resolve each faction/neutral capital to a world coord via its banker locations (cached
+    // map-wide in bankerEntryToLocation at boot). Prefer the nearest same-map capital; otherwise
+    // any faction-valid capital (the caller teleports, so cross-map is path-free and acceptable).
+    TeamId team = bot->GetTeamId();
+    WorldPosition best{};
+    float bestDist = FLT_MAX;
+    WorldPosition anyValid{};
+    for (Capital const& cap : capitals)
+    {
+        if (cap.team != team && cap.team != TEAM_NEUTRAL)
+            continue;
+
+        for (uint16 bankerEntry : cap.bankers)
+        {
+            auto it = bankerEntryToLocation.find(bankerEntry);
+            if (it == bankerEntryToLocation.end())
+                continue;
+
+            WorldPosition const& pos = it->second;
+            if (!anyValid)
+                anyValid = pos;
+
+            if (bot->GetMapId() == pos.GetMapId())
+            {
+                float d = bot->GetExactDist(pos);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = pos;
+                }
+            }
+        }
+    }
+
+    return best ? best : anyValid;
 }
 
 void TravelMgr::PrepareZone2LevelBracket()

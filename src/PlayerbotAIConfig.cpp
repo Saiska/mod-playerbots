@@ -764,6 +764,34 @@ bool PlayerbotAIConfig::Initialize()
         std::swap(restHubDwellMinSec, restHubDwellMaxSec);
     if (restHubDwellMinSec == 0)
         restHubDwellMinSec = 1;
+    upkeepCapitalChance   = sConfigMgr->GetOption<float>("AiPlayerbot.Upkeep.CapitalChance", 0.45f);
+    upkeepSellMinSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.SellMinSec", 90);
+    upkeepSellMaxSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.SellMaxSec", 180);
+    upkeepMaintMinSec     = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.MaintMinSec", 60);
+    upkeepMaintMaxSec     = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.MaintMaxSec", 120);
+    upkeepBankMinSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.BankMinSec", 300);
+    upkeepBankMaxSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.BankMaxSec", 600);
+    upkeepAHMinSec        = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.AHMinSec", 300);
+    upkeepAHMaxSec        = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.AHMaxSec", 600);
+    upkeepMailMinSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.MailMinSec", 90);
+    upkeepMailMaxSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.MailMaxSec", 180);
+    upkeepTrainerMinSec   = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.TrainerMinSec", 120);
+    upkeepTrainerMaxSec   = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.TrainerMaxSec", 240);
+    upkeepDummyTestEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.Upkeep.DummyTestEnable", true);
+    upkeepDummyTestMinMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.DummyTestMinMin", 10);
+    upkeepDummyTestMaxMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.DummyTestMaxMin", 20);
+    // clamp: urand requires min<=max and the rest path requires >=1
+    if (upkeepSellMinSec > upkeepSellMaxSec)       std::swap(upkeepSellMinSec, upkeepSellMaxSec);
+    if (upkeepBankMinSec > upkeepBankMaxSec)       std::swap(upkeepBankMinSec, upkeepBankMaxSec);
+    if (upkeepAHMinSec > upkeepAHMaxSec)           std::swap(upkeepAHMinSec, upkeepAHMaxSec);
+    if (upkeepMailMinSec > upkeepMailMaxSec)       std::swap(upkeepMailMinSec, upkeepMailMaxSec);
+    if (upkeepTrainerMinSec > upkeepTrainerMaxSec) std::swap(upkeepTrainerMinSec, upkeepTrainerMaxSec);
+    if (upkeepMaintMinSec > upkeepMaintMaxSec)     std::swap(upkeepMaintMinSec, upkeepMaintMaxSec);
+    if (upkeepDummyTestMinMin > upkeepDummyTestMaxMin) std::swap(upkeepDummyTestMinMin, upkeepDummyTestMaxMin);
+    LOG_INFO("server.loading",
+             "[Upkeep] two-tier config: capitalChance={} bank=[{},{}]s ah=[{},{}]s dummyTest={}",
+             upkeepCapitalChance, upkeepBankMinSec, upkeepBankMaxSec, upkeepAHMinSec, upkeepAHMaxSec,
+             upkeepDummyTestEnable);
     restHubHubRange         = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.HubRange", 2500.0f);
     restHubWitnessRange     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.WitnessRange", 120.0f);
     restHubTravelBudget     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.TravelBudget", 4000.0f);

@@ -537,90 +537,290 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
         case RPG_UPKEEP:
         {
-            // occupation-state-machine Task 5 — LAYER-1 UPKEEP (town errand; first DriveTravel consumer).
+            // occupation-upkeep-two-tier — UPKEEP routes by tier (rolled in ChangeToUpkeep):
+            //   LOCAL  : zone hub -> sell -> maintenance -> inn rest.
+            //   CAPITAL: capital anchor -> errand chain + city poses (Task 7).
             // CRASH RULE: get_if + null-guard; every Decide()/ChangeTo* immediately returns.
             auto* upkp = std::get_if<NewRpgInfo::Upkeep>(&info.data);
             if (!upkp)
                 return true;
             auto& up = *upkp;
 
-            switch (up.step)
+            // ACQUIRE the hub once (step 0), honoring the tier + the LOCAL->CAPITAL fallthrough.
+            if (up.hubPos == WorldPosition())
             {
-                case 0:   // ACQUIRE — pick a curated hub (capital-tier preference is a deferred refinement).
+                if (up.tier == NewRpgInfo::UPKEEP_TIER_LOCAL)
                 {
-                    WorldPosition hub = SelectRandomCampPos(bot);
-                    if (hub == WorldPosition())
+                    up.hubPos = SelectRandomCampPos(bot);
+                    if (up.hubPos == WorldPosition())
                     {
-                        // §12.1: no silent fallback. A free bot with no reachable hub is an
-                        // observability event — record it, then do the maintenance in place as a
-                        // last-ditch so the bot is not stranded, and hand back to Decide().
-                        LOG_ERROR("playerbots",
-                                  "[RpgMachine] {} #{} map={} zone={} pos=({:.0f},{:.0f},{:.0f}) — "
-                                  "UPKEEP found NO reachable hub; in-place maintenance + Decide()",
-                                  bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(),
-                                  bot->GetZoneId(), bot->GetPositionX(), bot->GetPositionY(),
-                                  bot->GetPositionZ());
-                        botAI->DoSpecificAction("maintenance");
-                        info.lastUpkeepMs = getMSTime();   // flat field — safe to stamp pre-Decide
-                        Decide();
-                        return true;   // CRASH RULE
+                        // No reachable zone hub — fall through to the capital tier (universal
+                        // backstop). This is the path that kills the old "NO reachable hub" trickle.
+                        up.tier = NewRpgInfo::UPKEEP_TIER_CAPITAL;
+                        up.hubPos = SelectCapitalHub(bot);
                     }
-                    up.hubPos = hub;
-                    up.step = 1;
-                    return true;
                 }
-                case 1:   // TRAVEL — drive to the hub via the shared witness-gated primitive.
-                {
-                    TravelResult tr = DriveTravel(up.hubPos);
-                    if (tr == TravelResult::EN_ROUTE)
-                        return true;
-                    if (tr == TravelResult::GAVE_UP)
-                    {
-                        LOG_WARN("playerbots",
-                                 "[RpgMachine] {} #{} map={} zone={} — UPKEEP can't reach town "
-                                 "(beyond travel budget); in-place maintenance + Decide()",
-                                 bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(),
-                                 bot->GetZoneId());
-                        botAI->DoSpecificAction("maintenance");
-                        info.lastUpkeepMs = getMSTime();
-                        Decide();
-                        return true;   // CRASH RULE
-                    }
-                    // ARRIVED
-                    up.step = 2;
-                    return true;
-                }
-                case 2:   // PERFORM — on arrival, run the town errands (reuse arms verbatim).
-                default:
-                {
-                    // repair + sell — mirrors the RS_VENDOR arm (NewRpgRestHub.cpp:377-380). The
-                    // "sell" path also auto-fires the guild-bank DEPOSIT (SellAction →
-                    // TryDepositLootToGuildBank), so no direct guild-bank hook is needed here.
-                    if (SelectVendorNpc().IsEmpty())
-                        LOG_WARN("playerbots",
-                                 "[RpgMachine] {} #{} map={} zone={} — UPKEEP at hub but NO vendor NPC in range",
-                                 bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), bot->GetZoneId());
-                    botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);
-                    botAI->DoSpecificAction("repair", Event(), true);
+                else
+                    up.hubPos = SelectCapitalHub(bot);
 
-                    // maintenance — ALSO performs guild-bank WITHDRAW (TrainerAction →
-                    // WithdrawUpgradesFromGuildBank), gems/enchants/glyphs/spells, provisioning
-                    // (InitBandages/fishing pole), and the GearFloorMgr enqueue (occupation-rebalance).
-                    // So sell+maintenance covers both guild-bank sides + restock — no duplicate calls.
+                if (up.hubPos == WorldPosition())
+                {
+                    // True should-never-fire: not even a capital is reachable (capital-cache boot
+                    // bug, not a runtime condition). Do the maintenance in place so the bot is not
+                    // stranded, then hand back to Decide().
+                    LOG_ERROR("playerbots",
+                              "[RpgMachine] {} #{} map={} zone={} — UPKEEP no capital reachable; "
+                              "in-place maintenance + Decide()",
+                              bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(),
+                              bot->GetZoneId());
                     botAI->DoSpecificAction("maintenance");
-
-                    // EXIT — stamp the maintenance window BEFORE Decide() (flat field, safe), then
-                    // hand back to the occupation resolver.
-                    info.lastUpkeepMs = getMSTime();
+                    info.lastUpkeepMs = getMSTime();   // flat field — safe to stamp pre-Decide
                     Decide();
-                    return true;   // CRASH RULE: nothing reads up after Decide()
+                    return true;   // CRASH RULE
                 }
+
+                up.step = 1;   // 0 = acquire done; pipelines start at step 1
+                return true;
             }
+
+            if (up.tier == NewRpgInfo::UPKEEP_TIER_CAPITAL)
+                return TickUpkeepCapital(up);   // Task 7
+            return TickUpkeepLocal(up);
         }
         default:
             break;
     }
     return false;
+}
+
+// Shared dwell + one-shot-action primitive for BOTH upkeep tiers (occupation-upkeep-two-tier).
+// On the step's ENTRY tick (up.stepStartMs == 0): stamp the clock, set the randomized dwell, fire
+// `action` EXACTLY ONCE (so sell/maintenance are not re-issued every tick), then return false (hold).
+// On later ticks: issue nothing, return true once the dwell has elapsed.
+bool NewRpgStatusUpdateAction::UpkeepDwell(NewRpgInfo::Upkeep& up, uint32 secs, std::string const& action,
+                                           bool vendorEvent)
+{
+    if (up.stepStartMs == 0)
+    {
+        up.stepStartMs = getMSTime();
+        up.dwellMs = secs * IN_MILLISECONDS;
+        if (!action.empty())
+        {
+            // "sell" must carry the vendor event so SellAction takes the RS_VENDOR path (which also
+            // auto-fires the guild-bank DEPOSIT via TryDepositLootToGuildBank). Mirrors the form used
+            // by the rest engine's RS_VENDOR arm (NewRpgRestHub.cpp:377-380).
+            if (vendorEvent)
+                botAI->DoSpecificAction(action, Event("rpg action", "vendor"), true);
+            else
+                botAI->DoSpecificAction(action);
+        }
+        return false;
+    }
+    return GetMSTimeDiffToNow(up.stepStartMs) >= up.dwellMs;
+}
+
+// LOCAL upkeep: travel to the zone hub, sell (+guild deposit) -> maintenance -> the shared inn rest.
+// Steps 1..3 (step 0 = acquire, handled in the RPG_UPKEEP case). CRASH RULE: every Decide() is the
+// last statement before return; nothing reads `up` after a Decide().
+bool NewRpgStatusUpdateAction::TickUpkeepLocal(NewRpgInfo::Upkeep& up)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+
+    // Travel to the hub first — but the inn step (Task 7) drives its own movement, so don't re-drive
+    // toward the upkeep hub once we've reached the inn step.
+    if (!UpkeepStepIsInn(up.step) && bot->GetExactDist(up.hubPos) > 10.0f)
+    {
+        if (DriveTravel(up.hubPos) == TravelResult::EN_ROUTE)
+            return true;
+    }
+
+    switch (up.step)
+    {
+        case 1:   // SELL (+guild-bank deposit) — fire once, hold a randomized dwell.
+        {
+            if (!UpkeepDwell(up, urand(sPlayerbotAIConfig.upkeepSellMinSec, sPlayerbotAIConfig.upkeepSellMaxSec),
+                             "sell", true))
+                return true;
+            up.step = 2;
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 2:   // MAINTENANCE (NPC-less restock + guild-bank withdraw + gear floor) — fire once, hold.
+        {
+            if (!UpkeepDwell(up, urand(sPlayerbotAIConfig.upkeepMaintMinSec, sPlayerbotAIConfig.upkeepMaintMaxSec),
+                             "maintenance"))
+                return true;
+            up.step = 3;
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 3:   // INN — reuse the shared inn rest step (Task 7); it ends with Decide().
+            return TickUpkeepInn(up);
+        default:
+            info.lastUpkeepMs = getMSTime();
+            Decide();
+            return true;   // CRASH RULE
+    }
+}
+
+// occupation-upkeep-two-tier Task 7 — the tier's inn step. The LOCAL pipeline ends at step 3
+// (sell->maintenance->inn); the CAPITAL pipeline ends at step 8. Both delegate their final inn step
+// to TickUpkeepInn, so this predicate must report the inn step of BOTH tiers.
+bool NewRpgStatusUpdateAction::UpkeepStepIsInn(uint8 step) const
+{
+    return step == 3 || step == 8;   // LOCAL inn = 3, CAPITAL inn = 8
+}
+
+// CAPITAL upkeep: sell, cosmetic city poses (bank/AH/mail/trainer), maintenance, a gated combat-dummy
+// tail, then the shared inn rest. Steps 1..8 (step 0 = acquire, handled in the RPG_UPKEEP case).
+// PoseAtProp drives its own intra-city hop to each prop; only the leading SELL/MAINTENANCE errands
+// need the bot anchored at the capital hub, so the initial hub travel is gated on step 1. CRASH RULE:
+// `up` is the caller's already-get_if'd reference; no Decide()/ChangeTo* lives here (the inn step,
+// which owns the terminal Decide(), is reached via TickUpkeepInn).
+bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
+{
+    // Travel to the capital anchor before the errand chain. The pose steps resolve + hop to their own
+    // prop, and the inn step owns its own movement, so only gate the leading SELL on the hub distance.
+    if (up.step == 1 && bot->GetExactDist(up.hubPos) > 30.0f)
+    {
+        if (DriveTravel(up.hubPos) == TravelResult::EN_ROUTE)
+            return true;
+    }
+
+    switch (up.step)
+    {
+        case 1:   // SELL (+guild-bank deposit) — fire once, hold a randomized dwell.
+        {
+            if (!UpkeepDwell(up, urand(sPlayerbotAIConfig.upkeepSellMinSec, sPlayerbotAIConfig.upkeepSellMaxSec),
+                             "sell", true))
+                return true;
+            up.step = 2;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 2:   // BANK pose (cosmetic — no transaction).
+        {
+            if (PoseAtProp(RS_BANK,
+                           urand(sPlayerbotAIConfig.upkeepBankMinSec, sPlayerbotAIConfig.upkeepBankMaxSec) * IN_MILLISECONDS,
+                           up))
+                return true;
+            up.step = 3;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 3:   // AUCTION HOUSE pose.
+        {
+            if (PoseAtProp(RS_AUCTION_HOUSE,
+                           urand(sPlayerbotAIConfig.upkeepAHMinSec, sPlayerbotAIConfig.upkeepAHMaxSec) * IN_MILLISECONDS,
+                           up))
+                return true;
+            up.step = 4;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 4:   // MAILBOX pose.
+        {
+            if (PoseAtProp(RS_MAILBOX,
+                           urand(sPlayerbotAIConfig.upkeepMailMinSec, sPlayerbotAIConfig.upkeepMailMaxSec) * IN_MILLISECONDS,
+                           up))
+                return true;
+            up.step = 5;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 5:   // CLASS TRAINER pose.
+        {
+            if (PoseAtProp(RS_CLASS_TRAINER,
+                           urand(sPlayerbotAIConfig.upkeepTrainerMinSec, sPlayerbotAIConfig.upkeepTrainerMaxSec) * IN_MILLISECONDS,
+                           up))
+                return true;
+            up.step = 6;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 6:   // MAINTENANCE (NPC-less restock + guild-bank withdraw + gear floor + train) — fire once.
+        {
+            // The maintenance action sets botAI->lastMaintenanceLearnedNew (TrainerAction.cpp:277).
+            // Reset it on the entry tick so a stale prior-episode value can't false-gate the dummy.
+            if (up.stepStartMs == 0)
+                botAI->lastMaintenanceLearnedNew = false;
+            if (!UpkeepDwell(up, urand(sPlayerbotAIConfig.upkeepMaintMinSec, sPlayerbotAIConfig.upkeepMaintMaxSec),
+                             "maintenance"))
+                return true;
+            // Capture the learned-new-spell signal AFTER maintenance completed (gates the dummy tail).
+            up.learnedNew = botAI->lastMaintenanceLearnedNew;
+            up.step = 7;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 7:   // DUMMY — only a freshly-trained bot tests its new ability on a target dummy.
+        {
+            if (!sPlayerbotAIConfig.upkeepDummyTestEnable || !up.learnedNew)
+            {
+                up.step = 8;
+                up.target.Clear();
+                up.stepStartMs = 0;
+                return true;
+            }
+            if (PoseAtProp(RS_DUMMY,
+                           urand(sPlayerbotAIConfig.upkeepDummyTestMinMin, sPlayerbotAIConfig.upkeepDummyTestMaxMin)
+                               * MINUTE * IN_MILLISECONDS,
+                           up))
+                return true;
+            up.step = 8;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 8:   // INN — shared inn rest step; it owns its movement and ends with Decide().
+        default:
+            return TickUpkeepInn(up);
+    }
+}
+
+// Shared inn rest step for BOTH tiers (LOCAL step 3 / CAPITAL step 8). This is the REAL functional
+// rest — it reuses the rest engine's TAVERN sit/seat behavior (HoldSeat) verbatim so the bot earns
+// rested XP, NOT a cosmetic emote pose. The inn step owns its own movement: HoldSeat paths the bot to
+// the resolved chair (and floor-sits in place if none is reachable). Terminal path ends with Decide()
+// as its LAST statement (CRASH RULE). `up` is the caller's already-get_if'd reference.
+bool NewRpgStatusUpdateAction::TickUpkeepInn(NewRpgInfo::Upkeep& up)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+
+    // Entry tick: stamp the inn dwell (reuse the existing inn dwell knobs) and resolve a chair once.
+    // up.target is free at the inn step (the prior pose/errand steps cleared it on advance); we reuse
+    // it to persist the chair guid across ticks. An empty chair → HoldSeat floor-sits in place.
+    if (up.stepStartMs == 0)
+    {
+        up.stepStartMs = getMSTime();
+        up.dwellMs = urand(sPlayerbotAIConfig.restHubDwellMinSec,
+                           sPlayerbotAIConfig.restHubDwellMaxSec) * IN_MILLISECONDS;
+        up.target = SelectInnChair(15.0f);   // chair optional — empty = floor-sit (still real rest)
+    }
+
+    // Reconstruct the minimal Rest state HoldSeat operates on, seeded from the Upkeep fields. The chair
+    // guid persists in up.target; the seated flags are DERIVED from the bot's live stand state each tick
+    // (so we never re-Use a chair we're already sitting on, and no Rest-only struct fields are needed).
+    NewRpgInfo::Rest seat;
+    seat.subtype = RS_TAVERN;
+    seat.chair = up.target;
+    seat.onChair = up.target && bot->getStandState() >= UNIT_STAND_STATE_SIT_LOW_CHAIR;
+    seat.seatState = seat.onChair ? bot->getStandState() : uint8(UNIT_STAND_STATE_SIT);
+    HoldSeat(seat);                          // paths to + sits the chair (or floor-sits), holds the pose
+    up.target = seat.chair;                  // reflect a HoldSeat chair-abandon (despawn/path fail) back
+
+    if (GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs)
+        return true;                         // still resting at the inn
+
+    info.lastUpkeepMs = getMSTime();         // flat field — safe to stamp before Decide()
+    Decide();
+    return true;                             // CRASH RULE — Decide() is the last statement
 }
 
 bool NewRpgGoGrindAction::Execute(Event /*event*/)

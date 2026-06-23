@@ -626,6 +626,7 @@ public:
     }
     void ClearLowPriorityQuests() { lowPriorityQuest.clear(); }
     time_t bgReleaseAttemptTime = 0;
+    bool lastMaintenanceLearnedNew = false;   // set by MaintenanceAction; read by UPKEEP dummy gate
 
     // Schedules a callback to run once after <delayMs> milliseconds.
     void AddTimedEvent(std::function<void()> callback, uint32 delayMs);

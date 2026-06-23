@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Random.h"
 #include "Timer.h"
 
 void NewRpgInfo::ChangeToGoGrind(WorldPosition pos)
@@ -71,8 +72,15 @@ void NewRpgInfo::ChangeToRecover()
 
 void NewRpgInfo::ChangeToUpkeep()
 {
+    // occupation-upkeep-two-tier: roll the tier ONCE on entry (no bot* here — only the config is
+    // needed). hubPos stays empty; the hub is resolved on the first ACQUIRE tick (Step 2) where
+    // SelectRandomCampPos(bot)/SelectCapitalHub(bot) can run. Mirrors how ChangeToRest defers the
+    // arrival-time acquire to the tick path.
+    Upkeep up{};
+    bool capital = roll_chance_f(sPlayerbotAIConfig.upkeepCapitalChance * 100.0f);
+    up.tier = capital ? UPKEEP_TIER_CAPITAL : UPKEEP_TIER_LOCAL;
     startT = getMSTime();
-    data = Upkeep{};
+    data = up;
     lastEmoteMs = 0;
     nextEmoteGapMs = 0;
     lastEmoteIdx = 0xFF;
@@ -192,7 +200,8 @@ std::string NewRpgInfo::ToString()
         else if constexpr (std::is_same_v<T, Upkeep>)
         {
             out << "UPKEEP";
-            out << "\nstep: " << static_cast<uint32>(arg.step);
+            out << "\ntier: " << static_cast<uint32>(arg.tier) << " step: " << static_cast<uint32>(arg.step)
+                << " dwellMs: " << arg.dwellMs << " learnedNew: " << arg.learnedNew;
         }
         else
             out << "UNKNOWN";
