@@ -1480,6 +1480,28 @@ AiPlayerbot.RestHub.Weight.Duel = 8
 AiPlayerbot.RestHub.Weight.Fish = 12
 AiPlayerbot.RestHub.Weight.FieldRest = 5
 
+#
+#    AiPlayerbot.Upkeep.CapitalChance
+#        Probability (0..1) an UPKEEP trip is the scenic CAPITAL run vs a quick LOCAL run.
+#        Live-tunable. Default 0.45
+#
+AiPlayerbot.Upkeep.CapitalChance = 0.45
+AiPlayerbot.Upkeep.SellMinSec = 90
+AiPlayerbot.Upkeep.SellMaxSec = 180
+AiPlayerbot.Upkeep.MaintMinSec = 60
+AiPlayerbot.Upkeep.MaintMaxSec = 120
+AiPlayerbot.Upkeep.BankMinSec = 300
+AiPlayerbot.Upkeep.BankMaxSec = 600
+AiPlayerbot.Upkeep.AHMinSec = 300
+AiPlayerbot.Upkeep.AHMaxSec = 600
+AiPlayerbot.Upkeep.MailMinSec = 90
+AiPlayerbot.Upkeep.MailMaxSec = 180
+AiPlayerbot.Upkeep.TrainerMinSec = 120
+AiPlayerbot.Upkeep.TrainerMaxSec = 240
+AiPlayerbot.Upkeep.DummyTestEnable = 1
+AiPlayerbot.Upkeep.DummyTestMinMin = 10
+AiPlayerbot.Upkeep.DummyTestMaxMin = 20
+
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel
 #
