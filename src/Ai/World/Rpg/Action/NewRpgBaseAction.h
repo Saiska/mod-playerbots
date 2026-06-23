@@ -91,6 +91,9 @@ protected:
     float DistToPoi(POIInfo const& poi);
     static WorldPosition SelectRandomGrindPos(Player* bot);
     static WorldPosition SelectRandomCampPos(Player* bot);
+    // occupation-upkeep-two-tier: map-wide faction-appropriate capital hub for the CAPITAL tier
+    // and the LOCAL->CAPITAL fallthrough. Non-empty for a free bot of any level (Task 6 caller).
+    static WorldPosition SelectCapitalHub(Player* bot);
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);
     // ── occupation-state-machine Task 4: NEEDS→DECIDE resolver ───────────────
     // Run only at occupation boundaries (from the IDLE case / occupation exits), never every tick.
