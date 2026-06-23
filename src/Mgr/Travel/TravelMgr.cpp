@@ -12,6 +12,7 @@
 #include "AreaDefines.h"
 #include "Creature.h"
 #include "Log.h"
+#include "Random.h"
 #include "ObjectAccessor.h"
 #include "TravelNode.h"
 #include "Talentspec.h"
@@ -68,22 +69,73 @@ static Capital const* FindCapitalByBanker(uint16 bankerEntry)
     return nullptr;
 }
 
-static int GetCityWeight(uint32 zoneId)
+// Race -> that race's racial-capital zone. Used to apply the raceHome weight multiplier.
+// 0 = no racial home (never matches a candidate, so raceHome stays 1.0).
+static uint32 RacialHomeZone(uint8 race)
+{
+    switch (race)
+    {
+        case RACE_HUMAN:         return AREA_STORMWIND_CITY;
+        case RACE_DWARF:         return AREA_IRONFORGE;
+        case RACE_GNOME:         return AREA_IRONFORGE;
+        case RACE_NIGHTELF:      return AREA_DARNASSUS;
+        case RACE_DRAENEI:       return AREA_THE_EXODAR;
+        case RACE_ORC:           return AREA_ORGRIMMAR;
+        case RACE_TROLL:         return AREA_ORGRIMMAR;
+        case RACE_TAUREN:        return AREA_THUNDER_BLUFF;
+        case RACE_UNDEAD_PLAYER: return AREA_UNDERCITY;
+        case RACE_BLOODELF:      return AREA_SILVERMOON_CITY;
+    }
+    return 0;
+}
+
+// Main faction hub dominant, racial minors taper. Neutral hubs (Shattrath/Dalaran) and any
+// city outside the classic ladder = 1.0 (they only ever appear alone in their level band, so
+// the value is moot there but must stay non-zero so the forced single-city pick resolves).
+static float CityFactionShare(uint32 zoneId)
 {
     switch (zoneId)
     {
-        case AREA_STORMWIND_CITY:  return sPlayerbotAIConfig.weightTeleToStormwind;
-        case AREA_IRONFORGE:       return sPlayerbotAIConfig.weightTeleToIronforge;
-        case AREA_DARNASSUS:       return sPlayerbotAIConfig.weightTeleToDarnassus;
-        case AREA_THE_EXODAR:      return sPlayerbotAIConfig.weightTeleToExodar;
-        case AREA_ORGRIMMAR:       return sPlayerbotAIConfig.weightTeleToOrgrimmar;
-        case AREA_UNDERCITY:       return sPlayerbotAIConfig.weightTeleToUndercity;
-        case AREA_THUNDER_BLUFF:   return sPlayerbotAIConfig.weightTeleToThunderBluff;
-        case AREA_SILVERMOON_CITY: return sPlayerbotAIConfig.weightTeleToSilvermoonCity;
-        case AREA_SHATTRATH_CITY:  return sPlayerbotAIConfig.weightTeleToShattrathCity;
-        case AREA_DALARAN:         return sPlayerbotAIConfig.weightTeleToDalaran;
+        case AREA_STORMWIND_CITY:  return 1.0f;
+        case AREA_IRONFORGE:       return 0.5f;
+        case AREA_DARNASSUS:       return 0.3f;
+        case AREA_THE_EXODAR:      return 0.25f;
+        case AREA_ORGRIMMAR:       return 1.0f;
+        case AREA_UNDERCITY:       return 0.5f;
+        case AREA_THUNDER_BLUFF:   return 0.3f;
+        case AREA_SILVERMOON_CITY: return 0.25f;
     }
-    return 0;
+    return 1.0f;
+}
+
+// weight = base_knob (existing TeleTo<City>Weight config) x factionShare x raceHome.
+// botRacialHomeZone is the bot's racial-capital zone (precomputed once by the caller); the
+// raceHome multiplier applies only to that city. Returns 0 for a non-capital zone or a
+// knob <= 0 (city excluded from the pick).
+static float GetCityWeight(uint32 zoneId, uint32 botRacialHomeZone)
+{
+    int baseKnob = 0;
+    switch (zoneId)
+    {
+        case AREA_STORMWIND_CITY:  baseKnob = sPlayerbotAIConfig.weightTeleToStormwind;      break;
+        case AREA_IRONFORGE:       baseKnob = sPlayerbotAIConfig.weightTeleToIronforge;      break;
+        case AREA_DARNASSUS:       baseKnob = sPlayerbotAIConfig.weightTeleToDarnassus;      break;
+        case AREA_THE_EXODAR:      baseKnob = sPlayerbotAIConfig.weightTeleToExodar;         break;
+        case AREA_ORGRIMMAR:       baseKnob = sPlayerbotAIConfig.weightTeleToOrgrimmar;      break;
+        case AREA_UNDERCITY:       baseKnob = sPlayerbotAIConfig.weightTeleToUndercity;      break;
+        case AREA_THUNDER_BLUFF:   baseKnob = sPlayerbotAIConfig.weightTeleToThunderBluff;   break;
+        case AREA_SILVERMOON_CITY: baseKnob = sPlayerbotAIConfig.weightTeleToSilvermoonCity; break;
+        case AREA_SHATTRATH_CITY:  baseKnob = sPlayerbotAIConfig.weightTeleToShattrathCity;  break;
+        case AREA_DALARAN:         baseKnob = sPlayerbotAIConfig.weightTeleToDalaran;        break;
+        default:                   return 0.0f;
+    }
+    if (baseKnob <= 0)
+        return 0.0f;
+
+    float raceHome = (botRacialHomeZone != 0 && zoneId == botRacialHomeZone)
+                         ? sPlayerbotAIConfig.raceHomeCapitalWeightMult
+                         : 1.0f;
+    return static_cast<float>(baseKnob) * CityFactionShare(zoneId) * raceHome;
 }
 
 WorldPosition::WorldPosition(std::string const str)
@@ -4526,24 +4578,39 @@ std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot)
     if (validBankerCities.empty())
         return fallbackLocations;
 
-    // Apply weights to valid cities
-    std::vector<uint32> weightedCities;
+    // Precompute the bot's racial-home capital once (raceHome multiplier keys off it).
+    uint32 botRacialHomeZone = RacialHomeZone(bot->getRace());
+
+    // Graded float weights over the faction-valid candidate cities.
+    std::vector<std::pair<uint32, float>> weighted;
+    float totalWeight = 0.0f;
     for (uint32 zoneId : validBankerCities)
     {
-        int weight = GetCityWeight(zoneId);
-        if (weight <= 0)
+        float w = GetCityWeight(zoneId, botRacialHomeZone);
+        if (w <= 0.0f)
             continue;
 
-        for (int i = 0; i < weight; ++i)
-            weightedCities.push_back(zoneId);
+        weighted.emplace_back(zoneId, w);
+        totalWeight += w;
     }
 
-    // Fallback if no valid cities
-    if (weightedCities.empty())
+    // Fallback if no weightable cities
+    if (weighted.empty() || totalWeight <= 0.0f)
         return fallbackLocations;
 
-    // Pick a weighted city randomly, then a random banker in that city
-    uint32 selectedCity = weightedCities[urand(0, weightedCities.size() - 1)];
+    // Cumulative weighted pick: roll in [0,total), take the first city past the running sum.
+    float roll = frand(0.0f, totalWeight);
+    uint32 selectedCity = weighted.back().first;   // float-drift guard (roll == total edge)
+    float cumulative = 0.0f;
+    for (auto const& entry : weighted)
+    {
+        cumulative += entry.second;
+        if (roll < cumulative)
+        {
+            selectedCity = entry.first;
+            break;
+        }
+    }
     Capital const* selectedCapital = FindCapitalByZone(selectedCity);
     if (!selectedCapital)
         return fallbackLocations;

@@ -183,6 +183,8 @@ bool PlayerbotAIConfig::Initialize()
     weightTeleToSilvermoonCity = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToSilvermoonCityWeight", 1);
     weightTeleToShattrathCity = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToShattrathCityWeight", 1);
     weightTeleToDalaran = sConfigMgr->GetOption<int>("AiPlayerbot.TeleToDalaranWeight", 1);
+    raceHomeCapitalWeightMult = sConfigMgr->GetOption<float>("AiPlayerbot.RaceHomeCapitalWeightMult", 2.0f);
+    LOG_INFO("server.loading", "[CapitalWeight] RaceHomeCapitalWeightMult = {}", raceHomeCapitalWeightMult);
     LoadList<std::vector<uint32>>(
         sConfigMgr->GetOption<std::string>("AiPlayerbot.RandomBotQuestItems",
                                            "5175,5176,5177,5178,6948,11000,12382,13704,16309"),
