@@ -72,6 +72,21 @@ protected:
     void TickStroll(NewRpgInfo::Rest& rest);  // STROLL walk loop — Task 8 fills; no-op stub for now
     EmotePalette PaletteOf(BotBehaviorId beh, BotCityPoi poi) const;  // (beh,poi) -> palette row
 
+    // ── RPG_UPKEEP two-tier machine (occupation-upkeep-two-tier) ─────────────
+    // The RPG_UPKEEP case ACQUIREs the hub by tier (LOCAL->CAPITAL fallthrough), then dispatches to
+    // one of the per-tier pipeline ticks. Both tiers share the dwell/one-shot-action primitive below.
+    bool TickUpkeepLocal(NewRpgInfo::Upkeep& up);    // Task 6: travel->sell->maintenance->inn (steps 1..3)
+    bool TickUpkeepCapital(NewRpgInfo::Upkeep& up);  // Task 7: capital errand chain + city poses
+    bool TickUpkeepInn(NewRpgInfo::Upkeep& up);      // Task 7: shared inn rest step (ends with Decide())
+    bool UpkeepStepIsInn(uint8 step) const;          // Task 7: true for the tier's inn step
+
+    // Shared dwell + one-shot-action primitive used by BOTH tiers. On the entry tick of a step
+    // (up.stepStartMs == 0) it stamps stepStartMs = getMSTime(), sets up.dwellMs = secs*IN_MILLISECONDS,
+    // and (if `action` is non-empty) issues it EXACTLY ONCE via DoSpecificAction, returning false (hold).
+    // Subsequent ticks issue nothing and return GetMSTimeDiffToNow(up.stepStartMs) >= up.dwellMs.
+    // `vendorEvent` selects the SellAction "rpg action"/"vendor" event form (only meaningful for "sell").
+    bool UpkeepDwell(NewRpgInfo::Upkeep& up, uint32 secs, std::string const& action, bool vendorEvent = false);
+
     // static NewRpgStatusTransitionProb transitionMat;
     const int32 statusWanderNpcDuration = 5 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusPastimeDuration = 10 * MINUTE * IN_MILLISECONDS;
