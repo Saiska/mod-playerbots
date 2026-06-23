@@ -184,6 +184,8 @@ bool MaintenanceAction::Execute(Event /*event*/)
     botAI->TellMaster("I'm maintaining");
     PlayerbotFactory factory(bot, bot->GetLevel());
 
+    size_t const spellsBefore = bot->GetSpellMap().size();
+
     if (!botAI->IsAlt())
     {
         factory.InitAttunementQuests();
@@ -271,6 +273,8 @@ bool MaintenanceAction::Execute(Event /*event*/)
             bot->GetLevel() >= sPlayerbotAIConfig.minEnchantingBotLevel)
             factory.ApplyEnchantAndGemsNew();
     }
+
+    botAI->lastMaintenanceLearnedNew = (bot->GetSpellMap().size() > spellsBefore);
 
     bot->DurabilityRepairAll(false, 1.0f, false);
     bot->SendTalentsInfoData(false);

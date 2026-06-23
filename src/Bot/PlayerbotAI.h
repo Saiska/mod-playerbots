@@ -673,6 +673,7 @@ protected:
     Position jumpDestination = Position();
     uint32 nextTransportCheck = 0;
     bool spellInterruptRequested = false;
+    bool lastMaintenanceLearnedNew{false};   // set by MaintenanceAction; read by UPKEEP dummy gate
 };
 
 #endif

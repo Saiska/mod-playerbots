@@ -565,15 +565,15 @@ public:
     uint16   restHubDwellMinSec{300};
     uint16   restHubDwellMaxSec{600};
     float    restHubHubRange{2500.0f};         // curated-hub in-range radius
-    float  upkeepCapitalChance;
-    uint32 upkeepSellMinSec, upkeepSellMaxSec;
-    uint32 upkeepMaintMinSec, upkeepMaintMaxSec;
-    uint32 upkeepBankMinSec, upkeepBankMaxSec;
-    uint32 upkeepAHMinSec, upkeepAHMaxSec;
-    uint32 upkeepMailMinSec, upkeepMailMaxSec;
-    uint32 upkeepTrainerMinSec, upkeepTrainerMaxSec;
-    bool   upkeepDummyTestEnable;
-    uint32 upkeepDummyTestMinMin, upkeepDummyTestMaxMin;
+    float  upkeepCapitalChance{0.45f};
+    uint32 upkeepSellMinSec{90},     upkeepSellMaxSec{180};
+    uint32 upkeepMaintMinSec{60},    upkeepMaintMaxSec{120};
+    uint32 upkeepBankMinSec{300},    upkeepBankMaxSec{600};
+    uint32 upkeepAHMinSec{300},      upkeepAHMaxSec{600};
+    uint32 upkeepMailMinSec{90},     upkeepMailMaxSec{180};
+    uint32 upkeepTrainerMinSec{120}, upkeepTrainerMaxSec{240};
+    bool   upkeepDummyTestEnable{true};
+    uint32 upkeepDummyTestMinMin{10}, upkeepDummyTestMaxMin{20};
     float    restHubWitnessRange{120.0f};      // real-player witness radius for TP gate
     float    restHubTravelBudget{4000.0f};     // max foot/mount distance before field-rest (witnessed)
     uint8    restHubStrollPoiCount{3};
