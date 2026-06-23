@@ -46,10 +46,10 @@ public:
 
 protected:
     // ── RestHub helpers (rest-hub-unification) ──────────────────────────────
-    // Witness check + witness-gated hub travel (R1: distance-driven, never treats a
+    // Witness-gated hub travel (R1: distance-driven, never treats a
     // MoveFarTo/MoveWorldObjectTo return as "arrived"; R2: target-acquire/engage take the
     // Rest substruct via std::get_if + null-guard and never read it after a ChangeTo*).
-    bool        IsRealPlayerNear(WorldPosition const& pos, float range) const;
+    // IsRealPlayerNear is inherited from NewRpgBaseAction.
     HubTravel   TravelToHubOrTeleport(WorldPosition const& hub);
     bool        AcquireSubtypeTarget(RestSubtype st);
     bool        EngageAndHold();

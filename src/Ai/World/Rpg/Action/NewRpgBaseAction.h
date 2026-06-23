@@ -20,6 +20,12 @@ struct POIInfo
     uint32 mapId{0};
 };
 
+// Tri-state result of the witness-gated travel primitive DriveTravel().
+//   EN_ROUTE  — bot is moving toward the target (MoveFarTo issued).
+//   ARRIVED   — bot is within arrive radius OR teleported when unwitnessed.
+//   GAVE_UP   — witnessed + beyond rpgTravelBudget (caller should pick a nearer goal).
+enum class TravelResult : uint8 { EN_ROUTE, ARRIVED, GAVE_UP };
+
 /// A base (composition) class for all new rpg actions
 /// All functions that may be shared by multiple actions should be declared here
 /// And we should make all actions composable instead of inheritable
@@ -34,6 +40,14 @@ protected:
     bool MoveWorldObjectTo(ObjectGuid guid, float distance = INTERACTION_DISTANCE);
     bool MoveRandomNear(float moveStep = 50.0f, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, WorldObject* center = nullptr);
     bool ForceToWait(uint32 duration, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
+
+    // Witness-gated travel primitive.  Teleports when unwitnessed; walks/mounts
+    // via MoveFarTo when witnessed + within budget; gives up if too far.
+    // Ground-z safety of the target is the CALLER's responsibility.
+    TravelResult DriveTravel(WorldPosition const& target);
+
+    // True if any non-bot player is within `range` yards of `pos` on the bot's map.
+    bool IsRealPlayerNear(WorldPosition const& pos, float range) const;
 
     /* EMOTE CADENCE (occupation-emote-palettes) */
     // Re-assert the behavior's sustained pose + fire a timed, jittered, non-repeating
@@ -78,8 +92,22 @@ protected:
     static WorldPosition SelectRandomGrindPos(Player* bot);
     static WorldPosition SelectRandomCampPos(Player* bot);
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);
-    bool RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus);
-    bool CheckRpgStatusAvailable(NewRpgStatus status);
+    // ── occupation-state-machine Task 4: NEEDS→DECIDE resolver ───────────────
+    // Run only at occupation boundaries (from the IDLE case / occupation exits), never every tick.
+    // LAYER 1 NEEDS (strict priority RECOVER>UPKEEP), then LAYER 2 weighted-random over the
+    // FEASIBLE productive set. Replaces the deleted satiation-roulette RandomChangeStatus.
+    void Decide();
+    // Maps a candidate status to its Task-2 precondition (precondition ONLY — weights/cooldowns
+    // are applied by Decide()). Deliberately changes behaviour vs the old CheckRpgStatusAvailable
+    // (e.g. RPG_REST is now hub-gated, so a far bot never strands in field-rest).
+    bool OccupationFeasible(NewRpgStatus status);
+    // Wraps the per-status ChangeTo* + ACQUIRE seed. CRASH RULE: every ChangeTo* is followed by an
+    // immediate return; acquire-fail paths route to FallToFarmOrRest(), never a silent ChangeToIdle.
+    void EnterOccupation(NewRpgStatus status);
+    // LAYER 1 NEEDS predicates. Bodies land in Task 5; for now they are inert (return false) so
+    // NEEDS never fire and the build stays green.
+    bool RecoverNeeded();
+    bool UpkeepNeeded();
     // bot-rpg-bleed-suppression: allowlist guard — a bot may run autonomous NewRpg ONLY when free.
     bool IsFreeToIdle();
     bool ShouldSuppressRpg();
@@ -89,6 +117,24 @@ protected:
     // Last-resort fallback: near a hub -> rest in place; in the wild -> farm in place (GoGrind
     // anchored to current pos, which is always non-empty so the commit cannot fail). Never Idle.
     bool FallToFarmOrRest();
+
+    // ── occupation-machine Task 2: predicate vocabulary ──────────────────────
+    // All predicates are O(1)/cheap-proximity; read-only; valid for the current tick only.
+    // Callers: Task 4 Decide()/OccupationFeasible()/RecoverNeeded()/UpkeepNeeded(), Task 5 NEEDS.
+    bool InOpenWorld();                 // not in dungeon/raid/battleground/arena
+    bool NearHub(float r);              // within r yards of any travel hub (wraps IsNearRestHub)
+    bool InCityHub();                   // current zone has AREA_FLAG_CAPITAL
+    bool HealthLow();                   // hp% < needHealthLowPct, non-combat
+    bool ManaLow();                     // mana% < needManaLowPct (power-using classes only)
+    bool DurabilityLow();               // any equipped item below needDurabilityLowPct%
+    bool BagsFull();                    // free inventory slots <= needBagsFullSlots
+    bool MissingToolsOrReagents();      // mining-pick absent (miner) or fishing-pole absent (fisher)
+    bool MaintenanceOverdue();          // time since lastUpkeepMs > maintenanceOverdueMs
+    bool HasActionableQuest();          // held quest with resolvable POI, or complete-unturned
+    bool HasGatherProfAndTool();        // gathering profession (mining/herb) + required tool present
+    bool NodeInRange(float r);          // a gather node within r yards (uses SelectGatherNode cap)
+    bool VendorInRange();               // vendor/repair NPC within pastimeRepairSellRadius
+    bool EnemyNearForPvp();             // open-world PvP zone AND nearest hostile player present
 
 protected:
     /* FOR MOVE FAR */

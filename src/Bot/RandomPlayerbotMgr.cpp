@@ -1461,13 +1461,12 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
             ScheduleTeleport(bot, randomTime);
         }
 
-        if (sPlayerbotAIConfig.autoMaintenance && !GetEventValue(bot, "maintenance"))
-        {
-            // Stagger the first pass across the full interval window so the whole
-            // population does not maintain at once after a restart.
-            ScheduleMaintenance(bot, urand(sPlayerbotAIConfig.minAutoMaintenanceInterval,
-                                           sPlayerbotAIConfig.maxAutoMaintenanceInterval));
-        }
+        // occupation-state-machine Task 5: the autonomous background maintenance timer is RETIRED.
+        // Maintenance is now a VISIBLE town errand driven by the UPKEEP state (DoSpecificAction
+        // "maintenance" on arrival at a hub), gated by MaintenanceOverdue() against
+        // maintenanceOverdueMs. We no longer schedule a per-bot "maintenance" event here.
+        // ScheduleMaintenance/RunMaintenance remain defined (MaintenanceAction is still reachable
+        // via UPKEEP) but are no longer driven by this timer.
 
         return true;
     }
@@ -1642,28 +1641,23 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
         {
             LOG_DEBUG("playerbots", "Bot #{} <{}>: teleport for level and refresh", botId, bot->GetName());
             Refresh(bot);
-            RandomTeleportForLevel(bot);
+            // occupation-state-machine Task 6: the periodic 1-5h scatter relocation is RETIRED by
+            // default. Gate the actual relocation here (reversible — not hard-deleted) so a stale
+            // scheduled "teleport" event becomes a no-op while the reschedule loop keeps running.
+            // Login placement and the max-in-world-time relocation are SEPARATE paths and unaffected.
+            if (sPlayerbotAIConfig.randomTeleportEnable)
+                RandomTeleportForLevel(bot);
             uint32 time = urand(sPlayerbotAIConfig.minRandomBotTeleportInterval,
                                 sPlayerbotAIConfig.maxRandomBotTeleportInterval);
             ScheduleTeleport(botId, time);
             return true;
         }
 
-        // autonomous maintenance (timer-driven, idle-only)
-        if (sPlayerbotAIConfig.autoMaintenance && IsRandomBot(bot))
-        {
-            uint32 maintenance = GetEventValue(botId, "maintenance");
-            if (!maintenance)
-            {
-                if (RunMaintenance(bot))
-                    ScheduleMaintenance(botId, urand(sPlayerbotAIConfig.minAutoMaintenanceInterval,
-                                                     sPlayerbotAIConfig.maxAutoMaintenanceInterval));
-                else
-                    // a guard skipped it — retry soon rather than waiting a full window
-                    ScheduleMaintenance(botId, urand(300, 900));
-                return true;   // consumes one RandomBotsPerInterval unit → throttled like randomize
-            }
-        }
+        // occupation-state-machine Task 5: autonomous timer-driven maintenance is RETIRED.
+        // Maintenance now happens ONLY via the UPKEEP state as a visible town errand. The former
+        // consumer that read the "maintenance" event and called RunMaintenance() has been removed
+        // so the background timer no longer fires maintenance behind the scenes. RunMaintenance()
+        // is left defined/reachable (no longer called from here) for minimal churn.
     }
 
     return false;
@@ -3033,12 +3027,13 @@ void RandomPlayerbotMgr::PrintStats()
     {
         LOG_INFO("playerbots", "Bots rpg status:");
         LOG_INFO("playerbots",
-                 "    Idle: {}, Rest: {}, GoGrind: {}, DoQuest: {}, TravelFlight: {}, "
-                 "OutdoorPvP: {}, TravelMount: {}, GatheringCircuit: {}",
-                 rpgStatusCount[RPG_IDLE], rpgStatusCount[RPG_REST], rpgStatusCount[RPG_GO_GRIND],
-                 rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_TRAVEL_FLIGHT],
-                 rpgStatusCount[RPG_OUTDOOR_PVP], rpgStatusCount[RPG_TRAVEL_MOUNT],
-                 rpgStatusCount[RPG_GATHERING_CIRCUIT]);
+                 "    Idle: {}, Recover: {}, Upkeep: {}, Rest: {}, GoGrind: {}, DoQuest: {}, "
+                 "OutdoorPvP: {}, GatheringCircuit: {} | inTransit(Flight/Mount): {}/{}",
+                 rpgStatusCount[RPG_IDLE], rpgStatusCount[RPG_RECOVER], rpgStatusCount[RPG_UPKEEP],
+                 rpgStatusCount[RPG_REST], rpgStatusCount[RPG_GO_GRIND],
+                 rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_OUTDOOR_PVP],
+                 rpgStatusCount[RPG_GATHERING_CIRCUIT],
+                 rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_TRAVEL_MOUNT]);
 
         {
             std::ostringstream ss;

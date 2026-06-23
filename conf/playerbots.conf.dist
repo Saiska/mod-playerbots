@@ -1142,22 +1142,63 @@ AiPlayerbot.RestrictedHealerDPSMaps = "33,34,36,43,47,48,70,90,109,129,209,229,2
 # Default: 1 (enabled)
 AiPlayerbot.EnableNewRpgStrategy = 1
 
-# Control probability weights for RPG status of bots. Takes effect only when the status meets its premise.
-# Sum of weights need not be 100. Set to 0 to disable the status.
-# These occupation-selection weights are live-reloadable (reload config) and provisional — tune after measuring the live mix.
+# --- Occupation-machine DECIDE weights -------------------------------------------
+# Relative weights used by the DECIDE() function when picking the next occupation.
+# Sum of weights need not be 100. Set a weight to 0 to disable that occupation.
+# These are live-reloadable (reload config) and provisional — tune after measuring.
 #
-# GoGrind       (Default: 15  Go to nearby level-appropriate locations to grind for killing mobs)
-# DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion)
-# TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
-# Rest          (Default: 60  umbrella: travel to a hub and do one activity 5-10 min)
-# OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
-AiPlayerbot.RpgStatusProbWeight.GoGrind = 25
-AiPlayerbot.RpgStatusProbWeight.DoQuest = 60
-AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
-AiPlayerbot.RpgStatusProbWeight.Rest = 60
-AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
-AiPlayerbot.RpgStatusProbWeight.TravelMount = 10
-AiPlayerbot.RpgStatusProbWeight.GatheringCircuit = 30
+# DoQuest   — select a quest and travel to it
+# Gather    — multi-node herbalism/mining circuit
+# OutdoorPvP — capture-point participation (always cooldown-exempt)
+# HubLife   — visit a city hub (leisure or sit-rest; the leisure-vs-rest subtype is chosen by AiPlayerbot.RestHub.Weight.*)
+# Grind     — kill mobs at a level-appropriate location
+AiPlayerbot.OccupationWeight.DoQuest = 25
+AiPlayerbot.OccupationWeight.Gather = 30
+AiPlayerbot.OccupationWeight.OutdoorPvP = 7
+AiPlayerbot.OccupationWeight.HubLife = 20
+AiPlayerbot.OccupationWeight.Grind = 15
+
+# --- Occupation cooldowns (seconds) ----------------------------------------------
+# How long after finishing an occupation before the bot may DECIDE it again.
+# Set to 0 for no cooldown (default for all; OutdoorPvP is always 0 per design).
+# OccupationCooldownFrac: fraction of the occupation dwell that must pass before
+# the cooldown timer starts counting (prevents bailing-and-re-choosing instantly).
+AiPlayerbot.OccupationCooldownSec.DoQuest = 0
+AiPlayerbot.OccupationCooldownSec.Gather = 0
+AiPlayerbot.OccupationCooldownSec.OutdoorPvP = 0
+AiPlayerbot.OccupationCooldownSec.HubLife = 0
+AiPlayerbot.OccupationCooldownSec.Grind = 0
+AiPlayerbot.OccupationCooldownFrac = 0.25
+
+# --- Maintenance overdue threshold -----------------------------------------------
+# How many seconds since the bot's last maintenance before the NEEDS check flags
+# UPKEEP as overdue. Mirrors the AutoMaintenance interval (default 7200 = 2 hours).
+AiPlayerbot.MaintenanceOverdueSec = 7200
+
+# --- Travel budget ---------------------------------------------------------------
+# Maximum yards the bot is willing to travel to reach the next occupation target.
+AiPlayerbot.RpgTravelBudget = 2500
+
+# --- Travel witness range --------------------------------------------------------
+# Radius (yards) within which the bot looks for hubs/NPCs when picking a target.
+# Reuses the RestHub.WitnessRange concept; default matches that key's default.
+AiPlayerbot.RpgTravelWitnessRange = 120
+
+# --- State-machine debug logging -------------------------------------------------
+# Enable verbose per-bot DECIDE / state-machine log lines.
+# Default: 0 (off)
+AiPlayerbot.RpgMachineDebugLog = 0
+
+# --- NEEDS thresholds ------------------------------------------------------------
+# Below these thresholds the bot enters RECOVER (health/mana) or UPKEEP (durability/bags).
+# NeedHealthLowPct    — HP% below which the bot considers itself hurt (triggers RECOVER)
+# NeedManaLowPct      — mana% below which the bot considers itself OOM (triggers RECOVER)
+# NeedDurabilityLowPct — average gear durability% below which UPKEEP fires for repairs
+# NeedBagsFullSlots   — free bag slots below this count triggers UPKEEP for selling
+AiPlayerbot.NeedHealthLowPct = 35
+AiPlayerbot.NeedManaLowPct = 20
+AiPlayerbot.NeedDurabilityLowPct = 25
+AiPlayerbot.NeedBagsFullSlots = 2
 
 #    AiPlayerbot.Rest.DwellMin / .DwellMax
 #        Seated dwell at the inn, in seconds (per-bot jittered, measured from arrival). Long dwell is
@@ -1173,26 +1214,6 @@ AiPlayerbot.Rest.DwellMax = 300
 #
 AiPlayerbot.Rest.SeatRebroadcast = 1
 
-# --- Occupation satiation (variety) -------------------------------------------
-# Biases the RPG occupation pick above AWAY from recently-done activities. Each
-# bot keeps a per-category meter that rises while doing that category and decays
-# otherwise; a high meter suppresses that category's weight in the pick.
-# Categories:
-#   ADVENTURE = GoGrind, WanderRandom, DoQuest
-#   SOCIAL    = WanderNpc, Pastime
-#   REST      = Rest
-#   TRAVEL    = TravelFlight
-#   PVP       = OutdoorPvp
-# Enable = 0 restores the legacy static-weight pick (byte-for-byte).
-# RiseRatePerSec / DecayRatePerSec: meter units per second (meter range 0..1);
-#   defaults fill a meter in ~400s of activity, recover it in ~670s of neglect.
-# SuppressExponent: steepness of (1 - meter)^k (higher = sharper "had enough").
-# MinAppealFrac: floor as a fraction of base weight so nothing is fully starved.
-AiPlayerbot.RpgSatiation.Enable = 1
-AiPlayerbot.RpgSatiation.RiseRatePerSec = 0.0025
-AiPlayerbot.RpgSatiation.DecayRatePerSec = 0.0015
-AiPlayerbot.RpgSatiation.SuppressExponent = 1.5
-AiPlayerbot.RpgSatiation.MinAppealFrac = 0.05
 
 # --- RPG busy-suppression (NewRpg bleed suppression) --------------------------
 #
@@ -1283,6 +1304,15 @@ AiPlayerbot.LowPriorityQuestDecayMs = 1800000
 # Default: 1 (enabled).
 #
 AiPlayerbot.DoQuestSuppressScatter = 1
+
+#    AiPlayerbot.RandomTeleportEnable
+# Master switch for the periodic 1-5h random "scatter" relocation that teleports an idle bot to a
+# random level-appropriate spot. The occupation-state-machine replaces this wandering with visible
+# occupations, so it is OFF by default. Set to 1 to restore the legacy periodic scatter teleport.
+# This does NOT affect login placement or the max-in-world-time relocation, which always fire.
+# Default: 0 (disabled).
+#
+AiPlayerbot.RandomTeleportEnable = 0
 
 #    AiPlayerbot.DoQuestMaxConcurrentTravel
 # Maximum number of bots that may perform a cross-zone quest teleport in the same world tick.
@@ -1429,6 +1459,9 @@ AiPlayerbot.RestHub.Stroll.PoiCount = 3
 AiPlayerbot.RestHub.Stroll.PausePerPoi = 45
 # Split class vs profession trainer by creature_template.trainer_type.
 AiPlayerbot.RestHub.TrainerTypeFidelity = 1
+# Grid-scan radius (yards) for hub NPC/GO POI resolution (BANK/AH/TRAINER/MAIL/FLIGHT).
+# Must be town-sized; shrinking this below ~100 risks missing distant hub NPCs.
+AiPlayerbot.RestHub.PoiRadius = 150
 # Per-subtype selection weights.
 AiPlayerbot.RestHub.Weight.Tavern = 30
 AiPlayerbot.RestHub.Weight.ClassTrainer = 10

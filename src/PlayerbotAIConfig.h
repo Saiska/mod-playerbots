@@ -119,51 +119,11 @@ enum NewRpgStatus : int
     RPG_PASTIME,      // leisure/social activities (framework + social starter)
     RPG_TRAVEL_MOUNT,       // ride overland to a far hub
     RPG_GATHERING_CIRCUIT,  // multi-node profession-gathering loop
+    RPG_RECOVER,            // bot heals up / regens before next occupation
+    RPG_UPKEEP,             // bot performs maintenance (repair, restock, train)
     RPG_STATUS_END
 };
 
-// Thematic activity categories for occupation satiation (pipe 1).
-// Data-driven: a future occupation just adds one case to CategoryOf and
-// inherits a satiation axis for free. CAT_COUNT doubles as "no category".
-enum BotActivityCategory : uint8
-{
-    CAT_ADVENTURE = 0,
-    CAT_SOCIAL,
-    CAT_WORK,      // was CAT_REST
-    CAT_TRAVEL,
-    CAT_PVP,
-    CAT_COUNT          // element count AND the "none" sentinel (e.g. RPG_IDLE)
-};
-
-inline BotActivityCategory CategoryOf(NewRpgStatus s)
-{
-    switch (s)
-    {
-        case RPG_GO_GRIND:
-        case RPG_WANDER_RANDOM:        return CAT_ADVENTURE;
-        case RPG_DO_QUEST:
-        case RPG_GATHERING_CIRCUIT:    return CAT_WORK;
-        case RPG_REST:
-        case RPG_WANDER_NPC:
-        case RPG_PASTIME:              return CAT_SOCIAL;
-        case RPG_TRAVEL_FLIGHT:
-        case RPG_TRAVEL_MOUNT:         return CAT_TRAVEL;
-        case RPG_OUTDOOR_PVP:          return CAT_PVP;
-        default:                       return CAT_COUNT;  // RPG_IDLE / none
-    }
-}
-
-// Pure appeal multiplier: 1.0 at empty meter, 0.0 at full. Higher exponent =
-// sharper "had enough". Invariants (relied on, no unit harness in this module):
-//   sat<=0 -> 1.0 ; sat>=1 -> 0.0 ; strictly decreasing in sat for exponent>0.
-inline float RpgSatiationSuppress(float sat, float exponent)
-{
-    if (sat <= 0.0f)
-        return 1.0f;
-    if (sat >= 1.0f)
-        return 0.0f;
-    return std::pow(1.0f - sat, exponent);
-}
 
 enum BotCityPoi : uint8
 {
@@ -514,13 +474,26 @@ public:
     bool autoLearnTrainerSpells;
     bool autoDoQuests;
     bool enableNewRpgStrategy;
-    std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
-    // --- occupation satiation (pipe 1: bot-occupation-satiation) ---
-    bool  rpgSatiationEnable{true};
-    float rpgSatiationRiseRatePerSec{0.0025f};   // meter gain/sec while in-category (~400s to fill)
-    float rpgSatiationDecayRatePerSec{0.0015f};  // meter loss/sec otherwise (~670s to empty)
-    float rpgSatiationSuppressExponent{1.5f};    // steepness of (1-meter)^k
-    float rpgSatiationMinAppealFrac{0.05f};      // floor as fraction of base weight
+    // --- occupation-machine (state-machine rewrite) ---
+    // Per-occupation DECIDE weights (0 = never chosen); indexed by NewRpgStatus.
+    uint32 occupationWeight[RPG_STATUS_END]{};
+    // Per-occupation cooldown in ms (0 = no cooldown); indexed by NewRpgStatus.
+    uint32 occupationCooldownMs[RPG_STATUS_END]{};
+    // Fraction of dwell time that must elapse before cooldown starts counting.
+    float  occupationCooldownFrac{0.25f};
+    // How long (ms) since the last maintenance before the bot is considered overdue.
+    uint32 maintenanceOverdueMs{7200000};
+    // Max yards the bot may travel to reach the next occupation destination.
+    float  rpgTravelBudget{2500.0f};
+    // Witness range reused from rest-hub: how far a bot can "see" hubs/NPCs.
+    float  rpgTravelWitnessRange{120.0f};
+    // Enable verbose per-bot DECIDE/state-machine logging.
+    bool   rpgMachineDebugLog{false};
+    // NEEDS thresholds
+    float  needHealthLowPct{35.0f};
+    float  needManaLowPct{20.0f};
+    float  needDurabilityLowPct{25.0f};
+    uint32 needBagsFullSlots{2};
     // short idle dwell — bot waits this many ms before re-running the occupation-availability sweep
     uint32 rpgIdleDwellMs{2000};
     // bot-rpg-bleed-suppression: gate autonomous NewRpg off when a bot is on-task
@@ -543,6 +516,8 @@ public:
     uint32 lowPriorityQuestDecayMs{1800000};  // ms a stalled quest stays skipped (also clears on zone change); 0 = disabled
     // --- occupation-rebalance: doquest zone-travel guards (Task 9) ---
     bool   doQuestSuppressScatter{true};      // suppress random scatter-teleport while a bot is in RPG_DO_QUEST
+    // --- occupation-state-machine Task 6: retire the periodic 1-5h scatter teleport ---
+    bool   randomTeleportEnable{false};       // false (default): the periodic random relocation is OFF (occupations replace it)
     uint32 doQuestMaxConcurrentTravel{50};    // max bots performing a cross-zone quest teleport in the same tick
     bool healSayOncePerEpisode{true};      // announce "need heal" once per low-health descent, not in a row
     uint32 healSayMinIntervalSec{240};     // min seconds between heal-says (low health / critical health only)
@@ -595,6 +570,7 @@ public:
     uint8    restHubStrollPoiCount{3};
     uint16   restHubStrollPausePerPoiSec{45};
     bool     restHubTrainerTypeFidelity{true};
+    float    restHubPoiRadius{150.0f};         // grid-scan radius for hub NPC/GO POI resolution (town-sized)
     // --- more-activities-pastimes (pipe 2a) ---
     uint32 pastimeRepairSellWeight{25};
     uint32 pastimeRepairSellDwellMin{5};
