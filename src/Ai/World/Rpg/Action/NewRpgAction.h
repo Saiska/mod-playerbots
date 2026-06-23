@@ -58,8 +58,9 @@ protected:
     bool        IsAnywhereTargetPresent(RestSubtype st) const;
 
     // Fresh target selectors (mirror SelectVendorNpc's "nearest npcs"/"nearest game objects" idiom).
-    ObjectGuid  SelectNearestNpcWithFlag(uint32 npcFlag) const;
-    ObjectGuid  SelectNearestGoOfType(uint32 goType) const;
+    // SelectNearestNpcWithFlag / SelectNearestGoOfType are promoted to NewRpgBaseAction (shared with
+    // PoseAtProp, occupation-upkeep-two-tier) so the rest engine and the upkeep poses resolve props
+    // through the same grid-scan resolvers (no drift).
     ObjectGuid  SelectForgeOrProfTrainer() const;
     ObjectGuid  SelectSpectateTarget() const;
 

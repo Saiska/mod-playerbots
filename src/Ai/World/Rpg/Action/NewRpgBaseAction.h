@@ -65,6 +65,21 @@ protected:
     ObjectGuid SelectTrainingDummy();
     bool       SelectFarTaxiDest(WorldPosition& out);
     ObjectGuid SelectGatherNode();   // promoted from file-static
+    // Town-sized grid-scan prop resolvers (promoted from NewRpgStatusUpdateAction so both the rest
+    // engine AND the upkeep capital poses (PoseAtProp) resolve props identically — no drift).
+    // SelectNearestNpcWithFlag: nearest friendly creature carrying `npcFlag` (banker/auctioneer/
+    // trainer/...). SelectNearestGoOfType: nearest spawned GameObject of `goType` (mailbox).
+    // Both scan at restHubPoiRadius; empty ObjectGuid if none in range.
+    ObjectGuid SelectNearestNpcWithFlag(uint32 npcFlag) const;
+    ObjectGuid SelectNearestGoOfType(uint32 goType) const;
+    // occupation-upkeep-two-tier Task 4 — cosmetic city pose at a capital prop (banker/auctioneer/
+    // mailbox/trainer). Pure RP: NO transaction. Reuses the rest engine's per-subtype resolver
+    // mapping (RS_BANK/RS_AUCTION_HOUSE/RS_CLASS_TRAINER via NPC flag, RS_MAILBOX via GO type),
+    // DriveTravel (witness-gated short hop), SetFacingToObject, and TickEmoteCadence pose dwell.
+    // Returns true while still posing (caller returns this tick); false when done OR the prop is
+    // unresolvable (caller advances up.step and clears up.target). `up` is a live reference into the
+    // variant — caller already did the get_if; never re-enters throwing variant access.
+    bool PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo::Upkeep& up);
     // Nearest GAMEOBJECT_TYPE_CHAIR within `radius` (mirrors SelectGatherNode's scan).
     // Empty if none — RPG_REST then floor-sits in place.
     ObjectGuid SelectInnChair(float radius);
