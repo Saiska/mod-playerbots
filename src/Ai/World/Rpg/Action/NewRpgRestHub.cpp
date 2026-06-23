@@ -187,7 +187,9 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
     {
         RestSubtypeDef const& d = kRestTable[restSubtype];
         ObjectGuid prop;
-        if (d.target == TK_GO_TYPE)
+        if (d.target == TK_DUMMY)
+            prop = SelectTrainingDummy();                         // training dummy (Creature, no npcFlag)
+        else if (d.target == TK_GO_TYPE)
             prop = SelectNearestGoOfType(d.npcFlagOrGoType);     // mailbox (GameObject)
         else
             prop = SelectNearestNpcWithFlag(d.npcFlagOrGoType);  // banker/auctioneer/trainer (NPC)
