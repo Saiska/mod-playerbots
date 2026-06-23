@@ -192,7 +192,8 @@ std::string NewRpgInfo::ToString()
         else if constexpr (std::is_same_v<T, Upkeep>)
         {
             out << "UPKEEP";
-            out << "\nstep: " << static_cast<uint32>(arg.step);
+            out << "\ntier: " << static_cast<uint32>(arg.tier) << " step: " << static_cast<uint32>(arg.step)
+                << " dwellMs: " << arg.dwellMs << " learnedNew: " << arg.learnedNew;
         }
         else
             out << "UNKNOWN";

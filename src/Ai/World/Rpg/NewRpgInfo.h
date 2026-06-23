@@ -89,12 +89,18 @@ struct NewRpgInfo
     {
         uint32 dwellMs{0};
     };
-    // RPG_UPKEEP — bot performs maintenance (repair, restock, train)
+    // RPG_UPKEEP — bot performs maintenance + (capital tier) cosmetic city poses
+    enum { UPKEEP_TIER_LOCAL = 0, UPKEEP_TIER_CAPITAL = 1 };
     struct Upkeep
     {
-        uint8         step{0};       // which upkeep sub-step the bot is on
-        WorldPosition hubPos{};      // chosen hub/vendor position
-        ObjectGuid    target{};      // resolved vendor/trainer NPC guid
+        uint8         tier{UPKEEP_TIER_LOCAL};  // LOCAL or CAPITAL (rolled once on entry)
+        uint8         step{0};                  // index into the tier's pipeline
+        WorldPosition hubPos{};                 // chosen hub / capital anchor position
+        WorldPosition posePos{};                // current prop NPC position (capital poses)
+        ObjectGuid    target{};                 // resolved vendor / prop NPC guid
+        uint32        dwellMs{0};               // current step's randomized dwell
+        uint32        stepStartMs{0};           // getMSTime() the current step began
+        bool          learnedNew{false};        // maintenance granted a new spell/rank (gates DUMMY)
     };
 
     uint32 startT{0};  // start timestamp of the current status
