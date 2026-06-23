@@ -2856,6 +2856,7 @@ void RandomPlayerbotMgr::PrintStats()
     uint32 engine_combat = 0;
     uint32 engine_dead = 0;
     std::unordered_map<NewRpgStatus, int> rpgStatusCount;
+    uint32 upkeepLocal = 0, upkeepCapital = 0;
     uint32 restSubCount[RS_COUNT] = {};
     // static NewRpgStatistic rpgStasticTotal;
     std::unordered_map<uint32, int> zoneCount;
@@ -2946,6 +2947,11 @@ void RandomPlayerbotMgr::PrintStats()
         {
             NewRpgStatus status = botAI->rpgInfo.GetStatus();
             rpgStatusCount[status]++;
+            if (status == RPG_UPKEEP)
+            {
+                if (auto const* up = std::get_if<NewRpgInfo::Upkeep>(&botAI->rpgInfo.data))
+                    (up->tier == NewRpgInfo::UPKEEP_TIER_CAPITAL ? upkeepCapital : upkeepLocal)++;
+            }
             if (status == RPG_REST)
             {
                 auto* rp = std::get_if<NewRpgInfo::Rest>(&botAI->rpgInfo.data);
@@ -3034,6 +3040,7 @@ void RandomPlayerbotMgr::PrintStats()
                  rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_OUTDOOR_PVP],
                  rpgStatusCount[RPG_GATHERING_CIRCUIT],
                  rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_TRAVEL_MOUNT]);
+        LOG_INFO("playerbots", "    UpkeepTier: L={} C={}", upkeepLocal, upkeepCapital);
 
         {
             std::ostringstream ss;
