@@ -1335,9 +1335,9 @@ AiPlayerbot.Pastime.Social.Emotes = "dance|sit|cheer|laugh|applaud|point|talk"
 #    AiPlayerbot.Pastime.Social.DancePct
 #        Percent of social-pastime sessions where the bot holds a continuous dance
 #        (EMOTE_STATE_DANCE) instead of a conversing pose. 0 = never, 100 = always.
-#        Default: 25
+#        Default: 50
 #
-AiPlayerbot.Pastime.Social.DancePct = 25
+AiPlayerbot.Pastime.Social.DancePct = 50
 
 # --- More pastimes (pipe 2a) --------------------------------------------------
 # Extra leisure activities in the pastime registry (weights are relative to

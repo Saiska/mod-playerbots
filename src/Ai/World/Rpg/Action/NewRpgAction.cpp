@@ -270,17 +270,19 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         info.lastZoneId = curZone;
     }
 
-    // comedy-hold-dance: stale held-pose sweep. ANY exit from the social pastime (dwell end, partner
-    // lost, OR an external yank — the bot-rpg-bleed-suppression guard below calls ChangeToIdle, which
-    // does NOT clear emote-state) leaves status != RPG_PASTIME with our social emote-state still on the
-    // unit. Clear it so a suppressed bot doesn't keep dancing/talking while it idles/follows. Sits ABOVE
-    // the bleed guard so it still fires while the bot stays suppressed (status == RPG_IDLE). heldSocialEmote
-    // lives on NewRpgInfo (not the Social variant) so it survives ChangeToIdle's reset and we can clean up.
-    if (info.heldSocialEmote && info.GetStatus() != RPG_PASTIME)
+    // social-dance-resthub-revive: general stale rest-pose sweep. The rest engine holds
+    // UNIT_NPC_EMOTESTATE for posed subtypes (SOCIAL dance/talk, vendor/trainer talk, craft
+    // use-standing). The normal P4 exit clears it, but an external yank — the bleed-suppression
+    // guard below calls ChangeToIdle (pure-data, no unit access) — leaves status != RPG_REST with
+    // the pose still on the unit. Clear it (equality-gated so we never stomp a foreign pose) so a
+    // suppressed/idling bot doesn't keep dancing/talking while it follows. heldRestPose lives on
+    // NewRpgInfo so it survives ChangeToIdle's variant reset. ABOVE the bleed guard so it fires
+    // while the bot stays suppressed (status == RPG_IDLE).
+    if (info.heldRestPose && info.GetStatus() != RPG_REST)
     {
-        if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) == info.heldSocialEmote)
-            bot->ClearEmoteState();
-        info.heldSocialEmote = 0;
+        if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) == info.heldRestPose)
+            bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, 0);
+        info.heldRestPose = 0;
     }
 
     // --- occupation lifecycle events: emit on any behaviorId edge (once-only by construction) ---
@@ -454,6 +456,13 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 RestSubtype st = acq ? picked : RS_FIELD_REST;
                 rest.subtype = st;
                 rest.sustainedPose = PaletteOf(kRestTable[st].palette, kRestTable[st].poiVariant).sustainedPose;
+                // social-dance-resthub-revive: BEH_SOCIAL's static palette pose is 0 (stand), so
+                // re-home the comedy-hold-dance roll here — mostly converse (TALK), sometimes dance
+                // (per DancePct). The generic per-tick re-assert (steady-hold else branch) holds it;
+                // the P4 exit clears it.
+                if (st == RS_SOCIAL)
+                    rest.sustainedPose = (urand(0, 99) < sPlayerbotAIConfig.pastimeSocialDancePct)
+                                         ? EMOTE_STATE_DANCE : EMOTE_STATE_TALK;
                 return true;
             }
 
@@ -479,7 +488,12 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                     TickStroll(rest);
                 else
                 {
+                    // A mount hides a held pose; dismount before asserting a non-zero one
+                    // (mirrors comedy-hold-dance + TickEmoteCadence's sustained-pose guard).
+                    if (rest.sustainedPose && bot->IsMounted())
+                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
                     bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, rest.sustainedPose);
+                    info.heldRestPose = rest.sustainedPose;   // track for the head sweep (0 = no pose, harmless)
                     TickEmoteCadence(kRestTable[rest.subtype].palette,
                                      static_cast<uint8>(kRestTable[rest.subtype].poiVariant));
                 }
@@ -491,6 +505,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 {
                     bot->SetStandState(UNIT_STAND_STATE_STAND);
                     bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, 0);
+                    info.heldRestPose = 0;                   // clean exit cleared the pose; sweep has nothing to do
                     info.lastRestSubtype = rest.subtype;     // read rest BEFORE Decide()
                     info.lastFinished[RPG_REST] = getMSTime();
                     Decide();                                // R2: nothing after this touches rest

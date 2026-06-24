@@ -115,10 +115,11 @@ struct NewRpgInfo
     uint32 lastEmoteMs{0};
     uint32 nextEmoteGapMs{0};
     uint8  lastEmoteIdx{0xFF};
-    uint32 heldSocialEmote{0};   // comedy-hold-dance: social pastime held EMOTE_STATE_* (0=none). Lives on
+    uint32 heldRestPose{0};      // social-dance-resthub-revive: the UNIT_NPC_EMOTESTATE the rest engine is
+                                 // holding for a posed subtype (0=none). On top-level NewRpgInfo (not the Rest
+                                 // variant) so it survives ChangeToIdle's reset → the Execute-head sweep can
+                                 // clear a stuck pose after an external yank (bleed-suppression).
     uint32 sitDiagLastMs{0};     // rest-sit-render-diagnostic (TEMP): ms ts of this bot's last [SitDiag] line
-                                 // NewRpgInfo (not the Social variant) so it survives ChangeToIdle's variant
-                                 // reset and the Execute-head sweep can clear it after an external yank.
 
     // --- occupation-machine tracking ---
     uint32 lastFinished[RPG_STATUS_END] = {0};  // getMSTime() when each occupation last ended; 0=never
