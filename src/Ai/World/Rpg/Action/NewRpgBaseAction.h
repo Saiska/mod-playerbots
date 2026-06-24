@@ -109,6 +109,10 @@ protected:
     // occupation-upkeep-two-tier: map-wide faction-appropriate capital hub for the CAPITAL tier
     // and the LOCAL->CAPITAL fallthrough. Non-empty for a free bot of any level (Task 6 caller).
     static WorldPosition SelectCapitalHub(Player* bot);
+    // upkeep-capital-pose-prop-resolve: same weighted pick as SelectCapitalHub but also fills
+    // outZone with the chosen capital's zoneId so hubPos and capitalZone agree (single roll).
+    // Falls back to SelectCapitalHub (outZone stays 0) when GetCityLocationAndZone returns empty.
+    static WorldPosition SelectCapitalHubAndZone(Player* bot, uint32& outZone);
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);
     // ── occupation-state-machine Task 4: NEEDS→DECIDE resolver ───────────────
     // Run only at occupation boundaries (from the IDLE case / occupation exits), never every tick.

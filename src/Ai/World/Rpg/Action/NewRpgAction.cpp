@@ -557,11 +557,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                         // No reachable zone hub — fall through to the capital tier (universal
                         // backstop). This is the path that kills the old "NO reachable hub" trickle.
                         up.tier = NewRpgInfo::UPKEEP_TIER_CAPITAL;
-                        up.hubPos = SelectCapitalHub(bot);
+                        up.hubPos = SelectCapitalHubAndZone(bot, up.capitalZone);
                     }
                 }
                 else
-                    up.hubPos = SelectCapitalHub(bot);
+                    up.hubPos = SelectCapitalHubAndZone(bot, up.capitalZone);
 
                 if (up.hubPos == WorldPosition())
                 {
