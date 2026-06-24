@@ -707,6 +707,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 3;
             up.target.Clear();
+            up.poseArriveT = 0;
             up.stepStartMs = 0;
             return true;
         }
@@ -718,6 +719,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 4;
             up.target.Clear();
+            up.poseArriveT = 0;
             up.stepStartMs = 0;
             return true;
         }
@@ -729,6 +731,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 5;
             up.target.Clear();
+            up.poseArriveT = 0;
             up.stepStartMs = 0;
             return true;
         }
@@ -740,6 +743,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 6;
             up.target.Clear();
+            up.poseArriveT = 0;
             up.stepStartMs = 0;
             return true;
         }
@@ -765,6 +769,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             {
                 up.step = 8;
                 up.target.Clear();
+                up.poseArriveT = 0;
                 up.stepStartMs = 0;
                 return true;
             }
@@ -775,6 +780,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 8;
             up.target.Clear();
+            up.poseArriveT = 0;
             up.stepStartMs = 0;
             return true;
         }
