@@ -5,9 +5,13 @@
 
 #include "TravelMgr.h"
 
+#include <algorithm>
 #include <cfloat>
 #include <iomanip>
 #include <numeric>
+#include <unordered_set>
+
+#include "Ai/World/Rpg/Action/NewRpgRestHub.h"
 
 #include "AreaDefines.h"
 #include "Creature.h"
@@ -4662,6 +4666,19 @@ WorldPosition TravelMgr::GetNearestCapitalPos(Player* bot)
     return best ? best : anyValid;
 }
 
+WorldPosition TravelMgr::SelectCapitalPropPos(uint32 capitalZoneId, PropKind kind) const
+{
+    if (kind >= PROPKIND_COUNT)
+        return WorldPosition();
+    auto it = capitalPropLocations.find(capitalZoneId);
+    if (it == capitalPropLocations.end())
+        return WorldPosition();
+    auto const& vec = it->second[kind];
+    if (vec.empty())
+        return WorldPosition();
+    return vec[urand(0, vec.size() - 1)];
+}
+
 void TravelMgr::PrepareZone2LevelBracket()
 {
     // Classic WoW - starter zones
@@ -4748,6 +4765,11 @@ void TravelMgr::PrepareDestinationCache()
     uint32 flightMastersCount = 0;
     uint32 innkeepersCount = 0;
     uint32 bankerCount = 0;
+
+    // upkeep-capital-pose-prop-resolve: build a zone-id set for fast capital membership tests.
+    std::unordered_set<uint32> capitalZoneSet;
+    for (Capital const& cap : capitals)
+        capitalZoneSet.insert(cap.zoneId);
 
     LOG_INFO("playerbots", "Preparing destination caches for {} levels...", maxLevel);
     // Temporary map to group creatures by entry and area
@@ -4913,6 +4935,79 @@ void TravelMgr::PrepareDestinationCache()
             }
             bankerCount++;
         }
+
+        // upkeep-capital-pose-prop-resolve: capture any capital-resident prop (auctioneer /
+        // banker / class-trainer / training-dummy). areaId was resolved to its zone root above
+        // (area->zone ? area->zone : area->ID), so it serves directly as the capital zone key.
+        if (capitalZoneSet.count(areaId))
+        {
+            uint32 const flags = creatureTemplate->npcflag;
+            bool const isDummy = std::find(sPlayerbotAIConfig.pastimeDummyEntries.begin(),
+                                           sPlayerbotAIConfig.pastimeDummyEntries.end(),
+                                           creatureTemplate->Entry)
+                                 != sPlayerbotAIConfig.pastimeDummyEntries.end();
+            if (flags & (UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_AUCTIONEER |
+                         UNIT_NPC_FLAG_TRAINER | UNIT_NPC_FLAG_TRAINER_CLASS) || isDummy)
+            {
+                WorldPosition propLoc(mapId,
+                    x + cos(orient) * 6.0f,
+                    y + sin(orient) * 6.0f,
+                    z + 2.0f,
+                    orient + M_PI);
+                if (flags & UNIT_NPC_FLAG_BANKER)
+                    capitalPropLocations[areaId][PK_BANKER].push_back(propLoc);
+                if (flags & UNIT_NPC_FLAG_AUCTIONEER)
+                    capitalPropLocations[areaId][PK_AUCTIONEER].push_back(propLoc);
+                if (flags & (UNIT_NPC_FLAG_TRAINER | UNIT_NPC_FLAG_TRAINER_CLASS))
+                    capitalPropLocations[areaId][PK_CLASS_TRAINER].push_back(propLoc);
+                if (isDummy)
+                    capitalPropLocations[areaId][PK_DUMMY].push_back(propLoc);
+            }
+        }
+    }
+
+    // upkeep-capital-pose-prop-resolve: mailbox GO sweep.
+    // GameObjects are not creatures, so we iterate the GO spawn store separately.
+    // Position fields (posX/posY/posZ/orientation/mapid) are inherited from SpawnData.
+    for (auto const& [spawnId, goData] : sObjectMgr->GetAllGOData())
+    {
+        GameObjectTemplate const* goInfo = sObjectMgr->GetGameObjectTemplate(goData.id);
+        if (!goInfo || goInfo->type != GAMEOBJECT_TYPE_MAILBOX)
+            continue;
+
+        uint16 goMapId = goData.mapid;
+        Map* goMap = sMapMgr->FindMap(goMapId, 0);
+        if (!goMap)
+            continue;
+
+        AreaTableEntry const* goArea = sAreaTableStore.LookupEntry(
+            goMap->GetAreaId(PHASEMASK_NORMAL, goData.posX, goData.posY, goData.posZ));
+        if (!goArea)
+            continue;
+
+        uint32 goZone = goArea->zone ? goArea->zone : goArea->ID;
+        if (!capitalZoneSet.count(goZone))
+            continue;
+
+        capitalPropLocations[goZone][PK_MAILBOX].push_back(
+            WorldPosition(goMapId, goData.posX, goData.posY, goData.posZ, goData.orientation));
+    }
+
+    // upkeep-capital-pose-prop-resolve: emit one boot summary line per capital that has entries.
+    for (Capital const& cap : capitals)
+    {
+        auto it = capitalPropLocations.find(cap.zoneId);
+        if (it == capitalPropLocations.end())
+            continue;
+        auto const& a = it->second;
+        LOG_INFO("server.loading",
+                 "[Upkeep] capital props {}: bank={} ah={} mail={} trainer={} dummy={}",
+                 cap.name,
+                 a[PK_BANKER].size(),
+                 a[PK_AUCTIONEER].size(),
+                 a[PK_MAILBOX].size(),
+                 a[PK_CLASS_TRAINER].size(),
+                 a[PK_DUMMY].size());
     }
 
     // Process temporary caches

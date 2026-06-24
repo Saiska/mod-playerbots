@@ -6,15 +6,22 @@
 #ifndef _PLAYERBOT_TRAVELMGR_H
 #define _PLAYERBOT_TRAVELMGR_H
 
+#include <array>
 #include <boost/functional/hash.hpp>
 #include <map>
 #include <random>
+#include <unordered_map>
+#include <vector>
 
 #include "AiObject.h"
 #include "CreatureData.h"
 #include "GameObject.h"
 #include "GridDefines.h"
 #include "PlayerbotAIConfig.h"
+
+// upkeep-capital-pose-prop-resolve: forward-declare PropKind (defined in NewRpgRestHub.h)
+// so TravelMgr.h stays lean (the full enum is included in TravelMgr.cpp).
+enum PropKind : uint8;
 
 class Creature;
 class GuidPosition;
@@ -882,6 +889,9 @@ public:
     // occupation-upkeep-two-tier: faction/neutral capital banker anchor, map-wide; never empty
     // unless the capitals banker cache failed to populate at boot (a real boot bug, not runtime).
     WorldPosition GetNearestCapitalPos(Player* bot);
+    // upkeep-capital-pose-prop-resolve: pick a random spawn of `kind` inside capital
+    // `capitalZoneId` (empty WorldPosition if that city has no cached spawn of that kind).
+    WorldPosition SelectCapitalPropPos(uint32 capitalZoneId, PropKind kind) const;
     std::vector<uint32> GetFlightNodesInZone(uint32 zoneId, TeamId team, uint32 excludeNode = 0) const;
     bool SelectAuctioneerByMap(Player* bot, NpcLocation& outAuctioneer);
     const std::vector<WorldLocation>& GetLocsPerLevelCache(uint8 level) { return locsPerLevelCache[level]; }
@@ -1004,6 +1014,9 @@ private:
     std::map<uint8, std::vector<WorldLocation>> locsPerLevelCache;
     std::unordered_map<uint32, std::vector<WorldLocation>> creatureSpawnsByTemplate;
     std::map<uint32, LevelBracket> zone2LevelBracket;
+    // upkeep-capital-pose-prop-resolve — per-capital-zone prop coordinates, built once at boot.
+    // Index: [capital zoneId] -> [PropKind] -> spawn positions in that capital.
+    std::unordered_map<uint32, std::array<std::vector<WorldPosition>, 5>> capitalPropLocations;
 };
 
 #define sTravelMgr TravelMgr::instance()
