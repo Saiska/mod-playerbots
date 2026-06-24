@@ -4553,7 +4553,7 @@ const std::vector<WorldLocation> TravelMgr::GetTravelHubs(Player* bot)
 }
 
 std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot,
-    uint32* outBankerEntry, uint32* outCapitalZone)
+    uint32* outCapitalZone)
 {
     uint32 level = bot->GetLevel();
 
@@ -4624,8 +4624,6 @@ std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot,
     auto locIt = bankerEntryToLocation.find(selectedBankerEntry);
     if (locIt != bankerEntryToLocation.end())
     {
-        if (outBankerEntry)
-            *outBankerEntry = selectedBankerEntry;
         if (outCapitalZone)
             *outCapitalZone = selectedCity;
         return { locIt->second };
@@ -4637,24 +4635,17 @@ std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot,
 WorldLocation TravelMgr::GetCityLocationAndZone(Player* bot, uint32& outCapitalZone)
 {
     outCapitalZone = 0;
-    uint32 bankerEntry = 0;
     uint32 capitalZone = 0;
-    std::vector<WorldLocation> locs = GetCityLocations(bot, &bankerEntry, &capitalZone);
+    std::vector<WorldLocation> locs = GetCityLocations(bot, &capitalZone);
     if (locs.empty())
         return WorldLocation();
-    // On the weighted path, GetCityLocations returns exactly one location and fills both
-    // out-params. On the fallback path, bankerEntry/capitalZone stay 0; best-effort resolve
+    // On the weighted path, GetCityLocations returns exactly one location and fills
+    // outCapitalZone directly. On the fallback path capitalZone stays 0; best-effort resolve
     // via FindCapitalByBanker using the first entry in bankerLocsPerLevelCache.
     WorldLocation chosen = locs[0];
     if (capitalZone != 0)
     {
         outCapitalZone = capitalZone;
-    }
-    else if (bankerEntry != 0)
-    {
-        Capital const* cap = FindCapitalByBanker(static_cast<uint16>(bankerEntry));
-        if (cap)
-            outCapitalZone = cap->zoneId;
     }
     else
     {
