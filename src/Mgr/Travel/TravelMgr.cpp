@@ -13,6 +13,12 @@
 
 #include "Ai/World/Rpg/Action/NewRpgRestHub.h"
 
+// upkeep-capital-pose-prop-resolve — capitalPropLocations (TravelMgr.h) sizes its per-zone
+// std::array with a literal 5 because PropKind is only forward-declared there; pin it to the
+// enum here (NewRpgRestHub.h is in scope) so a future PropKind addition can't silently
+// under-allocate. Mirrors the RS_COUNT==16 guard in NewRpgRestHub.cpp.
+static_assert(PROPKIND_COUNT == 5, "capitalPropLocations array size in TravelMgr.h must match PROPKIND_COUNT");
+
 #include "AreaDefines.h"
 #include "Creature.h"
 #include "Log.h"
