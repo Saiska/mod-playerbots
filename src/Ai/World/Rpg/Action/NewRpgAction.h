@@ -68,7 +68,7 @@ protected:
     bool        BuildStrollRoute();
 
     // ── RPG_REST machine (Task 7) ───────────────────────────────────────────
-    void HoldSeat(NewRpgInfo::Rest& rest);    // chair/floor seat re-broadcast (extracted)
+    void HoldSeat(NewRpgInfo::Rest& rest, bool diag = false);    // chair/floor seat re-broadcast (extracted)
     void TickStroll(NewRpgInfo::Rest& rest);  // STROLL walk loop — Task 8 fills; no-op stub for now
     EmotePalette PaletteOf(BotBehaviorId beh, BotCityPoi poi) const;  // (beh,poi) -> palette row
 

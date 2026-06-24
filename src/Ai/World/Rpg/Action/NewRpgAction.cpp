@@ -57,6 +57,21 @@ static void ForceResitBroadcast(Player* bot, uint8 seatState)
     bot->SetStandState(seatState);
 }
 
+// rest-sit-render-diagnostic (TEMP, gated default-off): true at most once per ~3 s per bot when the
+// diag is on and (no name filter OR this bot's name matches). Stamps the throttle. Read-only.
+static bool SitDiagDue(Player* bot, NewRpgInfo& info)
+{
+    if (!sPlayerbotAIConfig.restSitDiagLog)
+        return false;
+    std::string const& want = sPlayerbotAIConfig.restSitDiagName;
+    if (!want.empty() && bot->GetName() != want)
+        return false;
+    if (info.sitDiagLastMs != 0 && GetMSTimeDiffToNow(info.sitDiagLastMs) < 3000)
+        return false;
+    info.sitDiagLastMs = getMSTime();
+    return true;
+}
+
 // rest-hub-unification: (beh,poi) -> EmotePalette row. Thin wrapper over the shared
 // LookupPalette (NewRpgBaseAction.cpp), the single source of truth for the kPalette /
 // kLoiterByPoi tables. The RPG_REST P2 phase reads only .sustainedPose from the result.
@@ -73,7 +88,7 @@ EmotePalette NewRpgStatusUpdateAction::PaletteOf(BotBehaviorId beh, BotCityPoi p
 // operates on the passed `rest`. NOTE the one behavioral nuance preserved exactly: when the chair
 // is still being pathed to, MoveWorldObjectTo returns true and we RETURN OUT OF HoldSeat for the
 // tick (the caller does no further work this tick) — this matches the old `return true` there.
-void NewRpgStatusUpdateAction::HoldSeat(NewRpgInfo::Rest& rest)
+void NewRpgStatusUpdateAction::HoldSeat(NewRpgInfo::Rest& rest, bool diag)
 {
     bool chaired = false;
     if (rest.chair)
@@ -89,7 +104,12 @@ void NewRpgStatusUpdateAction::HoldSeat(NewRpgInfo::Rest& rest)
         {
             // Not seated yet: path into seating range; keep moving toward the chair this tick.
             if (MoveWorldObjectTo(rest.chair))
+            {
+                if (diag)
+                    LOG_INFO("playerbots", "[SitDiag] {} HoldSeat branch=PATHING ss-after={}",
+                             bot->GetName(), uint32(bot->getStandState()));
                 return;
+            }
             // Pathing failed (offset in geometry); abandon the chair and floor-sit.
             rest.chair = ObjectGuid();
             LOG_DEBUG("playerbots", "[New RPG] {} rest: seated floor (chair pathing failed)", bot->GetName());
@@ -140,6 +160,11 @@ void NewRpgStatusUpdateAction::HoldSeat(NewRpgInfo::Rest& rest)
     // Chaired: chair already holds the pose -> do one-shots ONLY (skip the EMOTE_STATE_SIT
     // re-assert that would fight the SIT_*_CHAIR stand-state). Floor: the BEH_REST palette
     // pose (EMOTE_STATE_SIT) is the held seated baseline alongside the stand-state sit.
+    if (diag)
+        LOG_INFO("playerbots", "[SitDiag] {} HoldSeat branch={} ss-after={}",
+                 bot->GetName(),
+                 chaired ? (rest.onChair ? "CHAIR_HOLD" : "USE") : "FLOOR",
+                 uint32(bot->getStandState()));
     TickEmoteCadence(BEH_REST, 0, chaired);
 }
 
@@ -396,6 +421,24 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             }
 
+            // rest-sit-render-diagnostic (TEMP): one read-only line per throttled tick, all phases.
+            bool sitDiag = SitDiagDue(bot, info);
+            if (sitDiag)
+            {
+                char const* phase = (rest.hubArriveT != 0 && rest.subtype == RS_NONE) ? "SETTLE"
+                                  : (rest.lastReach == 0)                              ? "APPROACH"
+                                  : (rest.subtype == RS_TAVERN || rest.subtype == RS_FIELD_REST) ? "HOLD"
+                                  : (rest.subtype == RS_STROLL)                        ? "STROLL"
+                                  : "OTHER";
+                char const* sub = (rest.subtype < RS_COUNT) ? kRestTable[rest.subtype].name : "NONE";
+                LOG_INFO("playerbots",
+                    "[SitDiag] {} status=REST subtype={} phase={} lastReach={} dwellMs={} onChair={} chair={} ss={} em={}",
+                    bot->GetName(), sub, phase,
+                    rest.lastReach == 0 ? std::string("enroute") : std::to_string(GetMSTimeDiffToNow(rest.lastReach)),
+                    rest.dwellMs, uint32(rest.onChair ? 1 : 0), uint32(rest.chair ? 1 : 0),
+                    uint32(bot->getStandState()), bot->GetUInt32Value(UNIT_NPC_EMOTESTATE));
+            }
+
             // P2 ACQUIRE-ON-ARRIVAL — after a short settle so the post-teleport grid + the
             // NearestUnitsValue caches (checkInterval ~1s) have refreshed for the new location.
             if (rest.hubArriveT != 0 && rest.subtype == RS_NONE)
@@ -427,7 +470,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 }
 
                 if (rest.subtype == RS_TAVERN || rest.subtype == RS_FIELD_REST)
-                    HoldSeat(rest);
+                    HoldSeat(rest, sitDiag);
                 else if (rest.subtype == RS_STROLL)
                     TickStroll(rest);
                 else
