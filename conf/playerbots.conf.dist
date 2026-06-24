@@ -1260,13 +1260,6 @@ AiPlayerbot.Gather.HarvestHoldMs = 4000
 #
 AiPlayerbot.LowHealthSelfPreservation = 1
 #
-#    AiPlayerbot.RpgSuppressWhenHurt
-#        Below AiPlayerbot.LowHealth, suppress autonomous NewRpg wandering so the bot stays put and
-#        recovers (eat / bandage / out-of-combat regen). 1 = on, 0 = legacy.
-#        Default: 1
-#
-AiPlayerbot.RpgSuppressWhenHurt = 1
-#
 #    AiPlayerbot.RpgNearHubRadius
 #        Distance (yards) within which a bot that fails occupation selection is considered "at a hub"
 #        and rests locally instead of farming in place. Beyond this radius the bot farms (kills in

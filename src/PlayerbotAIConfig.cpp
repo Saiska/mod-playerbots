@@ -884,7 +884,6 @@ bool PlayerbotAIConfig::Initialize()
     rpgSuppressCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppress.Combat", true);
     gatherHarvestHoldMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.Gather.HarvestHoldMs", 4000);
     lowHealthSelfPreservation = sConfigMgr->GetOption<bool>("AiPlayerbot.LowHealthSelfPreservation", true);
-    rpgSuppressWhenHurt = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgSuppressWhenHurt", true);
     healSayOncePerEpisode = sConfigMgr->GetOption<bool>("AiPlayerbot.HealSayOncePerEpisode", true);
     healSayMinIntervalSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.HealSayMinIntervalSec", 240);
     rpgNearHubRadius = sConfigMgr->GetOption<float>("AiPlayerbot.RpgNearHubRadius", 60.0f);
@@ -892,10 +891,10 @@ bool PlayerbotAIConfig::Initialize()
     doQuestSuppressScatter = sConfigMgr->GetOption<bool>("AiPlayerbot.DoQuestSuppressScatter", true);
     randomTeleportEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomTeleportEnable", false);
     doQuestMaxConcurrentTravel = sConfigMgr->GetOption<uint32>("AiPlayerbot.DoQuestMaxConcurrentTravel", 50);
-    LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={} lowHpSelfPres={} rpgSuppressHurt={} healSayOnce={} healSayMinSec={}",
+    LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={} lowHpSelfPres={} healSayOnce={} healSayMinSec={}",
              rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,
              rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat, gatherHarvestHoldMs,
-             lowHealthSelfPreservation, rpgSuppressWhenHurt, healSayOncePerEpisode, healSayMinIntervalSec);
+             lowHealthSelfPreservation, healSayOncePerEpisode, healSayMinIntervalSec);
 
     pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
