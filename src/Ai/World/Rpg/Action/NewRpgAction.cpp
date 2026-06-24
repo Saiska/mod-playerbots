@@ -454,6 +454,13 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 RestSubtype st = acq ? picked : RS_FIELD_REST;
                 rest.subtype = st;
                 rest.sustainedPose = PaletteOf(kRestTable[st].palette, kRestTable[st].poiVariant).sustainedPose;
+                // social-dance-resthub-revive: BEH_SOCIAL's static palette pose is 0 (stand), so
+                // re-home the comedy-hold-dance roll here — mostly converse (TALK), sometimes dance
+                // (per DancePct). The generic per-tick re-assert (steady-hold else branch) holds it;
+                // the P4 exit clears it.
+                if (st == RS_SOCIAL)
+                    rest.sustainedPose = (urand(0, 99) < sPlayerbotAIConfig.pastimeSocialDancePct)
+                                         ? EMOTE_STATE_DANCE : EMOTE_STATE_TALK;
                 return true;
             }
 
@@ -479,6 +486,10 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                     TickStroll(rest);
                 else
                 {
+                    // A mount hides a held pose; dismount before asserting a non-zero one
+                    // (mirrors comedy-hold-dance + TickEmoteCadence's sustained-pose guard).
+                    if (rest.sustainedPose && bot->IsMounted())
+                        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
                     bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, rest.sustainedPose);
                     TickEmoteCadence(kRestTable[rest.subtype].palette,
                                      static_cast<uint8>(kRestTable[rest.subtype].poiVariant));
