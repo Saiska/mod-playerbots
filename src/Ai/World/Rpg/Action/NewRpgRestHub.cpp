@@ -222,7 +222,15 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
             return false;   // caller advances step
         }
 
-        up.posePos     = dest;
+        // Per-bot horizontal scatter: SelectCapitalPropPos hands every bot the SAME cached point, so
+        // multiple bots routing to one prop pile up on the identical spot. A few yards of jitter spreads
+        // them. Keep the prop's z (the cache no longer lifts it by +2) — small scatter on a flat capital
+        // service floor stays on the ground, and witnessed (walking) bots ground-snap via pathfinding.
+        up.posePos     = WorldPosition(dest.GetMapId(),
+                                       dest.GetPositionX() + frand(-4.0f, 4.0f),
+                                       dest.GetPositionY() + frand(-4.0f, 4.0f),
+                                       dest.GetPositionZ(),
+                                       dest.GetOrientation());
         up.stepStartMs = 0;          // dwell starts only after settle + confirm
         up.dwellMs     = dwellMs;
         // up.target stays empty until the post-settle confirm scan resolves the live object.

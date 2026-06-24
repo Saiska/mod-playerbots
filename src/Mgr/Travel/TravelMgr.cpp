@@ -5000,10 +5000,12 @@ void TravelMgr::PrepareDestinationCache()
             if (flags & (UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_AUCTIONEER |
                          UNIT_NPC_FLAG_TRAINER | UNIT_NPC_FLAG_TRAINER_CLASS) || isDummy)
             {
+                // z is the prop NPC's own ground z — do NOT lift it (+2 made pose bots float/stack
+                // vertically, esp. at the AH). Per-bot horizontal scatter is applied at pose time.
                 WorldPosition propLoc(mapId,
                     x + cos(orient) * 6.0f,
                     y + sin(orient) * 6.0f,
-                    z + 2.0f,
+                    z,
                     orient + M_PI);
                 if (flags & UNIT_NPC_FLAG_BANKER)
                     capitalPropLocations[areaId][PK_BANKER].push_back(propLoc);
