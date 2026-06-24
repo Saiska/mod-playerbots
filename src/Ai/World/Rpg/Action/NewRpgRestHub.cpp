@@ -117,8 +117,11 @@ ObjectGuid NewRpgBaseAction::SelectNearestNpcWithFlag(uint32 npcFlag) const
             continue;
         if (!c->HasNpcFlag((NPCFlags)npcFlag))
             continue;
-        if (!c->IsFriendlyTo(bot))
-            continue;   // never drag the bot toward a hostile-faction guard
+        if (c->IsHostileTo(bot))
+            continue;   // skip only genuinely hostile NPCs. Capital service NPCs (banker/auctioneer/
+                        // trainer) carry NEUTRAL-reaction faction templates, not >= REP_FRIENDLY, so the
+                        // old IsFriendlyTo gate filtered every one out (100% NO-prop at confirm); !IsHostileTo
+                        // resolves neutral props while still never dragging the bot toward a hostile guard.
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {
