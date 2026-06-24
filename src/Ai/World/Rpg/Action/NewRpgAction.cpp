@@ -557,11 +557,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                         // No reachable zone hub — fall through to the capital tier (universal
                         // backstop). This is the path that kills the old "NO reachable hub" trickle.
                         up.tier = NewRpgInfo::UPKEEP_TIER_CAPITAL;
-                        up.hubPos = SelectCapitalHub(bot);
+                        up.hubPos = SelectCapitalHubAndZone(bot, up.capitalZone);
                     }
                 }
                 else
-                    up.hubPos = SelectCapitalHub(bot);
+                    up.hubPos = SelectCapitalHubAndZone(bot, up.capitalZone);
 
                 if (up.hubPos == WorldPosition())
                 {
@@ -707,6 +707,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 3;
             up.target.Clear();
+            up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -718,6 +720,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 4;
             up.target.Clear();
+            up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -729,6 +733,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 5;
             up.target.Clear();
+            up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -740,6 +746,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 6;
             up.target.Clear();
+            up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -765,6 +773,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             {
                 up.step = 8;
                 up.target.Clear();
+                up.poseArriveT = 0;
+                up.posePos = WorldPosition();   // next pose re-acquires its own coord
                 up.stepStartMs = 0;
                 return true;
             }
@@ -775,6 +785,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 return true;
             up.step = 8;
             up.target.Clear();
+            up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }

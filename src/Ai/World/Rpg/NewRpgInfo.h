@@ -101,6 +101,8 @@ struct NewRpgInfo
         uint32        dwellMs{0};               // current step's randomized dwell
         uint32        stepStartMs{0};           // getMSTime() the current step began
         bool          learnedNew{false};        // maintenance granted a new spell/rank (gates DUMMY)
+        uint32        capitalZone{0};            // chosen capital zoneId (CAPITAL tier; resolved once at acquire)
+        uint32        poseArriveT{0};            // ms ts the bot reached the current prop (0=en route); gates the settle
     };
 
     uint32 startT{0};  // start timestamp of the current status

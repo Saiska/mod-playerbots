@@ -1652,6 +1652,20 @@ WorldPosition NewRpgBaseAction::SelectCapitalHub(Player* bot)
     return cap;
 }
 
+WorldPosition NewRpgBaseAction::SelectCapitalHubAndZone(Player* bot, uint32& outZone)
+{
+    // upkeep-capital-pose-prop-resolve: single weighted roll that yields both the capital banker
+    // anchor (hubPos) and the capital zoneId, so they always agree. Falls back to SelectCapitalHub
+    // (outZone stays 0) when GetCityLocationAndZone returns an empty WorldLocation — the caller's
+    // existing "up.hubPos == WorldPosition()" ERROR path then fires as before.
+    outZone = 0;
+    WorldLocation loc = sTravelMgr.GetCityLocationAndZone(bot, outZone);
+    if (loc.GetMapId() != 0 || loc.GetPositionX() != 0.0f || loc.GetPositionY() != 0.0f)
+        return WorldPosition(loc);
+    // Fallback: nearest capital (zone unresolved → outZone stays 0; pose steps degrade to clean skips).
+    return SelectCapitalHub(bot);
+}
+
 bool NewRpgBaseAction::SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path)
 {
     TravelMgr::FlightMasterInfo const* info = sTravelMgr.GetNearestFlightMasterInfo(bot);

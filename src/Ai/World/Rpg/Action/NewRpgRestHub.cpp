@@ -44,6 +44,19 @@ const RestSubtypeDef kRestTable[RS_COUNT] =
   { RS_FIELD_REST,       "FIELD_REST",     TK_IN_PLACE,        0,                          false, BEH_REST,        POI_NONE,        true  },
 };
 
+PropKind kindOf(uint8 restSubtype)
+{
+    switch (restSubtype)
+    {
+        case RS_BANK:          return PK_BANKER;
+        case RS_AUCTION_HOUSE: return PK_AUCTIONEER;
+        case RS_CLASS_TRAINER: return PK_CLASS_TRAINER;
+        case RS_MAILBOX:       return PK_MAILBOX;
+        case RS_DUMMY:         return PK_DUMMY;
+        default:               return PROPKIND_COUNT;
+    }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // C1/R1 — witness-gated hub travel, tri-state. NEVER uses MoveFarTo's return as
 // an arrival predicate: arrival is driven purely by an explicit distance check
@@ -182,7 +195,57 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
         return false;   // caller advances step
     }
 
-    // ── ACQUIRE: resolve the prop for this subtype using the rest engine's mapping ──
+    PropKind const kind = kindOf(restSubtype);
+
+    // ── ACQUIRE the prop's capital coordinate (once), then travel + settle before the local scan ──
+    // Gate on posePos (written once here, untouched by TRAVEL/SETTLE/CONFIRM) so ACQUIRE runs EXACTLY
+    // ONCE per pose step. Gating on up.target instead livelocked: target is set only later, in CONFIRM,
+    // which runs only after SETTLE — so ACQUIRE re-ran every tick, re-zeroing poseArriveT and forcing
+    // TRAVEL to re-return, never reaching SETTLE/CONFIRM (the step never terminated).
+    if (up.posePos == WorldPosition())
+    {
+        // Resolve this prop's coordinate map-wide within the chosen capital (NOT a 150y blind scan
+        // from a single banker anchor — that left 100% NO prop). capitalZone==0 (fallback acquire)
+        // or a city lacking this kind → empty → clean skip.
+        WorldPosition dest = (kind < PROPKIND_COUNT && up.capitalZone != 0)
+            ? sTravelMgr.SelectCapitalPropPos(up.capitalZone, kind)
+            : WorldPosition();
+
+        if (dest == WorldPosition())
+        {
+            LOG_WARN("playerbots",
+                     "[RpgMachine] {} #{} map={} — UPKEEP capital pose subtype={} NO prop; skipping",
+                     bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), uint32(restSubtype));
+            return false;   // caller advances step
+        }
+
+        up.posePos     = dest;
+        up.stepStartMs = 0;          // dwell starts only after settle + confirm
+        up.dwellMs     = dwellMs;
+        // up.target stays empty until the post-settle confirm scan resolves the live object.
+    }
+
+    // ── TRAVEL: hop to the prop's capital coordinate (witness-gated; teleports when unwitnessed) ──
+    if (up.poseArriveT == 0)
+    {
+        if (bot->GetExactDist(&up.posePos) > INTERACTION_DISTANCE)
+        {
+            TravelResult const tr = DriveTravel(up.posePos);
+            if (tr == TravelResult::GAVE_UP)
+                return false;        // witnessed + beyond budget → skip this pose, advance step
+            if (tr != TravelResult::ARRIVED)
+                return true;         // still EN_ROUTE
+        }
+        up.poseArriveT = getMSTime();   // arrived → start the settle
+        return true;
+    }
+
+    // ── SETTLE: let the post-teleport grid + nearest caches load before the confirm scan ──
+    // (mirrors the rest engine, NewRpgAction.cpp:399-404; without it the scan reads the STALE grid.)
+    if (GetMSTimeDiffToNow(up.poseArriveT) < 2500)
+        return true;
+
+    // ── CONFIRM: resolve the live object now that we're on top of it (150y scan is ample here) ──
     if (up.target.IsEmpty())
     {
         RestSubtypeDef const& d = kRestTable[restSubtype];
@@ -197,29 +260,12 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
         if (prop.IsEmpty())
         {
             LOG_WARN("playerbots",
-                     "[RpgMachine] {} #{} map={} — UPKEEP capital pose subtype={} NO prop; skipping",
+                     "[RpgMachine] {} #{} map={} — UPKEEP capital pose subtype={} NO prop (confirm); skipping",
                      bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), uint32(restSubtype));
             return false;   // caller advances step
         }
-
-        up.target = prop;
-        // Stamp the prop position (works for both a Unit and a GameObject — both are WorldObjects;
-        // WorldPosition(WorldObject const*) is the idiom used across the rest engine, cf. strollPts).
-        if (WorldObject* propObj = ObjectAccessor::GetWorldObject(*bot, prop))
-            up.posePos = WorldPosition(propObj);
-        up.stepStartMs = getMSTime();
-        up.dwellMs = dwellMs;
-    }
-
-    // ── TRAVEL: short intra-city hop to the prop (witness-gated; teleports when unwitnessed) ──
-    if (bot->GetExactDist(&up.posePos) > INTERACTION_DISTANCE)
-    {
-        TravelResult const tr = DriveTravel(up.posePos);
-        if (tr == TravelResult::GAVE_UP)
-            return false;   // witnessed + beyond budget: give up this pose, caller advances step
-        if (tr != TravelResult::ARRIVED)
-            return true;    // still EN_ROUTE — keep travelling this tick
-        // ARRIVED (teleport or within arrive radius) → fall through and pose this tick
+        up.target      = prop;
+        up.stepStartMs = getMSTime();   // dwell clock starts now
     }
 
     // ── PERFORM: face the prop (Unit OR GameObject) + hold the emote pose for the dwell ──
