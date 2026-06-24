@@ -871,7 +871,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepInn(NewRpgInfo::Upkeep& up)
     seat.chair = up.target;
     seat.onChair = up.target && bot->getStandState() >= UNIT_STAND_STATE_SIT_LOW_CHAIR;
     seat.seatState = seat.onChair ? bot->getStandState() : uint8(UNIT_STAND_STATE_SIT);
-    HoldSeat(seat);                          // paths to + sits the chair (or floor-sits), holds the pose
+    bool sitDiag = SitDiagDue(bot, info);   // rest-sit-render-diagnostic: also instrument the UPKEEP arm
+    HoldSeat(seat, sitDiag);                 // paths to + sits the chair (or floor-sits), holds the pose
     up.target = seat.chair;                  // reflect a HoldSeat chair-abandon (despawn/path fail) back
 
     if (GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs)
