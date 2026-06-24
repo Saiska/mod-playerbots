@@ -4552,7 +4552,8 @@ const std::vector<WorldLocation> TravelMgr::GetTravelHubs(Player* bot)
     return locs;
 }
 
-std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot)
+std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot,
+    uint32* outBankerEntry, uint32* outCapitalZone)
 {
     uint32 level = bot->GetLevel();
 
@@ -4622,9 +4623,62 @@ std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot)
     uint32 selectedBankerEntry = bankers[urand(0, bankers.size() - 1)];
     auto locIt = bankerEntryToLocation.find(selectedBankerEntry);
     if (locIt != bankerEntryToLocation.end())
+    {
+        if (outBankerEntry)
+            *outBankerEntry = selectedBankerEntry;
+        if (outCapitalZone)
+            *outCapitalZone = selectedCity;
         return { locIt->second };
+    }
     // Fallback if something went wrong
     return fallbackLocations;
+}
+
+WorldLocation TravelMgr::GetCityLocationAndZone(Player* bot, uint32& outCapitalZone)
+{
+    outCapitalZone = 0;
+    uint32 bankerEntry = 0;
+    uint32 capitalZone = 0;
+    std::vector<WorldLocation> locs = GetCityLocations(bot, &bankerEntry, &capitalZone);
+    if (locs.empty())
+        return WorldLocation();
+    // On the weighted path, GetCityLocations returns exactly one location and fills both
+    // out-params. On the fallback path, bankerEntry/capitalZone stay 0; best-effort resolve
+    // via FindCapitalByBanker using the first entry in bankerLocsPerLevelCache.
+    WorldLocation chosen = locs[0];
+    if (capitalZone != 0)
+    {
+        outCapitalZone = capitalZone;
+    }
+    else if (bankerEntry != 0)
+    {
+        Capital const* cap = FindCapitalByBanker(static_cast<uint16>(bankerEntry));
+        if (cap)
+            outCapitalZone = cap->zoneId;
+    }
+    else
+    {
+        // Fallback path: locs may hold multiple locations; pick one and attempt reverse-lookup.
+        if (locs.size() > 1)
+            chosen = locs[urand(0, locs.size() - 1)];
+        uint32 level = bot->GetLevel();
+        for (auto const& bLoc : bankerLocsPerLevelCache[level])
+        {
+            auto it = bankerEntryToLocation.find(bLoc.entry);
+            if (it == bankerEntryToLocation.end())
+                continue;
+            if (it->second.GetMapId() == chosen.GetMapId() &&
+                it->second.GetPositionX() == chosen.GetPositionX() &&
+                it->second.GetPositionY() == chosen.GetPositionY())
+            {
+                Capital const* cap = FindCapitalByBanker(bLoc.entry);
+                if (cap)
+                    outCapitalZone = cap->zoneId;
+                break;
+            }
+        }
+    }
+    return chosen;
 }
 
 WorldPosition TravelMgr::GetNearestCapitalPos(Player* bot)

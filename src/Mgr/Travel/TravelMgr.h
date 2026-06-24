@@ -885,7 +885,12 @@ public:
     std::vector<std::vector<uint32>> GetOptimalFlightDestinations(Player* bot);
     const std::vector<WorldLocation> GetTeleportLocations(Player* bot);
     const std::vector<WorldLocation> GetTravelHubs(Player* bot);
-    std::vector<WorldLocation> GetCityLocations(Player* bot);
+    std::vector<WorldLocation> GetCityLocations(Player* bot,
+        uint32* outBankerEntry = nullptr, uint32* outCapitalZone = nullptr);
+    // upkeep-capital-pose-prop-resolve: like GetCityLocations' single weighted pick, but also
+    // yields the chosen capital's zoneId (so the upkeep CAPITAL acquire gets banker-anchor +
+    // capital-zone from ONE roll, guaranteeing they agree).
+    WorldLocation GetCityLocationAndZone(Player* bot, uint32& outCapitalZone);
     // occupation-upkeep-two-tier: faction/neutral capital banker anchor, map-wide; never empty
     // unless the capitals banker cache failed to populate at boot (a real boot bug, not runtime).
     WorldPosition GetNearestCapitalPos(Player* bot);
