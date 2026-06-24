@@ -44,6 +44,19 @@ const RestSubtypeDef kRestTable[RS_COUNT] =
   { RS_FIELD_REST,       "FIELD_REST",     TK_IN_PLACE,        0,                          false, BEH_REST,        POI_NONE,        true  },
 };
 
+PropKind kindOf(uint8 restSubtype)
+{
+    switch (restSubtype)
+    {
+        case RS_BANK:          return PK_BANKER;
+        case RS_AUCTION_HOUSE: return PK_AUCTIONEER;
+        case RS_CLASS_TRAINER: return PK_CLASS_TRAINER;
+        case RS_MAILBOX:       return PK_MAILBOX;
+        case RS_DUMMY:         return PK_DUMMY;
+        default:               return PROPKIND_COUNT;
+    }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // C1/R1 — witness-gated hub travel, tri-state. NEVER uses MoveFarTo's return as
 // an arrival predicate: arrival is driven purely by an explicit distance check

@@ -18,6 +18,22 @@ enum RestSubtype : uint8
     RS_NONE = 0xFF
 };
 
+// occupation-upkeep-two-tier / upkeep-capital-pose-prop-resolve — the capital-resident
+// prop kinds the CAPITAL pose round travels to (map-wide, cached per capital in TravelMgr).
+enum PropKind : uint8
+{
+    PK_BANKER = 0,
+    PK_AUCTIONEER,
+    PK_CLASS_TRAINER,
+    PK_MAILBOX,
+    PK_DUMMY,
+    PROPKIND_COUNT
+};
+
+// Map a capital pose RestSubtype to its PropKind. Returns PROPKIND_COUNT for any
+// subtype that is NOT a capital prop (caller treats that as "skip / not applicable").
+PropKind kindOf(uint8 restSubtype);
+
 enum TargetKind : uint8
 {
     TK_INN_CHAIR, TK_NPC_FLAG, TK_FORGE_OR_TRAINER, TK_VENDOR, TK_GO_TYPE,
