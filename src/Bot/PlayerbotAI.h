@@ -6,6 +6,7 @@
 #ifndef _PLAYERBOT_PLAYERBOTAI_H
 #define _PLAYERBOT_PLAYERBOTAI_H
 
+#include <mutex>
 #include <stack>
 
 #include "Chat.h"
@@ -353,6 +354,10 @@ public:
 private:
     std::map<uint16, std::string> handlers;
     std::stack<WorldPacket> queue;
+    // queue is produced by AddPacket (packet path) and consumed by Handle (MapUpdater
+    // worker thread under multithreaded map updates); the lockless std::stack races and
+    // corrupts, crashing in WorldPacket's copy-ctor at queue.top(). Serialize all access.
+    std::mutex queueMutex;
 };
 
 class ChatCommandHolder

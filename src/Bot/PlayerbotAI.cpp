@@ -86,10 +86,20 @@ void PacketHandlingHelper::AddHandler(uint16 opcode, std::string const handler) 
 
 void PacketHandlingHelper::Handle(ExternalEventHelper& helper)
 {
-    while (!queue.empty())
+    // Drain under the lock by swapping the queue out, then process the local copy with the
+    // lock released: AddPacket may run concurrently on another thread (packet path vs this
+    // MapUpdater worker), and HandlePacket below can itself re-enter AddPacket on this same
+    // queue, so we must not hold queueMutex across HandlePacket (would self-deadlock).
+    std::stack<WorldPacket> pending;
     {
-        WorldPacket packet = queue.top();
-        queue.pop(); // remove first so handling can't modify the queue while we're using it
+        std::lock_guard<std::mutex> guard(queueMutex);
+        std::swap(pending, queue);
+    }
+
+    while (!pending.empty())
+    {
+        WorldPacket packet = pending.top();
+        pending.pop();
 
         helper.HandlePacket(handlers, packet);
     }
@@ -103,7 +113,10 @@ void PacketHandlingHelper::AddPacket(WorldPacket const& packet)
     // assert(packet);
     // assert(packet.GetOpcode());
     if (handlers.find(packet.GetOpcode()) != handlers.end())
+    {
+        std::lock_guard<std::mutex> guard(queueMutex);
         queue.push(WorldPacket(packet));
+    }
 }
 
 PlayerbotAI::PlayerbotAI()
