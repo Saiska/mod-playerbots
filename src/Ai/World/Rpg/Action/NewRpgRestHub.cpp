@@ -198,7 +198,11 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
     PropKind const kind = kindOf(restSubtype);
 
     // ── ACQUIRE the prop's capital coordinate (once), then travel + settle before the local scan ──
-    if (up.target.IsEmpty())
+    // Gate on posePos (written once here, untouched by TRAVEL/SETTLE/CONFIRM) so ACQUIRE runs EXACTLY
+    // ONCE per pose step. Gating on up.target instead livelocked: target is set only later, in CONFIRM,
+    // which runs only after SETTLE — so ACQUIRE re-ran every tick, re-zeroing poseArriveT and forcing
+    // TRAVEL to re-return, never reaching SETTLE/CONFIRM (the step never terminated).
+    if (up.posePos == WorldPosition())
     {
         // Resolve this prop's coordinate map-wide within the chosen capital (NOT a 150y blind scan
         // from a single banker anchor — that left 100% NO prop). capitalZone==0 (fallback acquire)
@@ -216,7 +220,6 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
         }
 
         up.posePos     = dest;
-        up.poseArriveT = 0;          // not yet arrived; gates the settle below
         up.stepStartMs = 0;          // dwell starts only after settle + confirm
         up.dwellMs     = dwellMs;
         // up.target stays empty until the post-settle confirm scan resolves the live object.

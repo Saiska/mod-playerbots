@@ -708,6 +708,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             up.step = 3;
             up.target.Clear();
             up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -720,6 +721,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             up.step = 4;
             up.target.Clear();
             up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -732,6 +734,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             up.step = 5;
             up.target.Clear();
             up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -744,6 +747,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             up.step = 6;
             up.target.Clear();
             up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
@@ -770,6 +774,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                 up.step = 8;
                 up.target.Clear();
                 up.poseArriveT = 0;
+                up.posePos = WorldPosition();   // next pose re-acquires its own coord
                 up.stepStartMs = 0;
                 return true;
             }
@@ -781,6 +786,7 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             up.step = 8;
             up.target.Clear();
             up.poseArriveT = 0;
+            up.posePos = WorldPosition();   // next pose re-acquires its own coord
             up.stepStartMs = 0;
             return true;
         }
