@@ -1337,7 +1337,7 @@ AiPlayerbot.Pastime.Social.Emotes = "dance|sit|cheer|laugh|applaud|point|talk"
 #        (EMOTE_STATE_DANCE) instead of a conversing pose. 0 = never, 100 = always.
 #        Default: 25
 #
-AiPlayerbot.Pastime.Social.DancePct = 25
+AiPlayerbot.Pastime.Social.DancePct = 50
 
 # --- More pastimes (pipe 2a) --------------------------------------------------
 # Extra leisure activities in the pastime registry (weights are relative to
