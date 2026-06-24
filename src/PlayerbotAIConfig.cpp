@@ -758,6 +758,8 @@ bool PlayerbotAIConfig::Initialize()
     restDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMin", 120);
     restDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Rest.DwellMax", 300);
     restSeatRebroadcast = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.SeatRebroadcast", true);
+    restSitDiagLog  = sConfigMgr->GetOption<bool>("AiPlayerbot.Rest.SitDiagLog", false);
+    restSitDiagName = sConfigMgr->GetOption<std::string>("AiPlayerbot.Rest.SitDiagName", "");
 
     restHubEnable           = sConfigMgr->GetOption<bool>("AiPlayerbot.RestHub.Enable", true);
     restHubDwellMinSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.DwellMin", 300);
@@ -822,8 +824,8 @@ bool PlayerbotAIConfig::Initialize()
         restDwellMin = 1;
     if (restDwellMax < restDwellMin)
         restDwellMax = restDwellMin;
-    LOG_INFO("server.loading", "[HubSaturation] DwellMin={}s DwellMax={}s SeatRebroadcast={}",
-             restDwellMin, restDwellMax, restSeatRebroadcast);
+    LOG_INFO("server.loading", "[HubSaturation] DwellMin={}s DwellMax={}s SeatRebroadcast={} sitDiagLog={} sitDiagName={}",
+             restDwellMin, restDwellMax, restSeatRebroadcast, restSitDiagLog, restSitDiagName);
     LOG_INFO("server.loading",
              "[RestHub] enabled={} subtypes={} hubRange={} witnessRange={}",
              restHubEnable, (uint32)RS_COUNT, restHubHubRange, restHubWitnessRange);

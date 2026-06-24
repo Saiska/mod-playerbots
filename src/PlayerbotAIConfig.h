@@ -556,6 +556,8 @@ public:
     uint32 restDwellMax{300};         // seconds — max seated dwell
     bool   restSeatRebroadcast{true};  // RPG_REST: re-broadcast the seat stand-state each tick so a
                                        // one-shot emote can't leave the bot rendering standing
+    bool restSitDiagLog;          // rest-sit-render-diagnostic (TEMP): per-tick rest-state log gate
+    std::string restSitDiagName;  // rest-sit-render-diagnostic (TEMP): exact bot name to target (empty=all)
     // --- rest-hub-unification config ---
     // Note: restHubWeight is sized by RS_COUNT (RestSubtype enum in NewRpgRestHub.h).
     // NewRpgRestHub.h includes PlayerbotAIConfig.h, so we cannot include it here (circular).

@@ -2929,3 +2929,9 @@ RaidSim.BroadcastLootMinQuality = 3
 #        Default: 2000
 
 AiPlayerbot.RpgIdleDwellMs = 2000
+
+# rest-sit-render-diagnostic (TEMP): per-tick rest-state log to find why inn bots render standing.
+# 0 = off (default, zero overhead). 1 = log resting bots (filtered by SitDiagName).
+AiPlayerbot.Rest.SitDiagLog = 0
+# Exact in-game bot name to target (empty = log ALL resting bots — floods; use briefly).
+AiPlayerbot.Rest.SitDiagName =

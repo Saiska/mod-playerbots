@@ -116,6 +116,7 @@ struct NewRpgInfo
     uint32 nextEmoteGapMs{0};
     uint8  lastEmoteIdx{0xFF};
     uint32 heldSocialEmote{0};   // comedy-hold-dance: social pastime held EMOTE_STATE_* (0=none). Lives on
+    uint32 sitDiagLastMs{0};     // rest-sit-render-diagnostic (TEMP): ms ts of this bot's last [SitDiag] line
                                  // NewRpgInfo (not the Social variant) so it survives ChangeToIdle's variant
                                  // reset and the Execute-head sweep can clear it after an external yank.
 
