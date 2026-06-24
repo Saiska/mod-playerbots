@@ -157,15 +157,19 @@ void NewRpgStatusUpdateAction::HoldSeat(NewRpgInfo::Rest& rest, bool diag)
             bot->SetStandState(UNIT_STAND_STATE_SIT);
     }
 
-    // Chaired: chair already holds the pose -> do one-shots ONLY (skip the EMOTE_STATE_SIT
-    // re-assert that would fight the SIT_*_CHAIR stand-state). Floor: the BEH_REST palette
-    // pose (EMOTE_STATE_SIT) is the held seated baseline alongside the stand-state sit.
+    // rest-sit-standstate-render: skip the BEH_REST sustained pose (EMOTE_STATE_SIT) on BOTH the
+    // chaired AND floor paths. EMOTE_STATE_SIT has no player-model seated animation, so a non-zero
+    // UNIT_NPC_EMOTESTATE masks the real seat render (the UNIT_STAND_STATE_SIT byte) -> the bot
+    // renders standing. The seat is held purely via the stand-state (re-asserted above /
+    // ForceResitBroadcast); the floor branch needs only the rest one-shots, not the
+    // never-rendering, strand-leaving sustained pose. (chaired already skipped; now floor does too.)
     if (diag)
-        LOG_INFO("playerbots", "[SitDiag] {} HoldSeat branch={} ss-after={}",
+        LOG_INFO("playerbots", "[SitDiag] {} HoldSeat branch={} ss-after={} em-after={}",
                  bot->GetName(),
                  chaired ? (rest.onChair ? "CHAIR_HOLD" : "USE") : "FLOOR",
-                 uint32(bot->getStandState()));
-    TickEmoteCadence(BEH_REST, 0, chaired);
+                 uint32(bot->getStandState()),
+                 bot->GetUInt32Value(UNIT_NPC_EMOTESTATE));
+    TickEmoteCadence(BEH_REST, 0, /*skipSustainedPose=*/true);
 }
 
 // ───────────────────────────────────────────────────────────────────────────
