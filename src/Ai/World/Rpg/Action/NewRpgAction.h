@@ -70,6 +70,7 @@ protected:
     // ── RPG_REST machine (Task 7) ───────────────────────────────────────────
     void HoldSeat(NewRpgInfo::Rest& rest, bool diag = false);    // chair/floor seat re-broadcast (extracted)
     void TickStroll(NewRpgInfo::Rest& rest);  // STROLL walk loop — Task 8 fills; no-op stub for now
+    void TickFish();   // drive the fishing chain (move near water -> go fishing -> use bobber) each hold tick
     EmotePalette PaletteOf(BotBehaviorId beh, BotCityPoi poi) const;  // (beh,poi) -> palette row
 
     // ── RPG_UPKEEP two-tier machine (occupation-upkeep-two-tier) ─────────────

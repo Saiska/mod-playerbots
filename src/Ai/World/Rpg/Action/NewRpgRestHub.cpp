@@ -579,8 +579,8 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
                 return false;   // R2: caller returns true; do not touch `rest` after a ChangeTo*
             }
             case RS_FISH:
-                // Fishing is a self-gating chain ("equip fishing pole"/"move near water"/"go fishing");
-                // the RPG_REST tick (Task 7) drives it. The dwell is stamped above.
+                // Fishing is a self-gating chain ("move near water"/"go fishing"/"use fishing bobber");
+                // the hold tick drives it via TickFish(). The dwell is stamped above.
                 break;
             case RS_TAVERN:
             case RS_FIELD_REST:
@@ -591,6 +591,23 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
         }
     }
     return true;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// RS_FISH hold driver. Reuses the existing fishing chain: "move near water"
+// (resolves the "fishing spot" WorldPosition + walks there), "go fishing"
+// (auto-acquires pole 6256 + casts 7620), "use fishing bobber" (reels on a bite).
+// Attempt in priority order each tick; each action self-gates (isUseful/isPossible),
+// so exactly the right step runs. No raw pointers held across ticks; no ChangeTo*.
+// ───────────────────────────────────────────────────────────────────────────
+void NewRpgStatusUpdateAction::TickFish()
+{
+    // Reel first if a bobber is biting; else cast if not already fishing; else walk to water.
+    if (botAI->DoSpecificAction("use fishing bobber", Event(), true))
+        return;
+    if (botAI->DoSpecificAction("go fishing", Event(), true))
+        return;
+    botAI->DoSpecificAction("move near water", Event(), true);
 }
 
 // Mirrored from FishingAction.cpp (file-static there). Values copied verbatim — keep in sync.
