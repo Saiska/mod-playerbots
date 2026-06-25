@@ -218,15 +218,35 @@ bool TryEmergencyAction::Execute(Event /*event*/)
         }
     }
 
-    // Else loop over the list of health consumable to pick one
+    // Else loop over the list of health consumable to pick one. Only USE (and report success)
+    // for an item whose use-spell is actually OFF cooldown. Combat potions share a ~1 min,
+    // one-per-combat category cooldown (Player::_AddSpellCooldown stamps every potion in the
+    // category), so after the first one FindConsumable still returns the item but the server
+    // silently drops the use. Returning true on that no-op would, at ACTION_EMERGENCY priority,
+    // break the engine's action loop (Engine.cpp:219) and starve the whole combat rotation — the
+    // bot freezes at low HP until passive regen clears the "low health" trigger. So skip
+    // on-cooldown items and return false when nothing was usable, letting the rotation run.
     for (uint8 i = 0; i < std::size(uPrioritizedHealingItemIds); ++i)
     {
-        if (Item* healthItem = botAI->FindConsumable(uPrioritizedHealingItemIds[i]))
+        Item* healthItem = botAI->FindConsumable(uPrioritizedHealingItemIds[i]);
+        if (!healthItem)
+            continue;
+
+        uint32 spellId = 0;
+        for (uint8 s = 0; s < MAX_ITEM_PROTO_SPELLS; ++s)
         {
-            botAI->ImbueItem(healthItem);
-            break;                 // use ONE potion, not the whole list
+            if (healthItem->GetTemplate()->Spells[s].SpellId > 0)
+            {
+                spellId = healthItem->GetTemplate()->Spells[s].SpellId;
+                break;
+            }
         }
+        if (!spellId || bot->HasSpellCooldown(spellId))
+            continue;              // on cooldown / no use-spell — keep looking, do not claim success
+
+        botAI->ImbueItem(healthItem);
+        return true;               // used ONE usable consumable
     }
 
-    return true;
+    return false;                  // nothing usable — let the combat rotation run instead of freezing
 }
