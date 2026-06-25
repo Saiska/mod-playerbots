@@ -17,6 +17,7 @@
 #include "GridNotifiers.h"      // Acore::UnitListSearcher, Acore::AnyUnitInObjectRangeCheck
 #include "GridNotifiersImpl.h"  // searcher template impls
 #include "NearestGameObjects.h" // AnyGameObjectInObjectRangeCheck, Acore::GameObjectListSearcher
+#include "Ai/Base/Actions/FishingAction.h"   // FindWaterRadial (water presence gate for RS_FISH)
 #include <algorithm>
 
 // PlayerbotAIConfig.h cannot include NewRpgRestHub.h (circular), so its
@@ -578,8 +579,8 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
                 return false;   // R2: caller returns true; do not touch `rest` after a ChangeTo*
             }
             case RS_FISH:
-                // Fishing is a self-gating chain ("equip fishing pole"/"move near water"/"go fishing");
-                // the RPG_REST tick (Task 7) drives it. The dwell is stamped above.
+                // Fishing is a self-gating chain ("move near water"/"go fishing"/"use fishing bobber");
+                // the hold tick drives it via TickFish(). The dwell is stamped above.
                 break;
             case RS_TAVERN:
             case RS_FIELD_REST:
@@ -591,6 +592,28 @@ bool NewRpgStatusUpdateAction::EngageAndHold()
     }
     return true;
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// RS_FISH hold driver. Reuses the existing fishing chain: "move near water"
+// (resolves the "fishing spot" WorldPosition + walks there), "go fishing"
+// (auto-acquires pole 6256 + casts 7620), "use fishing bobber" (reels on a bite).
+// Attempt in priority order each tick; each action self-gates (isUseful/isPossible),
+// so exactly the right step runs. No raw pointers held across ticks; no ChangeTo*.
+// ───────────────────────────────────────────────────────────────────────────
+void NewRpgStatusUpdateAction::TickFish()
+{
+    // Reel first if a bobber is biting; else cast if not already fishing; else walk to water.
+    if (botAI->DoSpecificAction("use fishing bobber", Event(), true))
+        return;
+    if (botAI->DoSpecificAction("go fishing", Event(), true))
+        return;
+    botAI->DoSpecificAction("move near water", Event(), true);
+}
+
+// Mirrored from FishingAction.cpp (file-static there). Values copied verbatim — keep in sync.
+static constexpr float REST_FISH_MIN_DIST = 10.0f;   // MIN_DISTANCE_TO_WATER
+static constexpr float REST_FISH_MAX_DIST = 20.0f;   // MAX_DISTANCE_TO_WATER
+static constexpr float REST_FISH_SEARCH_INC = 2.5f;  // SEARCH_INCREMENT
 
 // ───────────────────────────────────────────────────────────────────────────
 // Per-subtype eligibility (skill/area gates). Verified helpers:
@@ -638,7 +661,21 @@ bool NewRpgStatusUpdateAction::IsAnywhereTargetPresent(RestSubtype st) const
     switch (st)
     {
         case RS_DUEL:       return !RestHubSelectDuelPartner(botAI).IsEmpty();
-        case RS_FISH:       return true;   // "can fish" eligibility implies reachable water nearby
+        case RS_FISH:
+        {
+            // Real water gate (was unconditional `true`, falsely assuming "can fish" implies
+            // water). FISH rests where the bot already is, so require fishable water within
+            // fishingDistance of the current position; the hold's "move near water" does the
+            // authoritative resolution. Runs once per rest-episode selection (not per tick) —
+            // bounded cost, like the other anywhere probes (see :97-98).
+            WorldPosition water =
+                FindWaterRadial(bot, bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(),
+                                bot->GetMap(), bot->GetPhaseMask(),
+                                REST_FISH_MIN_DIST,
+                                sPlayerbotAIConfig.fishingDistance + REST_FISH_MAX_DIST,
+                                REST_FISH_SEARCH_INC, false);
+            return water.IsValid();
+        }
         case RS_FIELD_REST: return true;   // always possible in place
         default:            return true;
     }

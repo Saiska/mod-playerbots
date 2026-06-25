@@ -486,6 +486,8 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                     HoldSeat(rest, sitDiag);
                 else if (rest.subtype == RS_STROLL)
                     TickStroll(rest);
+                else if (rest.subtype == RS_FISH)
+                    TickFish();
                 else
                 {
                     // A mount hides a held pose; dismount before asserting a non-zero one
