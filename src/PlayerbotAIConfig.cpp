@@ -81,6 +81,7 @@ bool PlayerbotAIConfig::Initialize()
     dynamicReactDelay = sConfigMgr->GetOption<bool>("AiPlayerbot.DynamicReactDelay", true);
     passiveDelay = sConfigMgr->GetOption<int32>("AiPlayerbot.PassiveDelay", 10000);
     repeatDelay = sConfigMgr->GetOption<int32>("AiPlayerbot.RepeatDelay", 2000);
+    emoteCooldown = sConfigMgr->GetOption<int32>("AiPlayerbot.EmoteCooldown", 30);
     errorDelay = sConfigMgr->GetOption<int32>("AiPlayerbot.ErrorDelay", 100);
     rpgDelay = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgDelay", 10000);
     sitDelay = sConfigMgr->GetOption<int32>("AiPlayerbot.SitDelay", 20000);

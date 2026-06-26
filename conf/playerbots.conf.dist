@@ -390,6 +390,13 @@ AiPlayerbot.PassiveDelay = 10000
 # Minimum delay between repeating actions (chat messages, emotes etc)
 AiPlayerbot.RepeatDelay = 2000
 
+#    AiPlayerbot.EmoteCooldown
+#        Minimum seconds between ANY two text/idle emotes a bot performs (shared across all
+#        emote types - distress, ambient, reactions). Stops low-health distress-emote spam
+#        (cries out for help / calls out for healing). Default: 30
+#
+AiPlayerbot.EmoteCooldown = 30
+
 # Delay timers
 AiPlayerbot.ErrorDelay = 100
 AiPlayerbot.RpgDelay = 10000
