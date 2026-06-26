@@ -735,8 +735,8 @@ bool EmoteAction::Execute(Event event)
     {
         // time_t lastEmote = AI_VALUE2(time_t, "last emote", qualifier); //not used, line marked for removal.
         botAI->GetAiObjectContext()
-            ->GetValue<time_t>("last emote", qualifier)
-            ->Set(time(nullptr) + urand(1000, sPlayerbotAIConfig.repeatDelay) / 1000);
+            ->GetValue<time_t>("last emote", "shared")
+            ->Set(time(nullptr) + sPlayerbotAIConfig.emoteCooldown);
         param = qualifier;
     }
 
@@ -782,7 +782,7 @@ bool EmoteAction::isUseful()
     if (!botAI->AllowActivity())
         return false;
 
-    time_t lastEmote = AI_VALUE2(time_t, "last emote", qualifier);
+    time_t lastEmote = AI_VALUE2(time_t, "last emote", "shared");
     return time(nullptr) >= lastEmote;
 }
 
