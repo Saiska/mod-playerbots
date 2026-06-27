@@ -688,6 +688,8 @@ bool NewRpgStatusUpdateAction::UpkeepDwell(NewRpgInfo::Upkeep& up, uint32 secs, 
         }
         return false;
     }
+    // upkeep-sociability: errand dwell shouldn't be a frozen statue — light loiter cadence.
+    TickEmoteCadence(BEH_LOITER, (uint8)POI_NONE);
     return GetMSTimeDiffToNow(up.stepStartMs) >= up.dwellMs;
 }
 
