@@ -179,6 +179,16 @@ uint32 ResolveHeldPose(BotBehaviorId beh, uint8 variant, uint8 rollIdx)
     return LookupPalette(beh, variant).sustainedPose;
 }
 
+// upkeep-sociability: accessor over the file-static kOneShots_LoiterInteractive pool (inside
+// the anonymous namespace). Returns the pool pointer and fills `count`. Exported (declared in
+// NewRpgBaseAction.h) so the dwell cluster overlay in TickEmoteCadence can reference the pool
+// directly rather than duplicating the array — single source of truth.
+uint32 const* GetLoiterInteractivePool(uint8& count)
+{
+    count = (uint8)(sizeof(kOneShots_LoiterInteractive) / sizeof(kOneShots_LoiterInteractive[0]));
+    return kOneShots_LoiterInteractive;
+}
+
 void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose,
                                         uint32 overridePose)
 {
@@ -214,11 +224,36 @@ void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool s
     }
     if (GetMSTimeDiffToNow(info.lastEmoteMs) < info.nextEmoteGapMs)
         return;
-    uint8 idx = (uint8)urand(0, pal.oneShotCount - 1);
-    if (pal.oneShotCount > 1 && idx == info.lastEmoteIdx)  // non-repeat
-        idx = (idx + 1) % pal.oneShotCount;
-    bot->HandleEmoteCommand(pal.oneShots[idx]);
-    info.lastEmoteIdx = idx;
+    // upkeep-sociability: cluster overlay — on a dwell beat, optionally face a co-located peer
+    // and play an interactive one-shot instead of the normal one. Rides the EXISTING cadence beat
+    // (didInteractive skips the normal block; lastEmoteMs/nextEmoteGapMs bookkeeping is unchanged).
+    bool didInteractive = false;
+    if (sPlayerbotAIConfig.dwellSocialEnable &&
+        urand(1, 100) <= sPlayerbotAIConfig.dwellSocialChancePct)
+    {
+        ObjectGuid peer = FindDwellPeer(sPlayerbotAIConfig.pastimeSocialClusterDist);
+        if (peer)
+        {
+            if (WorldObject* po = ObjectAccessor::GetWorldObject(*bot, peer))
+                bot->SetFacingToObject(po);
+            uint8 icount = 0;
+            uint32 const* ipool = GetLoiterInteractivePool(icount);
+            if (ipool && icount)
+            {
+                uint8 iidx = (uint8)urand(0, icount - 1);
+                bot->HandleEmoteCommand(ipool[iidx]);
+                didInteractive = true;
+            }
+        }
+    }
+    if (!didInteractive)
+    {
+        uint8 idx = (uint8)urand(0, pal.oneShotCount - 1);
+        if (pal.oneShotCount > 1 && idx == info.lastEmoteIdx)  // non-repeat
+            idx = (idx + 1) % pal.oneShotCount;
+        bot->HandleEmoteCommand(pal.oneShots[idx]);
+        info.lastEmoteIdx = idx;
+    }
     info.lastEmoteMs = now;
     info.nextEmoteGapMs = urand(mn, mx) * IN_MILLISECONDS;
 }
@@ -234,6 +269,35 @@ void NewRpgBaseAction::FireOneShotEmote(BotBehaviorId beh, uint8 variant)
         idx = (idx + 1) % pal.oneShotCount;
     bot->HandleEmoteCommand(pal.oneShots[idx]);
     info.lastEmoteIdx = idx;
+}
+
+// upkeep-sociability: returns the GUID of the nearest co-located idle/dwelling friendly bot
+// within `radius` yards. Returns empty if none qualifies.
+// CRASH RULE: returns an ObjectGuid, NEVER a Player*. Caller re-resolves at use.
+// Runs on MapUpdater worker threads — no stored pointers across any yield.
+ObjectGuid NewRpgBaseAction::FindDwellPeer(float radius)
+{
+    GuidVector friends = AI_VALUE(GuidVector, "nearest friendly players");
+    ObjectGuid best;
+    float bestDist = radius;
+    for (ObjectGuid const& guid : friends)
+    {
+        Player* other = ObjectAccessor::FindPlayer(guid);
+        if (!other || other == bot || !other->IsInWorld() || other->isDead() || other->IsInCombat())
+            continue;
+        float d = bot->GetExactDist(other);
+        if (d >= bestDist)
+            continue;
+        if (PlayerbotAI* oai = GET_PLAYERBOT_AI(other))
+        {
+            NewRpgStatus st = oai->rpgInfo.GetStatus();
+            if (st != RPG_IDLE && st != RPG_REST && st != RPG_UPKEEP)
+                continue;   // only co-located idle/dwelling bots
+        }
+        bestDist = d;
+        best = other->GetGUID();
+    }
+    return best;
 }
 
 bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)

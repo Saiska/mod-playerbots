@@ -901,22 +901,17 @@ bool PlayerbotAIConfig::Initialize()
 
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
     pastimeSocialClusterDist = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.ClusterDist", 5.0f);
-    pastimeSocialEmoteInterval = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.EmoteInterval", 6);
-    pastimeSocialIncludePlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Social.IncludePlayers", false);
     pastimeSocialDancePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DancePct", 50);
     if (pastimeSocialDancePct > 100)
         pastimeSocialDancePct = 100;
     LOG_INFO("playerbots", "[SocialDance] dancePct={}", pastimeSocialDancePct);
-    pastimeSocialEmotes.clear();
-    {
-        std::string raw = sConfigMgr->GetOption<std::string>("AiPlayerbot.Pastime.Social.Emotes",
-            "dance|sit|cheer|laugh|applaud|point|talk");
-        std::stringstream ss(raw);
-        std::string tok;
-        while (std::getline(ss, tok, '|'))
-            if (!tok.empty())
-                pastimeSocialEmotes.push_back(tok);
-    }
+    // upkeep-sociability: dwell cluster overlay config
+    dwellSocialEnable   = sConfigMgr->GetOption<bool>("AiPlayerbot.DwellSocial.Enable", true);
+    dwellSocialChancePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.DwellSocial.ChancePct", 35);
+    if (dwellSocialChancePct > 100)
+        dwellSocialChancePct = 100;
+    LOG_INFO("playerbots", "[DwellSocial] enable={} chancePct={} clusterDist={}",
+             dwellSocialEnable, dwellSocialChancePct, pastimeSocialClusterDist);
 
     pastimeLoiterWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.Weight", 150);
     pastimeLoiterDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Loiter.DwellMin", 30);

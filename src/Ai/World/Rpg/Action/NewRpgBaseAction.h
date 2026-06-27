@@ -58,6 +58,9 @@ protected:
     void TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose = false,
                           uint32 overridePose = 0xFFFFFFFF);
     void FireOneShotEmote(BotBehaviorId beh, uint8 variant);   // immediate, non-repeating one-shot pick
+    // upkeep-sociability: nearest co-located idle/dwelling friendly bot within `radius` yards, by GUID.
+    // Crash rule: returns ObjectGuid; caller re-resolves at use, never stores a Player*.
+    ObjectGuid FindDwellPeer(float radius);
 
     /* QUEST RELATED CHECK */
     ObjectGuid ChooseNpcOrGameObjectToInteract(bool questgiverOnly = false, float distanceLimit = 0.0f);
@@ -176,5 +179,8 @@ protected:
 const EmotePalette& LookupPalette(BotBehaviorId beh, uint8 variant);
 // upkeep-sociability: returns kLoiterPoseSet[variant-1][rollIdx%count] for BEH_LOITER; else sustainedPose.
 uint32 ResolveHeldPose(BotBehaviorId beh, uint8 variant, uint8 rollIdx);
+// upkeep-sociability: accessor over the file-static kOneShots_LoiterInteractive pool.
+// Fills `count` and returns a pointer to the array; both are valid for the lifetime of the TU.
+uint32 const* GetLoiterInteractivePool(uint8& count);
 
 #endif
