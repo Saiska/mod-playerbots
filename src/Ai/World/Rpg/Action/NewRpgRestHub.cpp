@@ -471,7 +471,6 @@ bool NewRpgStatusUpdateAction::AcquireSubtypeTarget(RestSubtype st)
         case TK_INN_CHAIR:        rest.chair = SelectInnChair(15.0f); return true; // chair optional -> floor-sit fallback
         case TK_VENDOR:           rest.target = SelectVendorNpc(); return !rest.target.IsEmpty();
         case TK_DUMMY:            rest.target = SelectTrainingDummy(); return !rest.target.IsEmpty();
-        case TK_SOCIAL:           rest.target = SelectSocialPartner(); return !rest.target.IsEmpty();
         case TK_DUEL:             rest.target = RestHubSelectDuelPartner(botAI); return !rest.target.IsEmpty();
         case TK_NPC_FLAG:         rest.target = SelectNearestNpcWithFlag(d.npcFlagOrGoType); return !rest.target.IsEmpty();
         case TK_GO_TYPE:          rest.target = SelectNearestGoOfType(d.npcFlagOrGoType); return !rest.target.IsEmpty();
@@ -729,6 +728,12 @@ RestSubtype NewRpgStatusUpdateAction::PickRestSubtype(bool hubReachable)
     for (uint8 i = 0; i < RS_COUNT; ++i)
     {
         RestSubtype st = (RestSubtype)i;
+        if (st == RS_SOCIAL)        // upkeep-sociability: SOCIAL retired (folded into upkeep/loiter dwell)
+        {
+            avail[i] = false;
+            w[i] = 0;
+            continue;
+        }
         avail[i] = (kRestTable[st].needsHub ? hubReachable : IsAnywhereTargetPresent(st))
                    && IsSubtypeEligible(st);
         w[i] = avail[i] ? sPlayerbotAIConfig.restHubWeight[i] : 0;

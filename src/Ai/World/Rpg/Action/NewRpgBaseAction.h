@@ -83,9 +83,6 @@ protected:
     // Nearest GAMEOBJECT_TYPE_CHAIR within `radius` (mirrors SelectGatherNode's scan).
     // Empty if none — RPG_REST then floor-sits in place.
     ObjectGuid SelectInnChair(float radius);
-    // Nearest random bot within Pastime.Social.Radius that is idle-ish OR already socializing
-    // (or a player if Pastime.Social.IncludePlayers). Empty if none.
-    ObjectGuid SelectSocialPartner();
     bool HasQuestToAcceptOrReward(WorldObject* object);
     bool InteractWithNpcOrGameObjectForQuest(ObjectGuid guid);
     bool CanInteractWithQuestGiver(Object* questGiver);

@@ -527,11 +527,8 @@ public:
     uint32 gatheringCircuitMinNodes{3};
     uint32 gatheringCircuitMaxNodes{6};
     float  gatheringCircuitRadius{120.0f};
-    uint32 pastimeSocialWeight;
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
-    uint32 pastimeSocialDwellMin;
-    uint32 pastimeSocialDwellMax;
     uint32 pastimeSocialEmoteInterval;
     bool   pastimeSocialIncludePlayers;
     uint32 pastimeSocialDancePct{50};

@@ -1125,51 +1125,6 @@ ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
     return best ? best->GetGUID() : ObjectGuid();
 }
 
-ObjectGuid NewRpgBaseAction::SelectSocialPartner()
-{
-    GuidVector friends = AI_VALUE(GuidVector, "nearest friendly players");
-    Player* best = nullptr;
-    float bestDist = sPlayerbotAIConfig.pastimeSocialRadius;
-    bool sawTarget = false;
-    for (ObjectGuid& guid : friends)
-    {
-        Player* other = ObjectAccessor::FindPlayer(guid);
-        if (!other || other == bot || !other->IsInWorld())
-            continue;
-        if (other->isDead() || other->IsInCombat())
-            continue;
-        if (bot->GetExactDist(other) > sPlayerbotAIConfig.pastimeSocialRadius)
-            continue;
-
-        // In-radius base candidate confirmed — count once regardless of downstream filters.
-        if (!sawTarget) { sawTarget = true; }
-
-        bool isBot = sRandomPlayerbotMgr.IsRandomBot(other);
-        if (!isBot)
-        {
-            if (!sPlayerbotAIConfig.pastimeSocialIncludePlayers)
-                continue;   // real players only if opted in
-        }
-        else
-        {
-            // bot must be idle-ish OR already socializing (don't pester busy bots)
-            PlayerbotAI* oai = GET_PLAYERBOT_AI(other);
-            if (oai)
-            {
-                NewRpgStatus st = oai->rpgInfo.GetStatus();
-                // RPG_PASTIME/NewRpgInfo::Pastime removed (rest-hub-unification Task 9);
-                // socializing arm deleted. Check idleish only.
-                bool idleish = (st == RPG_IDLE || st == RPG_REST || st == RPG_WANDER_RANDOM);
-                if (!idleish)
-                    continue;
-            }
-        }
-
-        float d = bot->GetExactDist(other);
-        if (d < bestDist) { bestDist = d; best = other; }
-    }
-    return best ? best->GetGUID() : ObjectGuid();
-}
 
 ObjectGuid NewRpgBaseAction::SelectGatherNode()
 {

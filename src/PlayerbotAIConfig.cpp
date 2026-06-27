@@ -808,12 +808,12 @@ bool PlayerbotAIConfig::Initialize()
     static const std::pair<RestSubtype, const char*> kRestHubWeightKeys[] = {
         {RS_TAVERN,"Tavern"}, {RS_CLASS_TRAINER,"ClassTrainer"}, {RS_PROFESSION_CRAFT,"ProfessionCraft"},
         {RS_VENDOR,"Vendor"}, {RS_QUEST_GIVER,"QuestGiver"}, {RS_BANK,"Bank"}, {RS_AUCTION_HOUSE,"AuctionHouse"},
-        {RS_MAILBOX,"Mailbox"}, {RS_FLIGHT_MASTER,"FlightMaster"}, {RS_SOCIAL,"Social"}, {RS_STROLL,"Stroll"},
+        {RS_MAILBOX,"Mailbox"}, {RS_FLIGHT_MASTER,"FlightMaster"}, {RS_STROLL,"Stroll"},
         {RS_SPECTATE,"Spectate"}, {RS_DUMMY,"Dummy"}, {RS_DUEL,"Duel"}, {RS_FISH,"Fish"}, {RS_FIELD_REST,"FieldRest"}
     };
     static const uint16 kRestHubWeightDefault[RS_COUNT] = {
         /*Tavern*/30, /*ClassTrainer*/10, /*Craft*/15, /*Vendor*/15, /*QuestGiver*/12, /*Bank*/6, /*AH*/6,
-        /*Mail*/4, /*Flight*/6, /*Social*/20, /*Stroll*/18, /*Spectate*/6, /*Dummy*/10, /*Duel*/8, /*Fish*/12, /*FieldRest*/5
+        /*Mail*/4, /*Flight*/6, /*Social*/0, /*Stroll*/18, /*Spectate*/6, /*Dummy*/10, /*Duel*/8, /*Fish*/12, /*FieldRest*/5
     };
     for (auto const& k : kRestHubWeightKeys)
         restHubWeight[k.first] = sConfigMgr->GetOption<uint32>(
@@ -899,14 +899,8 @@ bool PlayerbotAIConfig::Initialize()
              rpgSuppressVehicle, rpgSuppressRaidSim, rpgSuppressCombat, gatherHarvestHoldMs,
              lowHealthSelfPreservation, healSayOncePerEpisode, healSayMinIntervalSec);
 
-    pastimeSocialWeight = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.Weight", 100);
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
     pastimeSocialClusterDist = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.ClusterDist", 5.0f);
-    pastimeSocialDwellMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DwellMin", 30);
-    pastimeSocialDwellMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DwellMax", 120);
-    // urand asserts max >= min; guard against an inverted operator config.
-    if (pastimeSocialDwellMax < pastimeSocialDwellMin)
-        std::swap(pastimeSocialDwellMin, pastimeSocialDwellMax);
     pastimeSocialEmoteInterval = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.EmoteInterval", 6);
     pastimeSocialIncludePlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.Pastime.Social.IncludePlayers", false);
     pastimeSocialDancePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DancePct", 50);
