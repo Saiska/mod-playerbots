@@ -901,10 +901,6 @@ bool PlayerbotAIConfig::Initialize()
 
     pastimeSocialRadius = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.Radius", 40.0f);
     pastimeSocialClusterDist = sConfigMgr->GetOption<float>("AiPlayerbot.Pastime.Social.ClusterDist", 5.0f);
-    pastimeSocialDancePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Pastime.Social.DancePct", 50);
-    if (pastimeSocialDancePct > 100)
-        pastimeSocialDancePct = 100;
-    LOG_INFO("playerbots", "[SocialDance] dancePct={}", pastimeSocialDancePct);
     // upkeep-sociability: dwell cluster overlay config
     dwellSocialEnable   = sConfigMgr->GetOption<bool>("AiPlayerbot.DwellSocial.Enable", true);
     dwellSocialChancePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.DwellSocial.ChancePct", 35);

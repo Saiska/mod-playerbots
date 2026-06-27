@@ -529,7 +529,6 @@ public:
     float  gatheringCircuitRadius{120.0f};
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
-    uint32 pastimeSocialDancePct{50};
     // upkeep-sociability: dwell cluster overlay — peer-facing interactive one-shot on a dwell beat.
     bool   dwellSocialEnable{true};
     uint32 dwellSocialChancePct{35};  // per one-shot beat, chance to do the peer-orient interactive variant

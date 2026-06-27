@@ -456,13 +456,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 RestSubtype st = acq ? picked : RS_FIELD_REST;
                 rest.subtype = st;
                 rest.sustainedPose = PaletteOf(kRestTable[st].palette, kRestTable[st].poiVariant).sustainedPose;
-                // social-dance-resthub-revive: BEH_SOCIAL's static palette pose is 0 (stand), so
-                // re-home the comedy-hold-dance roll here — mostly converse (TALK), sometimes dance
-                // (per DancePct). The generic per-tick re-assert (steady-hold else branch) holds it;
-                // the P4 exit clears it.
-                if (st == RS_SOCIAL)
-                    rest.sustainedPose = (urand(0, 99) < sPlayerbotAIConfig.pastimeSocialDancePct)
-                                         ? EMOTE_STATE_DANCE : EMOTE_STATE_TALK;
                 // upkeep-sociability: per-bot held-pose roll for non-seated posed REST subtypes
                 // (TAVERN/FIELD_REST sit via HoldSeat+skipSustainedPose — leave them on their seat logic).
                 if (st != RS_TAVERN && st != RS_FIELD_REST)
@@ -502,6 +495,10 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                     // (mirrors comedy-hold-dance + TickEmoteCadence's sustained-pose guard).
                     if (pose && bot->IsMounted())
                         bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+                    // upkeep-sociability fix: pose 0 means "plain stand" — restore the old unconditional
+                    // scrub so a stale UNIT_NPC_EMOTESTATE from a prior pose doesn't persist through the dwell.
+                    if (!pose && bot->GetUInt32Value(UNIT_NPC_EMOTESTATE))
+                        bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, 0);
                     info.heldRestPose = pose;   // track for the head sweep (0 = none, harmless)
                     TickEmoteCadence(kRestTable[rest.subtype].palette,
                                      static_cast<uint8>(kRestTable[rest.subtype].poiVariant),
