@@ -173,5 +173,7 @@ protected:
 // truth). Exposed so the RPG_REST machine (NewRpgAction.cpp) can read a row's sustained pose
 // without re-declaring those tables. variant is a BotCityPoi for BEH_LOITER (1..6), else 0.
 const EmotePalette& LookupPalette(BotBehaviorId beh, uint8 variant);
+// upkeep-sociability: returns kLoiterPoseSet[variant-1][rollIdx%count] for BEH_LOITER; else sustainedPose.
+uint32 ResolveHeldPose(BotBehaviorId beh, uint8 variant, uint8 rollIdx);
 
 #endif

@@ -45,6 +45,9 @@
 // Defined in FishingAction.cpp (only FindWaterRadial is header-declared).
 WorldPosition FindFishingHole(PlayerbotAI* botAI);
 
+// upkeep-sociability: per-POI held-pose set; file-scope so ResolveHeldPose (outside anon ns) can name it.
+struct PoseSet { const uint32* poses; uint8 count; };
+
 namespace
 {
     // -----------------------------------------------------------------------
@@ -76,8 +79,15 @@ namespace
                                            EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION, EMOTE_ONESHOT_YES };
     const uint32 kOneShots_Social[]    = { EMOTE_ONESHOT_CHEER, EMOTE_ONESHOT_LAUGH, EMOTE_ONESHOT_APPLAUD,
                                            EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_BOW, EMOTE_ONESHOT_TALK };
-    const uint32 kOneShots_LoiterTalk[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION, EMOTE_ONESHOT_POINT,
-                                            EMOTE_ONESHOT_LAUGH };
+    // upkeep-sociability: broadened loiter one-shots (was talk/question/point/laugh only).
+    const uint32 kOneShots_LoiterTalk[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_QUESTION,
+                                            EMOTE_ONESHOT_POINT, EMOTE_ONESHOT_LAUGH,
+                                            EMOTE_ONESHOT_CHEER, EMOTE_ONESHOT_APPLAUD,
+                                            EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_BOW };
+    // upkeep-sociability: interactive sub-pool used when a peer is co-located (cluster overlay).
+    const uint32 kOneShots_LoiterInteractive[] = { EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_LAUGH,
+                                                   EMOTE_ONESHOT_POINT, EMOTE_ONESHOT_BOW,
+                                                   EMOTE_ONESHOT_CHEER, EMOTE_ONESHOT_APPLAUD };
     const uint32 kOneShots_Craft[]     = { EMOTE_ONESHOT_TALK };  // USE_STANDING is the held pose
     const uint32 kOneShots_RepairSell[] = { EMOTE_ONESHOT_TALK, EMOTE_ONESHOT_BOW, EMOTE_ONESHOT_YES,
                                             EMOTE_ONESHOT_WAVE };
@@ -118,6 +128,25 @@ namespace
         /*POI_MAILBOX*/    { 0,                        POOL(kOneShots_LoiterTalk) },  // 0 (stand)
         /*POI_FORGE*/      { EMOTE_STATE_USE_STANDING, POOL(kOneShots_LoiterTalk) },  // 69
     };
+    // upkeep-sociability: per-POI candidate HELD poses; a bot rolls ONE of these once per dwell
+    // (NewRpgInfo::Upkeep/Rest.chosenDwellPose) so a crowd at one prop is not all EMOTE_STATE_TALK.
+    // Indexed by BotCityPoi 1..6 -> array 0..5 (same mapping as kLoiterByPoi).
+    // EMOTE_STATE_SIT_CHAIR absent in 3.3.5a SharedDefines.h -> substituted EMOTE_STATE_SIT.
+    const uint32 kPose_Auctioneer[] = { 0, EMOTE_STATE_TALK, EMOTE_STATE_USE_STANDING };
+    const uint32 kPose_Banker[]     = { 0, EMOTE_STATE_TALK, EMOTE_STATE_USE_STANDING };
+    const uint32 kPose_Innkeeper[]  = { EMOTE_STATE_SIT, EMOTE_STATE_SIT, 0 };
+    const uint32 kPose_Trainer[]    = { 0, EMOTE_STATE_TALK, EMOTE_STATE_USE_STANDING };
+    const uint32 kPose_Mailbox[]    = { 0 };                       // mailbox reads wrong posed -> stand
+    const uint32 kPose_Forge[]      = { EMOTE_STATE_USE_STANDING, 0 };
+
+    const PoseSet kLoiterPoseSet[6] = {
+        /*POI_AUCTIONEER*/ { kPose_Auctioneer, (uint8)(sizeof(kPose_Auctioneer)/sizeof(uint32)) },
+        /*POI_BANKER*/     { kPose_Banker,     (uint8)(sizeof(kPose_Banker)/sizeof(uint32)) },
+        /*POI_INNKEEPER*/  { kPose_Innkeeper,  (uint8)(sizeof(kPose_Innkeeper)/sizeof(uint32)) },
+        /*POI_TRAINER*/    { kPose_Trainer,    (uint8)(sizeof(kPose_Trainer)/sizeof(uint32)) },
+        /*POI_MAILBOX*/    { kPose_Mailbox,    (uint8)(sizeof(kPose_Mailbox)/sizeof(uint32)) },
+        /*POI_FORGE*/      { kPose_Forge,      (uint8)(sizeof(kPose_Forge)/sizeof(uint32)) },
+    };
     #undef POOL
 
 } // anonymous namespace
@@ -134,6 +163,20 @@ const EmotePalette& LookupPalette(BotBehaviorId beh, uint8 variant)
     if (beh > BEH_NONE && beh < BEH_COUNT)
         return kPalette[beh];
     return kPalette[BEH_NONE];
+}
+
+// upkeep-sociability: resolve a per-bot held pose for (beh, variant).
+// Returns the palette's sustainedPose for non-loiter behaviors; for BEH_LOITER
+// variant 1..6 returns kLoiterPoseSet[variant-1].poses[rollIdx % count].
+// Exported (declared in NewRpgBaseAction.h) so NewRpgRestHub.cpp (PoseAtProp) can call it.
+uint32 ResolveHeldPose(BotBehaviorId beh, uint8 variant, uint8 rollIdx)
+{
+    if (beh == BEH_LOITER && variant >= 1 && variant <= 6)
+    {
+        PoseSet const& ps = kLoiterPoseSet[variant - 1];
+        return ps.count ? ps.poses[rollIdx % ps.count] : 0;
+    }
+    return LookupPalette(beh, variant).sustainedPose;
 }
 
 void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose)
