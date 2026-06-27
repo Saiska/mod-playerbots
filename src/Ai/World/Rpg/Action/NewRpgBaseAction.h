@@ -55,7 +55,8 @@ protected:
     // skipSustainedPose=true does the one-shots ONLY (the caller already holds a pose,
     // e.g. RPG_REST seated on a real chair, so re-asserting EMOTE_STATE_SIT would fight
     // the chair's SIT_*_CHAIR stand-state).
-    void TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose = false);
+    void TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose = false,
+                          uint32 overridePose = 0xFFFFFFFF);
     void FireOneShotEmote(BotBehaviorId beh, uint8 variant);   // immediate, non-repeating one-shot pick
 
     /* QUEST RELATED CHECK */

@@ -55,6 +55,7 @@ struct NewRpgInfo
         bool          onChair{false};
         uint8         seatState{0};       // captured SIT_*_CHAIR, re-asserted each tick
         uint32        sustainedPose{0};   // EMOTE_STATE_* held during dwell (from the table row)
+        uint32        chosenDwellPose{0xFFFFFFFF};   // upkeep-sociability: per-bot held pose, rolled once on dwell entry (0xFFFFFFFF = unrolled)
         uint32        lastReach{0};       // 0 = en route; set once on arrival
         uint32        dwellMs{0};
         uint8         strollIdx{0};       // STROLL: current waypoint index
@@ -103,6 +104,7 @@ struct NewRpgInfo
         bool          learnedNew{false};        // maintenance granted a new spell/rank (gates DUMMY)
         uint32        capitalZone{0};            // chosen capital zoneId (CAPITAL tier; resolved once at acquire)
         uint32        poseArriveT{0};            // ms ts the bot reached the current prop (0=en route); gates the settle
+        uint32        chosenDwellPose{0xFFFFFFFF};   // upkeep-sociability: per-bot held pose, rolled once on dwell entry (0xFFFFFFFF = unrolled)
     };
 
     uint32 startT{0};  // start timestamp of the current status

@@ -278,6 +278,11 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
         }
         up.target      = prop;
         up.stepStartMs = getMSTime();   // dwell clock starts now
+        // upkeep-sociability: roll one held pose for this bot's dwell so the capital crowd isn't all EMOTE_STATE_TALK.
+        RestSubtypeDef const& pdRoll = kRestTable[restSubtype];
+        up.chosenDwellPose = ResolveHeldPose(pdRoll.palette,
+                                             static_cast<uint8>(pdRoll.poiVariant),
+                                             (uint8)urand(0, 5));   // rollIdx wrapped by ResolveHeldPose
     }
 
     // ── PERFORM: face the prop (Unit OR GameObject) + hold the emote pose for the dwell ──
@@ -288,7 +293,8 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
     // these rows are BEH_LOITER with POI_BANKER/POI_AUCTIONEER/POI_MAILBOX/POI_TRAINER, so the
     // per-POI loiter palette is selected exactly as the rest engine selects it.
     RestSubtypeDef const& pd = kRestTable[restSubtype];
-    TickEmoteCadence(pd.palette, static_cast<uint8>(pd.poiVariant));
+    TickEmoteCadence(pd.palette, static_cast<uint8>(pd.poiVariant),
+                     /*skipSustainedPose=*/false, up.chosenDwellPose);
 
     if (GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs)
         return true;   // still posing

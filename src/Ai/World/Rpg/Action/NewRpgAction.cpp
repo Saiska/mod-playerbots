@@ -463,6 +463,12 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 if (st == RS_SOCIAL)
                     rest.sustainedPose = (urand(0, 99) < sPlayerbotAIConfig.pastimeSocialDancePct)
                                          ? EMOTE_STATE_DANCE : EMOTE_STATE_TALK;
+                // upkeep-sociability: per-bot held-pose roll for non-seated posed REST subtypes
+                // (TAVERN/FIELD_REST sit via HoldSeat+skipSustainedPose — leave them on their seat logic).
+                if (st != RS_TAVERN && st != RS_FIELD_REST)
+                    rest.chosenDwellPose = ResolveHeldPose(kRestTable[st].palette,
+                                                           static_cast<uint8>(kRestTable[st].poiVariant),
+                                                           (uint8)urand(0, 5));
                 return true;
             }
 
@@ -490,14 +496,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                     TickFish();
                 else
                 {
+                    // upkeep-sociability: use the per-bot rolled pose if available, else fall back to sustainedPose.
+                    uint32 pose = (rest.chosenDwellPose != 0xFFFFFFFF) ? rest.chosenDwellPose : rest.sustainedPose;
                     // A mount hides a held pose; dismount before asserting a non-zero one
                     // (mirrors comedy-hold-dance + TickEmoteCadence's sustained-pose guard).
-                    if (rest.sustainedPose && bot->IsMounted())
+                    if (pose && bot->IsMounted())
                         bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
-                    bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, rest.sustainedPose);
-                    info.heldRestPose = rest.sustainedPose;   // track for the head sweep (0 = no pose, harmless)
+                    info.heldRestPose = pose;   // track for the head sweep (0 = none, harmless)
                     TickEmoteCadence(kRestTable[rest.subtype].palette,
-                                     static_cast<uint8>(kRestTable[rest.subtype].poiVariant));
+                                     static_cast<uint8>(kRestTable[rest.subtype].poiVariant),
+                                     /*skipSustainedPose=*/false, pose);
                 }
 
                 // P4 EXIT — Task 6: REST is an occupation, so stamp lastFinished[RPG_REST] + re-Decide

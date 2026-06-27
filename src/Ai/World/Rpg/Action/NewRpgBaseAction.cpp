@@ -179,7 +179,8 @@ uint32 ResolveHeldPose(BotBehaviorId beh, uint8 variant, uint8 rollIdx)
     return LookupPalette(beh, variant).sustainedPose;
 }
 
-void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose)
+void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool skipSustainedPose,
+                                        uint32 overridePose)
 {
     const EmotePalette& pal = LookupPalette(beh, variant);
     NewRpgInfo& info = botAI->rpgInfo;
@@ -187,12 +188,14 @@ void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool s
     // 1. sustained pose (held, replicated) — re-assert each tick; dismount first (a mount hides the pose).
     // skipSustainedPose: caller already holds a real pose (e.g. RPG_REST seated on a chair, which sets a
     // SIT_*_CHAIR stand-state) — re-asserting UNIT_NPC_EMOTESTATE would fight it, so do one-shots only.
-    if (pal.sustainedPose && !skipSustainedPose)
+    // overridePose: upkeep-sociability — per-bot held pose rolled once at dwell entry; 0xFFFFFFFF = use palette.
+    uint32 pose = (overridePose != 0xFFFFFFFF) ? overridePose : pal.sustainedPose;
+    if (pose && !skipSustainedPose)
     {
         if (bot->IsMounted())
             bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
-        if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != pal.sustainedPose)
-            bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, pal.sustainedPose);
+        if (bot->GetUInt32Value(UNIT_NPC_EMOTESTATE) != pose)
+            bot->SetUInt32Value(UNIT_NPC_EMOTESTATE, pose);
     }
 
     // 2. timed, jittered, non-repeating one-shot
@@ -205,7 +208,8 @@ void NewRpgBaseAction::TickEmoteCadence(BotBehaviorId beh, uint8 variant, bool s
     if (info.lastEmoteMs == 0)
     {
         info.lastEmoteMs = now;
-        info.nextEmoteGapMs = urand(mn, mx) * IN_MILLISECONDS;
+        // upkeep-sociability: random initial phase so a co-arriving crowd doesn't emote on one beat.
+        info.nextEmoteGapMs = urand(0, mx) * IN_MILLISECONDS;
         return;
     }
     if (GetMSTimeDiffToNow(info.lastEmoteMs) < info.nextEmoteGapMs)
