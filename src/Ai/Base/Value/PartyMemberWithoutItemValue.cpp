@@ -27,6 +27,11 @@ public:
         if (!(member->IsInSameGroupWith(botAI->GetBot()) || member->IsInSameRaidWith(botAI->GetBot())))
             return false;
 
+        // Cross-thread safety: same group/raid can span map instances; only read a
+        // member's context when it shares our Map* (same MapUpdater worker thread).
+        if (member->GetMap() != botAI->GetBot()->GetMap())
+            return false;
+
         PlayerbotAI* memberbotAI = GET_PLAYERBOT_AI(member);
         if (!memberbotAI)
             return false;
