@@ -7,6 +7,7 @@
 #define _PLAYERBOT_NAMEDOBJECTCONEXT_H
 
 #include <list>
+#include <mutex>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -161,6 +162,7 @@ public:
     const std::unordered_map<std::string, ObjectCreator>& creators;
     const std::vector<NamedObjectContext<T>*>& contexts;
     std::unordered_map<std::string, T*> created;
+    mutable std::recursive_mutex contextMutex;
 
     NamedObjectContextList(const SharedNamedObjectContextList<T>& shared)
         : creators(shared.creators), contexts(shared.contexts)
@@ -203,6 +205,12 @@ public:
 
     T* GetContextObject(const std::string& name, PlayerbotAI* botAI)
     {
+        // Thread-safety backstop: the value cache is a lock-free unordered_map
+        // that several MapUpdater worker threads can reach (cross-bot reads).
+        // Serialize find/create/insert so a concurrent rehash cannot hand back
+        // a torn pointer. Recursive: a Value ctor may re-enter on this context.
+        std::lock_guard<std::recursive_mutex> guard(contextMutex);
+
         if (created.find(name) == created.end())
         {
             if (T* object = create(name, botAI))
