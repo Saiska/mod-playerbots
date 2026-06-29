@@ -1184,7 +1184,7 @@ bool MovementAction::Follow(Unit* target, float distance, float angle)
     if (ServerFacade::instance().IsDistanceGreaterOrEqualThan(ServerFacade::instance().GetDistance2d(bot, target),
                                                     sPlayerbotAIConfig.sightDistance))
     {
-        if (target->GetGUID().IsPlayer())
+        if (target->GetGUID().IsPlayer() && target->GetMap() == bot->GetMap())
         {
             Player* pTarget = (Player*)target;
 
