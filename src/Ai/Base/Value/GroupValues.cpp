@@ -74,7 +74,7 @@ uint32 GroupBoolCountValue::Calculate()
         if (!player)
             continue;
 
-        if (player->GetMapId() != bot->GetMapId())
+        if (player->GetMap() != bot->GetMap())
             continue;
 
         if (!GET_PLAYERBOT_AI(player))
@@ -96,7 +96,7 @@ bool GroupBoolANDValue::Calculate()
         if (!player)
             continue;
 
-        if (player->GetMapId() != bot->GetMapId())
+        if (player->GetMap() != bot->GetMap())
             continue;
 
         if (!GET_PLAYERBOT_AI(player))
@@ -118,7 +118,7 @@ bool GroupBoolORValue::Calculate()
         if (!player)
             continue;
 
-        if (player->GetMapId() != bot->GetMapId())
+        if (player->GetMap() != bot->GetMap())
             continue;
 
         if (!GET_PLAYERBOT_AI(player))
@@ -140,6 +140,11 @@ bool GroupReadyValue::Calculate()
         Player* member = ObjectAccessor::FindPlayer(guid);
 
         if (!member)
+            continue;
+
+        // Cross-thread safety: a group member on a different Map* is updated by a
+        // different MapUpdater worker thread; never read its AI state from here.
+        if (member->GetMap() != bot->GetMap())
             continue;
 
         if (inDungeon)  // In dungeons all following members need to be alive before continueing.
