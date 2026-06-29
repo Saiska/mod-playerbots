@@ -413,8 +413,9 @@ bool ChooseTravelTargetAction::SetGroupTarget(TravelTarget* target)
         if (!player)
             continue;
 
-        // Cross-thread safety: a group member on a different Map* is updated by a
-        // different MapUpdater worker thread; never read its context from here.
+        // Cross-thread safety: a group member on a different Map* is
+        // updated by a different MapUpdater worker thread; never read
+        // its context from here.
         if (player->GetMap() != bot->GetMap())
             continue;
 

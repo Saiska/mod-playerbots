@@ -804,7 +804,9 @@ bool TalkAction::Execute(Event /*event*/)
         if (Player* player = dynamic_cast<Player*>(target))
             if (player->GetMap() == bot->GetMap())
                 if (PlayerbotAI* playerBotAI = GET_PLAYERBOT_AI(player))
-                    playerBotAI->GetAiObjectContext()->GetValue<ObjectGuid>("talk target")->Set(bot->GetGUID());
+                    playerBotAI->GetAiObjectContext()
+                        ->GetValue<ObjectGuid>("talk target")
+                        ->Set(bot->GetGUID());
 
         context->GetValue<ObjectGuid>("talk target")->Set(target->GetGUID());
         return Emote(target, GetRandomEmote(target, true), true);

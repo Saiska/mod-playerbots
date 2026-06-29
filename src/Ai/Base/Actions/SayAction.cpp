@@ -122,8 +122,8 @@ bool SayAction::Execute(Event /*event*/)
         int index = 0;
         for (auto& member : members)
         {
-            // Cross-thread safety: only write another bot's context when it shares
-            // our Map* (same MapUpdater worker thread).
+            // Cross-thread safety: only write another bot's context
+            // when it shares our Map* (same MapUpdater worker thread).
             if (member->GetMap() != bot->GetMap())
                 continue;
 

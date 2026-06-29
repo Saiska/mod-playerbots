@@ -83,8 +83,9 @@ bool AutoShareQuestAction::Execute(Event /*event*/)
 
             if (auto ai = GET_PLAYERBOT_AI(player))
             {
-                // Cross-thread safety: skip cross-Map* bots — their context is
-                // owned by a different MapUpdater worker thread.
+                // Cross-thread safety: skip cross-Map* bots — their
+                // context is owned by a different MapUpdater worker
+                // thread.
                 if (player->GetMap() != bot->GetMap())
                     continue;
 

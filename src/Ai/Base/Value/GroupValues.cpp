@@ -142,8 +142,9 @@ bool GroupReadyValue::Calculate()
         if (!member)
             continue;
 
-        // Cross-thread safety: a group member on a different Map* is updated by a
-        // different MapUpdater worker thread; never read its AI state from here.
+        // Cross-thread safety: a group member on a different Map* is
+        // updated by a different MapUpdater worker thread; never read
+        // its AI state from here.
         if (member->GetMap() != bot->GetMap())
             continue;
 
