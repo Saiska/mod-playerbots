@@ -15,7 +15,7 @@
 
 static bool IsBlessingTargetCandidate(Player* bot, Player* player)
 {
-    if (!player || !player->IsAlive() || player->GetMapId() != bot->GetMapId())
+    if (!player || !player->IsAlive() || player->GetMap() != bot->GetMap())
         return false;
 
     if (player->IsGameMaster())
@@ -397,6 +397,7 @@ bool CastBlessingOfSanctuaryOnPartyAction::Execute(Event /*event*/)
                 Player* player = ref->GetSource();
                 if (!player) continue;
                 if (!player->IsInWorld() || !player->IsAlive()) continue;
+                if (player->GetMap() != bot->GetMap()) continue;
                 if (!IsTankRole(player)) continue;
 
                 bool hasSanct = HasSanctAura(player);

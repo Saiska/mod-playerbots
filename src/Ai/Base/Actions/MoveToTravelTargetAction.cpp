@@ -31,6 +31,9 @@ bool MoveToTravelTargetAction::Execute(Event /*event*/)
             if (!member->isMoving())
                 continue;
 
+            if (member->GetMap() != bot->GetMap())
+                continue;
+
             PlayerbotAI* memberBotAI = GET_PLAYERBOT_AI(member);
             if (memberBotAI && !memberBotAI->HasStrategy("follow", BOT_STATE_NON_COMBAT))
                 continue;

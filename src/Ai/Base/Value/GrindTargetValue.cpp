@@ -217,6 +217,9 @@ uint32 GrindTargetValue::GetTargetingPlayerCount(Unit* unit)
         if (!member || !member->IsAlive() || member == bot)
             continue;
 
+        if (member->GetMap() != bot->GetMap())
+            continue;
+
         PlayerbotAI* botAI = GET_PLAYERBOT_AI(member);
         if ((botAI && *botAI->GetAiObjectContext()->GetValue<Unit*>("current target") == unit) ||
             (!botAI && member->GetTarget() == unit->GetGUID()))
