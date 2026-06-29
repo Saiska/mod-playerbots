@@ -209,7 +209,10 @@ bool InviteGuildToGroupAction::Execute(Event /*event*/)
             if (player->GetLevel() >
                 bot->GetLevel() + 5)  // Invite higher levels that need money so they can grind money and help out.
             {
-                if (!PAI_VALUE(bool, "should get money"))
+                // Cross-thread safety: only read another bot's value cache when it
+                // shares our Map* (same MapUpdater worker thread). Cross-map
+                // candidates skip the money gate rather than racing their context.
+                if (player->GetMap() == bot->GetMap() && !PAI_VALUE(bool, "should get money"))
                     continue;
             }
         }
