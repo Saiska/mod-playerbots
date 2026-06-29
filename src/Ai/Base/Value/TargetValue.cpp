@@ -42,7 +42,7 @@ bool FindNonCcTargetStrategy::IsCcTarget(Unit* attacker)
             if (!member || !member->IsAlive())
                 continue;
 
-            if (member->GetMap() != bot->GetMap())
+            if (member->GetMap() != botAI->GetBot()->GetMap())
                 continue;
 
             if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(member))
