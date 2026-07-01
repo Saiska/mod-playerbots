@@ -17,6 +17,25 @@
 #include "ServerFacade.h"
 #include "StatsWeightCalculator.h"
 
+namespace
+{
+    // Diagnostic (reuses AiPlayerbot.GuildBankDeposit.Debug/DebugGuildId): trace the usage a bot
+    // assigns to TRADE_GOODS (cloth/ore/...), to explain why they never reach the guild-bank
+    // deposit path (which only sees VENDOR/gray items on the sell/destroy seams). KEEP/SKILL =>
+    // hoarded (e.g. cloth for First Aid); AH => routed to the auctioneer, not the deposit hook.
+    void DbgTradeGoodUsage(Player* bot, ItemTemplate const* proto, char const* usage)
+    {
+        if (!sPlayerbotAIConfig.guildBankDepositDebug || !bot || !proto)
+            return;
+        if (bot->GetGuildId() != sPlayerbotAIConfig.guildBankDepositDebugGuildId)
+            return;
+        if (proto->Class != ITEM_CLASS_TRADE_GOODS)
+            return;
+        LOG_INFO("playerbots", "[ItemUsage dbg] {} tradegood={} ({}) -> {}",
+                 bot->GetName(), proto->ItemId, proto->Name1, usage);
+    }
+}
+
 ItemUsage ItemUsageValue::Calculate()
 {
     ParsedItemUsage const parsed = GetItemIdFromQualifier();
@@ -60,9 +79,15 @@ ItemUsage ItemUsageValue::Calculate()
         {
             float stacks = CurrentStacks(proto);
             if (stacks < 1)
+            {
+                DbgTradeGoodUsage(bot, proto, "SKILL (needed for spell, <1 stack)");
                 return ITEM_USAGE_SKILL;  // Buy more.
+            }
             if (stacks < 2)
+            {
+                DbgTradeGoodUsage(bot, proto, "KEEP (needed for spell, <2 stacks)");
                 return ITEM_USAGE_KEEP;  // Keep current amount.
+            }
         }
     }
 
@@ -154,11 +179,18 @@ ItemUsage ItemUsageValue::Calculate()
     if (proto->SellPrice > 0)
     {
         if (proto->Quality >= ITEM_QUALITY_NORMAL && !isSoulbound && proto->Bonding != BIND_WHEN_PICKED_UP)
+        {
+            DbgTradeGoodUsage(bot, proto, "AH (excess/not-needed -> auctioneer, NOT deposit)");
             return ITEM_USAGE_AH;
+        }
         else
+        {
+            DbgTradeGoodUsage(bot, proto, "VENDOR (-> sell seam, reaches deposit hook)");
             return ITEM_USAGE_VENDOR;
+        }
     }
 
+    DbgTradeGoodUsage(bot, proto, "NONE");
     return ITEM_USAGE_NONE;
 }
 
