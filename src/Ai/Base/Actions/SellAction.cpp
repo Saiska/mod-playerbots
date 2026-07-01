@@ -100,6 +100,14 @@ void SellAction::Sell(FindItemVisitor* visitor)
 
 void SellAction::Sell(Item* item)
 {
+    if (sPlayerbotAIConfig.guildBankDepositDebug && item &&
+        bot->GetGuildId() == sPlayerbotAIConfig.guildBankDepositDebugGuildId)
+    {
+        if (ItemTemplate const* p = item->GetTemplate())
+            LOG_INFO("playerbots", "[GBSell dbg] {} reached Sell(): item={} ({}) class={} -> deposit gate next",
+                     bot->GetName(), p->ItemId, p->Name1, uint32(p->Class));
+    }
+
     if (botAI->TryDepositLootToGuildBank(item))
         return;
 
