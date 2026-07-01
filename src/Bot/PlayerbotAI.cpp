@@ -6110,11 +6110,32 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
     if (!item)
         return false;
 
-    if (!sPlayerbotAIConfig.guildBankDepositEnable)
-        return false;
+    // --- Diagnostic tracing (AiPlayerbot.GuildBankDeposit.Debug) --------------------
+    // Trace this bot's attempt when debug is on AND it targets this bot: a specific
+    // guild (DebugGuildId) or, when that is 0, any real-player guild. Keeps the log to
+    // the guild under investigation (no spam from the bot-only guilds).
+    uint32 const myGuild = bot->GetGuildId();
+    bool const realGuild = IsInRealGuild();
+    uint32 const dbgGuild = sPlayerbotAIConfig.guildBankDepositDebugGuildId;
+    bool const trace = sPlayerbotAIConfig.guildBankDepositDebug && myGuild != 0
+                       && (dbgGuild ? myGuild == dbgGuild : realGuild);
+    uint32 const entry = item->GetEntry();
 
-    if (!IsInRealGuild())
+    if (!sPlayerbotAIConfig.guildBankDepositEnable)
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> SKIP feature-disabled",
+                     bot->GetName(), entry);
         return false;
+    }
+
+    if (!realGuild)
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} guild={} item={} -> SKIP not-a-real-guild",
+                     bot->GetName(), myGuild, entry);
+        return false;
+    }
 
     ItemTemplate const* proto = item->GetTemplate();
     if (!proto)
@@ -6122,19 +6143,52 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
 
     // Quality floor (default white) — greys are never banked.
     if (proto->Quality < sPlayerbotAIConfig.guildBankDepositMinQuality)
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} q={} -> SKIP below-minquality ({})",
+                     bot->GetName(), entry, uint32(proto->Quality),
+                     sPlayerbotAIConfig.guildBankDepositMinQuality);
         return false;
+    }
 
     // Soulbound or BoP items cannot enter a guild bank — hard game rule.
     if (!item->CanBeTraded())
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> SKIP soulbound/BoP (CanBeTraded=false)",
+                     bot->GetName(), entry);
         return false;
+    }
 
-    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
+    Guild* guild = sGuildMgr->GetGuildById(myGuild);
     if (!guild)
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> SKIP no-guild-object",
+                     bot->GetName(), entry);
         return false;
+    }
 
     uint8 tab = 0;
-    if (!guild->FindDepositTabForEntry(item->GetEntry(), bot->GetGUID(), tab))
+    if (!guild->FindDepositTabForEntry(entry, bot->GetGUID(), tab))
+    {
+        if (trace)
+        {
+            // Distinguish a rights problem from a stock problem: count tabs this bot may
+            // deposit to. 0 => the bot's guild rank lacks "Deposit Item" (the usual cause
+            // for a freshly-invited bot). >0 => rights are fine, but no such tab already
+            // stocks this entry with room (the top-up-only design).
+            uint8 rightsTabs = 0;
+            for (uint8 t = 0; t < GUILD_BANK_MAX_TABS; ++t)
+                if (guild->MemberHasTabRights(bot->GetGUID(), t, GUILD_BANK_RIGHT_DEPOSIT_ITEM))
+                    ++rightsTabs;
+            LOG_INFO("playerbots",
+                     "[GBDeposit dbg] {} item={} -> SKIP no-depositable-tab "
+                     "(deposit-rights on {} tab(s); need a rights-tab already stocking this entry + room)",
+                     bot->GetName(), entry, uint32(rightsTabs));
+        }
         return false;
+    }
 
     // Capture identity before the move (the Item* may be invalidated by the swap).
     uint8 bag = item->GetBagSlot();
@@ -6149,10 +6203,18 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
     // Post-check: a clean full move empties the source slot. If the slot still holds an item,
     // treat as not-deposited (e.g. tab filled in a race) and let the caller sell/destroy it.
     if (bot->GetItemByPos(bag, slot))
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> FAIL swap-left-item (race / tab full)",
+                     bot->GetName(), entry);
         return false;
+    }
 
     LOG_INFO("playerbots", "Bots guildbank deposit: {} -> {} x{} (tab {})",
              bot->GetName(), name, count, tab);
+    if (trace)
+        LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> DEPOSITED x{} (tab {})",
+                 bot->GetName(), entry, count, tab);
     return true;
 }
 

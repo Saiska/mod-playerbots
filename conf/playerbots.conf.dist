@@ -593,8 +593,22 @@ AiPlayerbot.GuildBankWithdraw.IndexTTLSeconds = 300
 #        Minimum item quality eligible for guild-bank deposit (0=poor/grey, 1=white/normal,
 #        2=uncommon, 3=rare, ...). Default 1 skips grey vendor-trash.
 #
+#    AiPlayerbot.GuildBankDeposit.Debug
+#        Diagnostic. When 1, logs (to Playerbots.log, "playerbots") one line per guild-bank
+#        deposit ATTEMPT by a targeted bot, naming the item and the exact gate that stopped
+#        it (feature-disabled / not-a-real-guild / below-minquality / soulbound / no-depositable-
+#        tab [+ how many tabs the bot has deposit rights on] / DEPOSITED). Use to find out why
+#        a guild bot never deposits. Verbose; leave off in normal operation. Default: 0 (off)
+#
+#    AiPlayerbot.GuildBankDeposit.DebugGuildId
+#        Which guild the Debug log targets. 0 = every real-player guild. Set to a specific
+#        guildid to trace only that guild (no spam from other guilds, and it also traces the
+#        not-a-real-guild case for that guild). Default: 0
+#
 AiPlayerbot.GuildBankDeposit.Enable = 1
 AiPlayerbot.GuildBankDeposit.MinQuality = 1
+AiPlayerbot.GuildBankDeposit.Debug = 0
+AiPlayerbot.GuildBankDeposit.DebugGuildId = 0
 
 # Enable/Disable specific maintenance command functionality for altbots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their altbots
