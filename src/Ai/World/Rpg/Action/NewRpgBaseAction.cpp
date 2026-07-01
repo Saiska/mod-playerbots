@@ -1754,30 +1754,29 @@ bool NewRpgBaseAction::SelectRandomFlightTaxiNode(uint32& flightMasterEntry, Wor
 // provably "free" suppresses by default). Each axis is individually gated by its config toggle; an
 // off toggle makes that axis non-constraining. Combat/dead are redundant with the COMBAT/DEAD engine
 // switches but kept as cheap belt-and-suspenders against idle-window edges.
-bool NewRpgBaseAction::IsFreeToIdle()
+RpgIdleBlock GetRpgIdleBlock(Player* bot)
 {
     PlayerbotAIConfig const& cfg = sPlayerbotAIConfig;
 
-    // Always: a dead or mid-teleport bot is never free to idle.
     if (!bot->IsAlive() || bot->IsBeingTeleported())
-        return false;
+        return IB_DEAD_OR_TP;
+
+    if (cfg.rpgSuppressRaidSim && sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
+        return IB_RAIDSIM;
 
     if (cfg.rpgSuppressCombat && bot->IsInCombat())
-        return false;
+        return IB_COMBAT;
 
-    // Instanced content: dungeon / raid / battleground / arena.
     if (cfg.rpgSuppressInstance)
     {
         Map* map = bot->GetMap();
         if (map && (map->IsDungeon() || map->IsRaid() || map->IsBattlegroundOrArena()))
-            return false;
+            return IB_INSTANCE;
     }
 
-    // On a moving platform or in a vehicle -> don't wander off it.
     if (cfg.rpgSuppressVehicle && (bot->GetTransport() || bot->GetVehicle()))
-        return false;
+        return IB_VEHICLE;
 
-    // Grouped with a human: a real player has no PlayerbotAI.
     if (cfg.rpgSuppressGroupedWithPlayer)
     {
         if (Group* group = bot->GetGroup())
@@ -1786,16 +1785,17 @@ bool NewRpgBaseAction::IsFreeToIdle()
             {
                 Player* member = ref->GetSource();
                 if (member && member != bot && !GET_PLAYERBOT_AI(member))
-                    return false;
+                    return IB_GROUPED;
             }
         }
     }
 
-    // In a RaidSim run (the simulated-instance gear loop).
-    if (cfg.rpgSuppressRaidSim && sRaidSimulationMgr.IsRaiding(bot->GetGUID()))
-        return false;
+    return IB_NONE;
+}
 
-    return true;
+bool NewRpgBaseAction::IsFreeToIdle()
+{
+    return GetRpgIdleBlock(bot) == IB_NONE;
 }
 
 bool NewRpgBaseAction::ShouldSuppressRpg()

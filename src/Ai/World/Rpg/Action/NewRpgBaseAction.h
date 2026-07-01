@@ -26,6 +26,23 @@ struct POIInfo
 //   GAVE_UP   — witnessed + beyond rpgTravelBudget (caller should pick a nearer goal).
 enum class TravelResult : uint8 { EN_ROUTE, ARRIVED, GAVE_UP };
 
+// Reason why a bot's open-world RPG idling is blocked, or IB_NONE when free.
+// Shared by IsFreeToIdle() (engine gate) and the census (label).
+enum RpgIdleBlock : uint8
+{
+    IB_NONE = 0,    // free to idle (IsFreeToIdle == true)
+    IB_DEAD_OR_TP,  // dead or being teleported
+    IB_RAIDSIM,     // in a RaidSim run (checked before INSTANCE for clearer attribution)
+    IB_COMBAT,      // in combat
+    IB_INSTANCE,    // dungeon/raid/bg/arena (non-RaidSim)
+    IB_VEHICLE,     // transport/vehicle
+    IB_GROUPED      // grouped with a human
+};
+
+// First reason this bot's open-world RPG idling is blocked, or IB_NONE. Shared by the engine
+// (IsFreeToIdle) and the census. Player* + config + sRaidSimulationMgr only.
+RpgIdleBlock GetRpgIdleBlock(Player* bot);
+
 /// A base (composition) class for all new rpg actions
 /// All functions that may be shared by multiple actions should be declared here
 /// And we should make all actions composable instead of inheritable
