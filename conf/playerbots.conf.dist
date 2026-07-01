@@ -609,6 +609,17 @@ AiPlayerbot.GuildBankDeposit.Enable = 1
 AiPlayerbot.GuildBankDeposit.MinQuality = 1
 AiPlayerbot.GuildBankDeposit.Debug = 0
 AiPlayerbot.GuildBankDeposit.DebugGuildId = 0
+#    AiPlayerbot.GuildBankDeposit.ProactiveEnable
+#        When 1, a bot in a real guild proactively deposits its SURPLUS of items the bank
+#        already stocks (top-up only) — before it would sell/destroy them — keeping KeepStacks
+#        stacks for itself. Runs before the bag-full destroy, at a vendor visit, and in the
+#        periodic maintenance pass. Default: 1
+#    AiPlayerbot.GuildBankDeposit.KeepStacks
+#        How many stacks of a surplus item the bot keeps for its own use before depositing the
+#        rest (e.g. 1 stack of cloth for First Aid). Default: 1
+#
+AiPlayerbot.GuildBankDeposit.ProactiveEnable = 1
+AiPlayerbot.GuildBankDeposit.KeepStacks = 1
 
 # Enable/Disable specific maintenance command functionality for altbots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their altbots

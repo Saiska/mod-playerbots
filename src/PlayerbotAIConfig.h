@@ -628,6 +628,8 @@ public:
     uint32 guildBankDepositMinQuality;
     bool guildBankDepositDebug;
     uint32 guildBankDepositDebugGuildId;
+    bool guildBankDepositProactiveEnable;
+    uint32 guildBankDepositKeepStacks;
     int32 groupInvitationPermission;
     bool keepAltsInGroup = false;
     bool KeepAltsInGroup() const { return keepAltsInGroup; }

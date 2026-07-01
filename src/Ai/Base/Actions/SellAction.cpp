@@ -69,6 +69,7 @@ bool SellAction::Execute(Event event)
 
     if (text == "vendor")
     {
+        botAI->DepositSurplusToGuildBank();   // bank stocked surplus (incl. SKILL cloth) before vendoring the rest
         SellVendorItemsVisitor visitor(this, context);
         IterateItems(&visitor);
         return true;

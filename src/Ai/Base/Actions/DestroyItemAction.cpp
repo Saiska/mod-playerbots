@@ -44,6 +44,9 @@ bool SmartDestroyItemAction::isUseful() { return !botAI->HasActivePlayerMaster()
 
 bool SmartDestroyItemAction::Execute(Event /*event*/)
 {
+    // Try to offload surplus to the guild bank BEFORE destroying anything (destroy = last resort).
+    botAI->DepositSurplusToGuildBank();
+
     uint8 bagSpace = AI_VALUE(uint8, "bag space");
 
     if (bagSpace < 90)
