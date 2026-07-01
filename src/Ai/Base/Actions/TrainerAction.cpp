@@ -285,6 +285,8 @@ bool MaintenanceAction::Execute(Event /*event*/)
     if (sPlayerbotAIConfig.guildBankWithdraw && botAI->IsInRealGuild())
         factory.WithdrawUpgradesFromGuildBank();
 
+    botAI->DepositSurplusToGuildBank();
+
     return true;
 }
 
