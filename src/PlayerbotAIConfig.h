@@ -626,6 +626,8 @@ public:
     int32 guildBankWithdrawIndexTtlSeconds;
     bool guildBankDepositEnable;
     uint32 guildBankDepositMinQuality;
+    bool guildBankDepositDebug;
+    uint32 guildBankDepositDebugGuildId;
     int32 groupInvitationPermission;
     bool keepAltsInGroup = false;
     bool KeepAltsInGroup() const { return keepAltsInGroup; }
