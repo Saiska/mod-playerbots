@@ -2856,6 +2856,9 @@ void RandomPlayerbotMgr::PrintStats()
     uint32 engine_combat = 0;
     uint32 engine_dead = 0;
     std::unordered_map<NewRpgStatus, int> rpgStatusCount;
+    uint32 idleGenuine = 0, idleSuppressed = 0;
+    uint32 supByBlock[IB_GROUPED + 1] = {};        // indexed by RpgIdleBlock
+    std::unordered_map<NewRpgStatus, int> openWorldStatus;
     uint32 upkeepLocal = 0, upkeepCapital = 0;
     uint32 restSubCount[RS_COUNT] = {};
     // static NewRpgStatistic rpgStasticTotal;
@@ -2947,6 +2950,15 @@ void RandomPlayerbotMgr::PrintStats()
         {
             NewRpgStatus status = botAI->rpgInfo.GetStatus();
             rpgStatusCount[status]++;
+            RpgIdleBlock block = GetRpgIdleBlock(bot);
+            bool suppressed = (block != IB_NONE);
+            if (status == RPG_IDLE)
+            {
+                if (suppressed) { ++idleSuppressed; ++supByBlock[block]; }
+                else            { ++idleGenuine; }
+            }
+            if (!suppressed)
+                ++openWorldStatus[status];
             if (status == RPG_UPKEEP)
             {
                 if (auto const* up = std::get_if<NewRpgInfo::Upkeep>(&botAI->rpgInfo.data))
@@ -3033,14 +3045,32 @@ void RandomPlayerbotMgr::PrintStats()
     {
         LOG_INFO("playerbots", "Bots rpg status:");
         LOG_INFO("playerbots",
-                 "    Idle: {}, Recover: {}, Upkeep: {}, Rest: {}, GoGrind: {}, DoQuest: {}, "
+                 "    Idle(genuine): {}, Recover: {}, Upkeep: {}, Rest: {}, GoGrind: {}, DoQuest: {}, "
                  "OutdoorPvP: {}, GatheringCircuit: {} | inTransit(Flight/Mount): {}/{}",
-                 rpgStatusCount[RPG_IDLE], rpgStatusCount[RPG_RECOVER], rpgStatusCount[RPG_UPKEEP],
+                 idleGenuine, rpgStatusCount[RPG_RECOVER], rpgStatusCount[RPG_UPKEEP],
                  rpgStatusCount[RPG_REST], rpgStatusCount[RPG_GO_GRIND],
                  rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_OUTDOOR_PVP],
                  rpgStatusCount[RPG_GATHERING_CIRCUIT],
                  rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_TRAVEL_MOUNT]);
         LOG_INFO("playerbots", "    UpkeepTier: L={} C={}", upkeepLocal, upkeepCapital);
+        LOG_INFO("playerbots",
+                 "    Suppressed: {} [raidsim={} instance={} combat={} grouped={} vehicle={} dead/tp={}]",
+                 idleSuppressed, supByBlock[IB_RAIDSIM], supByBlock[IB_INSTANCE], supByBlock[IB_COMBAT],
+                 supByBlock[IB_GROUPED], supByBlock[IB_VEHICLE], supByBlock[IB_DEAD_OR_TP]);
+        {
+            int owN = 0;
+            for (auto const& kv : openWorldStatus) owN += kv.second;
+            auto pct = [owN](NewRpgStatus s, std::unordered_map<NewRpgStatus, int> const& m)
+            { auto it = m.find(s); int c = it == m.end() ? 0 : it->second; return owN ? (100 * c / owN) : 0; };
+            LOG_INFO("playerbots",
+                     "    Open-world mix (non-suppressed N={}): GoGrind {}% DoQuest {}% Rest {}% Idle {}% "
+                     "Gather {}% PvP {}% Flight {}% Mount {}% Upkeep {}% Recover {}%",
+                     owN, pct(RPG_GO_GRIND, openWorldStatus), pct(RPG_DO_QUEST, openWorldStatus),
+                     pct(RPG_REST, openWorldStatus), pct(RPG_IDLE, openWorldStatus),
+                     pct(RPG_GATHERING_CIRCUIT, openWorldStatus), pct(RPG_OUTDOOR_PVP, openWorldStatus),
+                     pct(RPG_TRAVEL_FLIGHT, openWorldStatus), pct(RPG_TRAVEL_MOUNT, openWorldStatus),
+                     pct(RPG_UPKEEP, openWorldStatus), pct(RPG_RECOVER, openWorldStatus));
+        }
 
         {
             std::ostringstream ss;
