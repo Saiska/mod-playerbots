@@ -590,6 +590,7 @@ public:
     // item whose entry already exists in a depositable guild-bank tab with room, deposit it and
     // return true (caller then skips its own sell/destroy). Returns false otherwise.
     bool TryDepositLootToGuildBank(Item* item);
+    void DepositSurplusToGuildBank();
     static std::vector<std::string> dispel_whitelist;
     bool EqualLowercaseName(std::string s1, std::string s2);
     InventoryResult CanEquipItem(uint8 slot, uint16& dest, Item* pItem, bool swap, bool not_loading = true) const;

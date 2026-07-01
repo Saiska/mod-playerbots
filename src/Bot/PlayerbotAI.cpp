@@ -24,7 +24,9 @@
 #include "ExternalEventHelper.h"
 #include "GameObjectData.h"
 #include "GameTime.h"
+#include "Bag.h"
 #include "GuildMgr.h"
+#include "ItemUsageValue.h"
 #include "LFGMgr.h"
 #include "LastMovementValue.h"
 #include "LastSpellCastValue.h"
@@ -6216,6 +6218,60 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
         LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> DEPOSITED x{} (tab {})",
                  bot->GetName(), entry, count, tab);
     return true;
+}
+
+// Proactively move a bot's SURPLUS of guild-bank-stocked items into the bank, keeping
+// KeepStacks stacks for itself. "Surplus" = an entry the bot's own ItemUsage rates AH/VENDOR
+// (sellable, not needed): a skill item reads AH only once the bot holds >=2 stacks, so this
+// keeps ~1 stack of cloth and deposits the rest. Reuses TryDepositLootToGuildBank per stack,
+// so top-up/quality/rights/room/fill-then-new-stack all come for free; unstocked entries are
+// silently skipped by that gate.
+void PlayerbotAI::DepositSurplusToGuildBank()
+{
+    if (!sPlayerbotAIConfig.guildBankDepositEnable || !sPlayerbotAIConfig.guildBankDepositProactiveEnable)
+        return;
+
+    if (!IsInRealGuild())
+        return;
+
+    uint32 const keepStacks = sPlayerbotAIConfig.guildBankDepositKeepStacks;
+
+    // Collect bag items grouped by entry (GUIDs — Item* is invalidated by each deposit swap).
+    std::map<uint32, std::vector<ObjectGuid>> byEntry;
+
+    auto collect = [&](Item* item)
+    {
+        if (item)
+            byEntry[item->GetEntry()].push_back(item->GetGUID());
+    };
+
+    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+        collect(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
+
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+        if (Bag* pBag = bot->GetBagByPos(bag))
+            for (uint32 i = 0; i < pBag->GetBagSize(); ++i)
+                collect(bot->GetItemByPos(bag, i));
+
+    for (auto const& pair : byEntry)
+    {
+        uint32 const entry = pair.first;
+        std::vector<ObjectGuid> const& guids = pair.second;
+
+        if (guids.size() <= keepStacks)
+            continue;   // nothing beyond the keep amount
+
+        ItemUsage const usage = GetAiObjectContext()->GetValue<ItemUsage>("item usage", entry)->Get();
+        if (usage != ITEM_USAGE_AH && usage != ITEM_USAGE_VENDOR)
+            continue;   // needed / hoarded -> keep all
+
+        // Keep the first keepStacks stacks; offer the rest to the bank (top-up gate filters unstocked).
+        for (uint32 i = keepStacks; i < guids.size(); ++i)
+        {
+            if (Item* item = bot->GetItemByGuid(guids[i]))
+                TryDepositLootToGuildBank(item);
+        }
+    }
 }
 
 void PlayerbotAI::QueueChatResponse(const ChatQueuedReply chatReply) { chatReplies.push_back(std::move(chatReply)); }
