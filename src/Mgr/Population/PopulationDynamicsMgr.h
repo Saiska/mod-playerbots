@@ -68,7 +68,8 @@ public:
 private:
     PopulationDynamicsMgr() = default;
 
-    bool   IsSafeBot(Player* bot) const;       // alive, in world, idle, not raid-sim, no real-player adjacency
+    bool   IsSafeBot(Player* bot) const;       // strict gatekeeper — always excludes dungeon maps; promotion sites use IsPromotable
+    bool   IsPromotable(Player* bot) const;    // like IsSafeBot but IsDungeon gate is config-gated (PromoteInInstances)
     void   TakeCensus(Census& out) const;      // iterate live bots, bin by (faction, level)
     // fairShare - census, clamped >=0, per [faction][band][class]; pure (no DB/locks).
     void ComputeClassDeficit(uint8 cap, Census const& census,
@@ -87,7 +88,7 @@ private:
     void BuildPlan(std::array<uint32, 81> const& targets, Census const& census,
                    float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
     // Drain queued promotions self-paced across world ticks (due = _planTotal * elapsed / Period).
-    // Re-validates each bot (FindPlayer + IsSafeBot + expectLevel) before IncreaseLevel.
+    // Re-validates each bot (FindPlayer + IsPromotable + expectLevel) before IncreaseLevel.
     void DripDrain();
     // The slow sink gate: only path into level 80 (random 79->80, SinkBatch/faction). Returns promotions issued.
     uint32 SinkGate(std::array<uint32, 81> const& targets, Census const& census,

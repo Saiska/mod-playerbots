@@ -723,6 +723,7 @@ public:
     uint32 populationSinkBatch;          // bots promoted 79->80 per faction per sink tick
     std::array<uint32, 8> populationBracket;   // bots-per-level for bands 0..7 (levels 1-9 .. 70-79)
     bool   populationClassFavor;               // favor most under-represented class when promoting
+    bool   populationPromoteInInstances;       // allow promotion of instance-parked bots (not raiding, not in combat)
 
     // Provision First-Aid bandages (and the fishing pole) to bots that have the matching skill.
     bool botProvisionConsumables{true};
