@@ -173,6 +173,10 @@ protected:
     bool HasGatherProfAndTool();        // gathering profession (mining/herb) + required tool present
     bool VendorInRange();               // vendor/repair NPC within pastimeRepairSellRadius
     bool EnemyNearForPvp();             // open-world PvP zone AND nearest hostile player present
+    // farm-lean-by-class: soft per-bot weight tilt of the gather-vs-grind occupation choice
+    // by class + active talent spec. Returns (gatherMult, grindMult). Never a hard 0;
+    // caller floors with max(1u, ...) before passing to the weighted draw.
+    std::pair<float, float> FarmLean() const;
 
 protected:
     /* FOR MOVE FAR */
