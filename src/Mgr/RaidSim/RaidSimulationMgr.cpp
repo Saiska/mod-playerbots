@@ -358,15 +358,17 @@ namespace
     {
     public:
         RaidSimTeardownOperation(ObjectGuid leaderGuid, ObjectGuid groupGuid,
-                                 std::vector<ObjectGuid> memberGuids, std::string label)
+                                 std::vector<ObjectGuid> memberGuids, std::string label,
+                                 bool broadcast = true)
             : m_leaderGuid(leaderGuid), m_groupGuid(groupGuid),
-              m_memberGuids(std::move(memberGuids)), m_label(std::move(label))
+              m_memberGuids(std::move(memberGuids)), m_label(std::move(label)),
+              m_broadcast(broadcast)
         {
         }
 
         bool Execute() override
         {
-            if (sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
+            if (m_broadcast && sPlayerbotAIConfig.raidSimBroadcast && sPlayerbotAIConfig.raidSimBroadcastStartStop)
                 if (Player* leader = ObjectAccessor::FindPlayer(m_leaderGuid))
                     if (Guild* guild = sGuildMgr->GetGuildById(leader->GetGuildId()))
                     {
@@ -415,6 +417,7 @@ namespace
         ObjectGuid m_groupGuid;
         std::vector<ObjectGuid> m_memberGuids;
         std::string m_label;
+        bool m_broadcast;
     };
 }  // namespace
 
@@ -1108,7 +1111,7 @@ void RaidSimulationMgr::ReconcileOrphans(uint32 diff)
     {
         if (!PlayerbotWorldThreadProcessor::instance().QueueOperation(
                 std::make_unique<RaidSimTeardownOperation>(
-                    og.leaderGuid, og.groupGuid, og.memberGuids, "orphan cleanup")))
+                    og.leaderGuid, og.groupGuid, og.memberGuids, "orphan cleanup", false)))
         {
             LOG_ERROR("playerbots",
                       "RaidSim: orphan teardown op dropped for group {};"
