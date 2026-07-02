@@ -2164,6 +2164,7 @@ void NewRpgBaseAction::Decide()
     struct Cand { NewRpgStatus s; uint32 w; };
     std::vector<Cand> feasible;
     uint32 sum = 0;
+    auto const [gatherMult, grindMult] = FarmLean();   // per-bot class/spec lean (Task 2)
     for (NewRpgStatus s : {RPG_DO_QUEST, RPG_GATHERING_CIRCUIT, RPG_OUTDOOR_PVP,
                            RPG_REST /*HubLife*/, RPG_GO_GRIND /*+RestAtHub default*/})
     {
@@ -2175,6 +2176,11 @@ void NewRpgBaseAction::Decide()
         uint32 cdMs = sPlayerbotAIConfig.occupationCooldownMs[s];
         if (cdMs && GetMSTimeDiffToNow(botAI->rpgInfo.lastFinished[s]) < cdMs)
             w = std::max<uint32>(1u, static_cast<uint32>(std::lround(w * sPlayerbotAIConfig.occupationCooldownFrac)));
+        // Apply per-bot farm lean (soft tilt — max(1u,...) guarantees neither option is excluded).
+        if (s == RPG_GATHERING_CIRCUIT)
+            w = std::max<uint32>(1u, static_cast<uint32>(std::lround(w * gatherMult * sPlayerbotAIConfig.gatherLeanBias)));
+        else if (s == RPG_GO_GRIND)
+            w = std::max<uint32>(1u, static_cast<uint32>(std::lround(w * grindMult)));
         feasible.push_back({s, w});
         sum += w;
     }

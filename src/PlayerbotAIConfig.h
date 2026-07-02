@@ -512,6 +512,8 @@ public:
     // Radius (yards) within which a bot is considered "at a rest hub" and rests in place instead of
     // farming in place. Beyond this the bot farms (kill in place) rather than sitting in the open world.
     float rpgNearHubRadius{60.0f};
+    // Global bias applied on top of FarmLean()'s per-bot gather multiplier (default 1.0 = no nudge).
+    float gatherLeanBias{1.0f};
     // --- occupation-rebalance: lowPriorityQuest decay (Task 8) ---
     uint32 lowPriorityQuestDecayMs{1800000};  // ms a stalled quest stays skipped (also clears on zone change); 0 = disabled
     // --- occupation-rebalance: doquest zone-travel guards (Task 9) ---
