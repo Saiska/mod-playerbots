@@ -1237,57 +1237,9 @@ ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
 }
 
 
-ObjectGuid NewRpgBaseAction::SelectGatherNode()
-{
-    GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
-    ObjectGuid best;
-    float bestDist = sPlayerbotAIConfig.gatheringCircuitRadius;
-
-    for (ObjectGuid const& guid : gos)
-    {
-        GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
-        if (!go || !go->isSpawned())
-            continue;
-
-        if (go->GetGoType() != GAMEOBJECT_TYPE_CHEST)
-            continue;
-
-        LockEntry const* lockInfo = sLockStore.LookupEntry(go->GetGOInfo()->GetLockId());
-        if (!lockInfo)
-            continue;
-
-        float dist = bot->GetExactDist(go);
-
-        bool eligible = false;
-        for (uint8 i = 0; i < 8; ++i)
-        {
-            if (lockInfo->Type[i] != LOCK_KEY_SKILL)
-                continue;
-
-            uint32 skillId = SkillByLockType(LockType(lockInfo->Index[i]));
-            uint32 reqSkillValue = std::max(2u, lockInfo->Skill[i]);
-            if ((skillId == SKILL_MINING || skillId == SKILL_HERBALISM) &&
-                bot->HasSkill(skillId) && bot->GetSkillValue(skillId) >= reqSkillValue)
-            {
-                eligible = true;
-                break;
-            }
-        }
-        if (!eligible)
-            continue;
-
-        if (dist < bestDist)
-        {
-            bestDist = dist;
-            best = guid;
-        }
-    }
-    return best;
-}
-
 ObjectGuid NewRpgBaseAction::SelectInnChair(float radius)
 {
-    // Mirror SelectGatherNode's GO scan, filtered to GAMEOBJECT_TYPE_CHAIR (type 7).
+    // Nearest spawned GAMEOBJECT_TYPE_CHAIR (type 7) grid-scan, distance-bounded by `radius`.
     GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
     ObjectGuid best;
     float bestDist = radius;
@@ -1958,7 +1910,7 @@ bool NewRpgBaseAction::MissingToolsOrReagents()
     }
 
     // Herbalism needs no physical tool; skinning knife is not checked here because
-    // the gather-circuit only covers mining/herbalism (SelectGatherNode:1150).
+    // the gather-circuit only covers mining/herbalism.
     return false;
 }
 
@@ -2009,17 +1961,6 @@ bool NewRpgBaseAction::HasGatherProfAndTool()
     }
 
     return false;
-}
-
-bool NewRpgBaseAction::NodeInRange(float r)
-{
-    // SelectGatherNode() uses sPlayerbotAIConfig.gatheringCircuitRadius as its hard cap.
-    // When r <= gatheringCircuitRadius the existing scan naturally honours the tighter bound
-    // (it tracks bestDist and only accepts nodes closer than its cap). When r > cap the result
-    // is still bounded by the cap, which is the safe/cheap O(1) guarantee we need.
-    // Either way: !IsEmpty() means at least one eligible node is within range.
-    (void)r;   // r is the caller's intent; the scan already uses gatheringCircuitRadius
-    return !SelectGatherNode().IsEmpty();
 }
 
 bool NewRpgBaseAction::VendorInRange()
@@ -2082,7 +2023,7 @@ bool NewRpgBaseAction::OccupationFeasible(NewRpgStatus status)
         case RPG_DO_QUEST:
             return HasActionableQuest();
         case RPG_GATHERING_CIRCUIT:
-            return HasGatherProfAndTool() && NodeInRange(sPlayerbotAIConfig.gatheringCircuitRadius);
+            return HasGatherProfAndTool() && sTravelMgr.AnyGatherNodeWithin(bot, sPlayerbotAIConfig.gatheringCircuitTravelRadius);
         case RPG_OUTDOOR_PVP:
             return EnemyNearForPvp();
         case RPG_REST:
@@ -2136,10 +2077,10 @@ void NewRpgBaseAction::EnterOccupation(NewRpgStatus status)
         }
         case RPG_GATHERING_CIRCUIT:
         {
-            uint32 maxNodes = urand(sPlayerbotAIConfig.gatheringCircuitMinNodes,
-                                    sPlayerbotAIConfig.gatheringCircuitMaxNodes);
-            botAI->rpgInfo.ChangeToGatheringCircuit(maxNodes);
-            return;                                             // CRASH RULE
+            // gather is DURATION-bound (GatheringCircuit.DurationSec); node count is only a runaway safety cap.
+            static constexpr uint32 kGatherNodeSafetyCap = 10000;
+            botAI->rpgInfo.ChangeToGatheringCircuit(kGatherNodeSafetyCap);
+            return;                                             // CRASH RULE — ChangeTo* is the last statement
         }
         case RPG_OUTDOOR_PVP:
         {

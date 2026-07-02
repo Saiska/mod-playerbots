@@ -75,11 +75,20 @@ struct NewRpgInfo
     // RPG_GATHERING_CIRCUIT
     struct GatheringCircuit
     {
-        ObjectGuid node{};
+        uint32 nodeSpawnId{0};      // DB spawn low guid of the current target node (0 = none seeded);
+                                    // the STABLE key — the live GameObject is resolved each tick via
+                                    // GetGameObjectBySpawnIdStore (its runtime guid is NOT the spawnId)
+        uint32 nodeEntry{0};        // gameobject_template entry (disambiguates the spawn store lookup)
+        WorldPosition nodePos{};    // world position of the current target node (from the boot index);
+                                    // drives the far-travel leg before the node's grid/live object loads
         uint32 visited{0};
         uint32 maxNodes{0};
         bool   harvesting{false};   // true while holding at a node for the gather cast to finish
         uint32 harvestStartMs{0};   // GetMSTime() when the gather cast was (re)issued; wrap-safe elapsed
+        // Bounded recent-visited ring (oldest dropped when full): spawnIds of nodes just
+        // harvested/abandoned, excluded from the next seed so the circuit doesn't ping-pong
+        // between the two closest nodes. Capped in the action (GATHER_RECENT_VISITED_CAP).
+        std::vector<ObjectGuid::LowType> recentVisited{};
     };
     struct Idle
     {

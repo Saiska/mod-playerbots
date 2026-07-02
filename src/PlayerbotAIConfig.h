@@ -524,9 +524,8 @@ public:
     // --- more-activities-occupations (pipe 2b) ---
     float  travelMountDistMin{300.0f};
     float  travelMountDistMax{2000.0f};
-    uint32 gatheringCircuitMinNodes{3};
-    uint32 gatheringCircuitMaxNodes{6};
-    float  gatheringCircuitRadius{120.0f};
+    float  gatheringCircuitTravelRadius{2000.0f};
+    uint32 gatheringCircuitDurationSec{3600};
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
     // upkeep-sociability: dwell cluster overlay — peer-facing interactive one-shot on a dwell beat.

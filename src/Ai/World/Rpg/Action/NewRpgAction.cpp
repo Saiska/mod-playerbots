@@ -555,7 +555,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_GATHERING_CIRCUIT:
         {
             // GatheringCircuit finish — Task 6: stamp lastFinished + re-Decide (flat field; CRASH RULE).
-            if (info.HasStatusPersisted(statusGatheringDuration))
+            if (info.HasStatusPersisted(sPlayerbotAIConfig.gatheringCircuitDurationSec * IN_MILLISECONDS))
             {
                 info.lastFinished[RPG_GATHERING_CIRCUIT] = getMSTime();
                 Decide();
@@ -1241,6 +1241,19 @@ bool NewRpgTravelMountAction::Execute(Event /*event*/)
     return false;
 }
 
+// gather-travel-to-node: bounded recent-visited ring. Remember up to this many just-finished
+// nodes so the next NearestGatherNode seed skips them (prevents A<->B ping-pong between the two
+// closest nodes). Oldest guid drops when the ring is full.
+static constexpr size_t GATHER_RECENT_VISITED_CAP = 16;
+static void PushGatherRecentVisited(NewRpgInfo::GatheringCircuit& gc, ObjectGuid::LowType spawnId)
+{
+    if (spawnId == 0)
+        return;
+    gc.recentVisited.push_back(spawnId);
+    if (gc.recentVisited.size() > GATHER_RECENT_VISITED_CAP)
+        gc.recentVisited.erase(gc.recentVisited.begin());
+}
+
 bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
@@ -1250,34 +1263,71 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
     if (data->visited >= data->maxNodes)
     {
         info.ChangeToIdle();
-        return true;
+        return true;                    // CRASH RULE — ChangeToIdle is the last statement
     }
-    if (data->node.IsEmpty())
+    // Seed the next target node from the boot-built index (reachable up to the travel radius),
+    // skipping every recently visited/abandoned node so the circuit advances instead of looping.
+    if (data->nodeSpawnId == 0)
     {
-        data->node = SelectGatherNode();
-        if (data->node.IsEmpty())
+        TravelMgr::GatherNodeHit hit;
+        if (!sTravelMgr.NearestGatherNode(bot, sPlayerbotAIConfig.gatheringCircuitTravelRadius,
+                                          data->recentVisited, hit))
         {
-            info.ChangeToIdle();   // no node nearby -> done
-            return true;
+            info.ChangeToIdle();        // no reachable node left -> done
+            return true;                // CRASH RULE — ChangeToIdle is the last statement
         }
+        data->nodeSpawnId = hit.spawnId;
+        data->nodeEntry = hit.entry;
+        data->nodePos = hit.pos;
         data->harvesting = false;       // fresh node — no harvest in progress
         data->harvestStartMs = 0;
     }
-    GameObject* node = ObjectAccessor::GetGameObject(*bot, data->node);
-    if (!node || !node->isSpawned())
+    // Resolve the LIVE GameObject by its DB spawnId — the runtime guid is generated at LoadFromDB
+    // and is NOT the spawnId, so a fabricated guid never matches. The store carries the object only
+    // once the grid is loaded (present after we travel into range). `node` is a per-tick pointer,
+    // never stored across ticks (CRASH RULE). `bot->GetMap()` is valid for the member Player* here.
+    GameObject* node = nullptr;
+    auto bounds = bot->GetMap()->GetGameObjectBySpawnIdStore().equal_range(data->nodeSpawnId);
+    for (auto it = bounds.first; it != bounds.second; ++it)
     {
+        GameObject* g = it->second;
+        if (g && g->isSpawned() && (data->nodeEntry == 0 || g->GetEntry() == data->nodeEntry))
+        {
+            node = g;
+            break;
+        }
+    }
+    if (!node)
+    {
+        // Either the grid isn't loaded yet (far target) OR we arrived and the object is gone
+        // (harvested/despawned). Far -> travel leg toward the indexed position; near -> resolve.
+        // R1: never treat MoveFarTo's return as an arrival test — use an explicit distance.
+        if (bot->GetExactDist(data->nodePos.GetPositionX(), data->nodePos.GetPositionY(),
+                              data->nodePos.GetPositionZ()) > 30.0f)
+        {
+            MoveFarTo(data->nodePos);
+            return true;
+        }
+        // We ARE at the position but there is no live object -> already harvested/despawned.
         if (data->harvesting)           // we were harvesting this one -> success
             ++data->visited;
-        data->node = ObjectGuid();
+        PushGatherRecentVisited(*data, data->nodeSpawnId);
+        data->nodeSpawnId = 0;
+        data->nodeEntry = 0;
+        data->nodePos = WorldPosition();
         data->harvesting = false;
         data->harvestStartMs = 0;
         return true;
     }
+    ObjectGuid const nodeGuid = node->GetGUID();   // the REAL runtime guid for loot/movement
     if (!IsWithinInteractionDist(node))
     {
-        if (MoveWorldObjectTo(data->node))
+        if (MoveWorldObjectTo(nodeGuid))
             return true;
-        data->node = ObjectGuid();      // unreachable -> try another
+        PushGatherRecentVisited(*data, data->nodeSpawnId);
+        data->nodeSpawnId = 0;          // unreachable -> try another
+        data->nodeEntry = 0;
+        data->nodePos = WorldPosition();
         data->harvesting = false;
         data->harvestStartMs = 0;
         return true;
@@ -1286,7 +1336,7 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
     if (!data->harvesting)
     {
         // Begin the harvest: DoLoot stops movement, then casts the mining/herb gather spell.
-        LootObject lootObj(bot, data->node);
+        LootObject lootObj(bot, nodeGuid);
         if (lootObj.IsLootPossible(bot))
         {
             context->GetValue<LootObject>("loot target")->Set(lootObj);
@@ -1303,14 +1353,17 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
     if (GetMSTimeDiffToNow(data->harvestStartMs) >= sPlayerbotAIConfig.gatherHarvestHoldMs)
     {
         ++data->visited;                 // gave up on this node -> count it and move on
-        data->node = ObjectGuid();
+        PushGatherRecentVisited(*data, data->nodeSpawnId);
+        data->nodeSpawnId = 0;
+        data->nodeEntry = 0;
+        data->nodePos = WorldPosition();
         data->harvesting = false;
         data->harvestStartMs = 0;
         return true;
     }
     if (!bot->HasUnitState(UNIT_STATE_CASTING))
     {
-        LootObject lootObj(bot, data->node);
+        LootObject lootObj(bot, nodeGuid);
         if (lootObj.IsLootPossible(bot))
         {
             context->GetValue<LootObject>("loot target")->Set(lootObj);

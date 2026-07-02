@@ -21,7 +21,9 @@ static_assert(PROPKIND_COUNT == 5, "capitalPropLocations array size in TravelMgr
 
 #include "AreaDefines.h"
 #include "Creature.h"
+#include "DBCStores.h"
 #include "Log.h"
+#include "SharedDefines.h"
 #include "Random.h"
 #include "ObjectAccessor.h"
 #include "TravelNode.h"
@@ -5125,5 +5127,171 @@ void TravelMgr::PrepareDestinationCache()
             break;
         }
     }
+    // gather-travel-to-node: build the per-map gather-node spatial index ONCE here at boot.
+    // Classified from STATIC spawn data (bot-independent): at boot most GO spawns are never
+    // instantiated as live GameObjects (grids load on demand), so the template + lock is the only
+    // complete, stable source of "does a node exist here". This index is WRITTEN only here (during
+    // single-threaded boot) and READ-ONLY afterwards -> immutable, so runtime reads need NO
+    // synchronization (identical lock-free contract to capitalPropLocations). NO lazy build.
+    uint32 gatherNodesIndexed = 0;
+    std::map<uint32, uint32> gatherNodesPerMap;
+    for (auto const& [spawnId, goData] : sObjectMgr->GetAllGOData())
+    {
+        GameObjectTemplate const* got = sObjectMgr->GetGameObjectTemplate(goData.id);
+        if (!got)
+            continue;
+
+        // classified from spawn template (bot-independent): a CHEST whose LockEntry
+        // has a MINING/HERBALISM skill slot.
+        if (got->type != GAMEOBJECT_TYPE_CHEST)
+            continue;
+
+        LockEntry const* lockInfo = sLockStore.LookupEntry(got->GetLockId());
+        if (!lockInfo)
+            continue;
+
+        uint32 skillId = 0;
+        uint32 reqValue = 0;
+        for (uint8 i = 0; i < 8; ++i)
+        {
+            if (lockInfo->Type[i] != LOCK_KEY_SKILL)
+                continue;
+
+            uint32 lockSkill = SkillByLockType(LockType(lockInfo->Index[i]));
+            if (lockSkill == SKILL_MINING || lockSkill == SKILL_HERBALISM)
+            {
+                skillId = lockSkill;
+                reqValue = std::max(2u, lockInfo->Skill[i]);
+                break;
+            }
+        }
+        if (skillId == 0)
+            continue;
+
+        GatherNode node;
+        node.posX = goData.posX;
+        node.posY = goData.posY;
+        node.posZ = goData.posZ;
+        node.skillId = skillId;
+        node.reqValue = reqValue;
+        node.entry = goData.id;
+        node.spawnId = spawnId;
+
+        uint64 cellKey = GatherCellKey(GatherCellCoord(node.posX), GatherCellCoord(node.posY));
+        gatherNodeIndex[goData.mapid][cellKey].push_back(node);
+        ++gatherNodesIndexed;
+        ++gatherNodesPerMap[goData.mapid];
+    }
+    LOG_INFO("playerbots", ">> Gather-node index: {} mining/herb nodes across {} maps.",
+        gatherNodesIndexed, static_cast<uint32>(gatherNodeIndex.size()));
+    for (auto const& [mapId, count] : gatherNodesPerMap)
+        LOG_INFO("playerbots", "   gather nodes on map {}: {}", mapId, count);
+
     LOG_INFO("playerbots", ">> {} flight masters and {} innkeepers and {} banker locations for level collected.", flightMastersCount, innkeepersCount, bankerCount);
+}
+
+// gather-travel-to-node: lock-free read of the immutable boot-built index. Sweeps only the cells a
+// `radius` ball reaches around the bot's cell (ceil(radius / GATHER_CELL_SIZE) rings, at least the
+// 3x3 neighbourhood) -> never a full-map scan. Distance is horizontal (2D), matching the 2D grid.
+bool TravelMgr::AnyGatherNodeWithin(Player* bot, float radius) const
+{
+    if (!bot)
+        return false;
+
+    auto mapIt = gatherNodeIndex.find(bot->GetMapId());
+    if (mapIt == gatherNodeIndex.end())
+        return false;
+
+    float const x = bot->GetPositionX();
+    float const y = bot->GetPositionY();
+    float const radiusSq = radius * radius;
+
+    int32 const centerX = GatherCellCoord(x);
+    int32 const centerY = GatherCellCoord(y);
+    int32 const rings = std::max(1, static_cast<int32>(std::ceil(radius / GATHER_CELL_SIZE)));
+
+    for (int32 cx = centerX - rings; cx <= centerX + rings; ++cx)
+    {
+        for (int32 cy = centerY - rings; cy <= centerY + rings; ++cy)
+        {
+            auto cellIt = mapIt->second.find(GatherCellKey(cx, cy));
+            if (cellIt == mapIt->second.end())
+                continue;
+
+            for (GatherNode const& node : cellIt->second)
+            {
+                if (!bot->HasSkill(node.skillId) || bot->GetSkillValue(node.skillId) < node.reqValue)
+                    continue;
+
+                float const dx = node.posX - x;
+                float const dy = node.posY - y;
+                if (dx * dx + dy * dy <= radiusSq)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+// gather-travel-to-node: nearest gatherable node within `radius` (2D), skipping every spawnId in
+// `excludeSpawnIds` (the circuit's recent-visited ring). Same lock-free neighbourhood sweep as
+// AnyGatherNodeWithin; returns the node closest to the bot. Keyed on the STABLE DB spawnId — the
+// live GameObject is resolved by the caller via GetGameObjectBySpawnIdStore (a runtime guid
+// fabricated from entry+spawnId does NOT match LoadFromDB's generated guid).
+bool TravelMgr::NearestGatherNode(Player* bot, float radius, std::vector<ObjectGuid::LowType> const& excludeSpawnIds,
+                                  GatherNodeHit& out) const
+{
+    if (!bot)
+        return false;
+
+    auto mapIt = gatherNodeIndex.find(bot->GetMapId());
+    if (mapIt == gatherNodeIndex.end())
+        return false;
+
+    float const x = bot->GetPositionX();
+    float const y = bot->GetPositionY();
+
+    int32 const centerX = GatherCellCoord(x);
+    int32 const centerY = GatherCellCoord(y);
+    int32 const rings = std::max(1, static_cast<int32>(std::ceil(radius / GATHER_CELL_SIZE)));
+
+    GatherNode const* best = nullptr;
+    float bestSq = radius * radius;
+
+    for (int32 cx = centerX - rings; cx <= centerX + rings; ++cx)
+    {
+        for (int32 cy = centerY - rings; cy <= centerY + rings; ++cy)
+        {
+            auto cellIt = mapIt->second.find(GatherCellKey(cx, cy));
+            if (cellIt == mapIt->second.end())
+                continue;
+
+            for (GatherNode const& node : cellIt->second)
+            {
+                if (std::find(excludeSpawnIds.begin(), excludeSpawnIds.end(), node.spawnId) != excludeSpawnIds.end())
+                    continue;
+
+                if (!bot->HasSkill(node.skillId) || bot->GetSkillValue(node.skillId) < node.reqValue)
+                    continue;
+
+                float const dx = node.posX - x;
+                float const dy = node.posY - y;
+                float const distSq = dx * dx + dy * dy;
+                if (distSq <= bestSq)
+                {
+                    bestSq = distSq;
+                    best = &node;
+                }
+            }
+        }
+    }
+
+    if (!best)
+        return false;
+
+    out.pos = WorldPosition(bot->GetMapId(), best->posX, best->posY, best->posZ);
+    out.spawnId = best->spawnId;
+    out.entry = best->entry;
+    out.skillId = best->skillId;
+    return true;
 }
