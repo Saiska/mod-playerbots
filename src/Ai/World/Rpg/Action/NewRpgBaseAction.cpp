@@ -2127,7 +2127,7 @@ bool NewRpgBaseAction::OccupationFeasible(NewRpgStatus status)
         case RPG_DO_QUEST:
             return HasActionableQuest();
         case RPG_GATHERING_CIRCUIT:
-            return HasGatherProfAndTool() && NodeInRange(sPlayerbotAIConfig.gatheringCircuitRadius);
+            return HasGatherProfAndTool() && sTravelMgr.AnyGatherNodeWithin(bot, sPlayerbotAIConfig.gatheringCircuitTravelRadius);
         case RPG_OUTDOOR_PVP:
             return EnemyNearForPvp();
         case RPG_REST:

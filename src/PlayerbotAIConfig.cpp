@@ -841,6 +841,7 @@ bool PlayerbotAIConfig::Initialize()
     gatheringCircuitMaxNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MaxNodes", 6);
     if (gatheringCircuitMaxNodes < gatheringCircuitMinNodes) std::swap(gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
     gatheringCircuitRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.Radius", 120.0f);
+    gatheringCircuitTravelRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.TravelRadius", 2000.0f);
     LOG_INFO("playerbots", "[MoreOccupations] mountDist={}-{} circuitNodes={}-{}",
              travelMountDistMin, travelMountDistMax,
              gatheringCircuitMinNodes, gatheringCircuitMaxNodes);

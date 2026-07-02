@@ -527,6 +527,7 @@ public:
     uint32 gatheringCircuitMinNodes{3};
     uint32 gatheringCircuitMaxNodes{6};
     float  gatheringCircuitRadius{120.0f};
+    float  gatheringCircuitTravelRadius{2000.0f};
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
     // upkeep-sociability: dwell cluster overlay — peer-facing interactive one-shot on a dwell beat.
