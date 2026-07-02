@@ -1265,17 +1265,18 @@ AiPlayerbot.RpgSuppress.Combat = 1
 
 # --- More occupations (pipe 2b) -----------------------------------------------
 # travel_mount picks a taxi-node position on the bot's current map within
-# [DistMin,DistMax] yards. gathering_circuit harvests MinNodes..MaxNodes nodes
-# (bot needs a mining/herbalism skill). Node ranges auto-swap if inverted.
-# GatheringCircuit.Radius: search radius (yards) for a harvestable mining/herb node when the bot
-# considers the gathering_circuit occupation AND when advancing between circuit hops. The occupation
-# is only offered when at least one node is actually reachable within this radius (honest gate — no
-# instant idle-bounce for profession-holders with no nearby nodes). Default: 120
+# [DistMin,DistMax] yards for the travel_mount taxi-node pick.
+# gathering_circuit (gather-travel-to-node): bots travel to reachable mining/herb nodes from a
+# boot-built per-map node index and harvest node-to-node for a duration-bounded stint.
+# GatheringCircuit.TravelRadius: yards to search the node index for a reachable node - drives both the
+#   feasibility gate (occupation offered only when a node is reachable) and the far-travel leg.
+#   Default 2000. A small value (<=~100) approximates the old underfoot-only behaviour.
+# GatheringCircuit.DurationSec: length of a gather stint before the bot re-decides. Default 3600 (~1h).
+#   The circuit is duration-bound; node count is only a runaway safety cap. (MinNodes/MaxNodes/Radius retired.)
 AiPlayerbot.TravelMount.DistMin = 300.0
 AiPlayerbot.TravelMount.DistMax = 2000.0
-AiPlayerbot.GatheringCircuit.MinNodes = 3
-AiPlayerbot.GatheringCircuit.MaxNodes = 6
-AiPlayerbot.GatheringCircuit.Radius = 120.0
+AiPlayerbot.GatheringCircuit.TravelRadius = 2000.0
+AiPlayerbot.GatheringCircuit.DurationSec = 3600
 #
 #    AiPlayerbot.Gather.HarvestHoldMs
 #        How long (ms) a bot on the gathering_circuit occupation holds at a node for its mining/herb
