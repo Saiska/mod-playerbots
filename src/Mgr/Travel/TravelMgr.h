@@ -8,6 +8,7 @@
 
 #include <array>
 #include <boost/functional/hash.hpp>
+#include <cmath>
 #include <map>
 #include <random>
 #include <unordered_map>
@@ -901,6 +902,19 @@ public:
     bool SelectAuctioneerByMap(Player* bot, NpcLocation& outAuctioneer);
     const std::vector<WorldLocation>& GetLocsPerLevelCache(uint8 level) { return locsPerLevelCache[level]; }
 
+    // gather-travel-to-node: results from a nearest-node query against the boot-built index.
+    struct GatherNodeHit
+    {
+        WorldPosition   pos;
+        ObjectGuid      guid;
+        uint32          skillId;
+    };
+    // True if any gather node the bot can harvest sits within `radius` of the bot on its map.
+    // Reads the immutable boot-built index (lock-free); sweeps only the bot's cell neighbourhood.
+    bool AnyGatherNodeWithin(Player* bot, float radius) const;
+    // Nearest gatherable node to the bot within `radius`, skipping `excludeGuid`; false if none.
+    bool NearestGatherNode(Player* bot, float radius, ObjectGuid excludeGuid, GatherNodeHit& out) const;
+
     template <class D, class W, class URBG>
     void weighted_shuffle(D first, D last, W first_weight, W last_weight, URBG&& g)
     {
@@ -1022,6 +1036,35 @@ private:
     // upkeep-capital-pose-prop-resolve — per-capital-zone prop coordinates, built once at boot.
     // Index: [capital zoneId] -> [PropKind] -> spawn positions in that capital.
     std::unordered_map<uint32, std::array<std::vector<WorldPosition>, 5>> capitalPropLocations;
+
+    // gather-travel-to-node — one gatherable mining/herb CHEST spawn in the index.
+    struct GatherNode
+    {
+        float                   posX;
+        float                   posY;
+        float                   posZ;
+        uint32                  skillId;   // SKILL_MINING or SKILL_HERBALISM
+        uint32                  reqValue;  // min bot skill value to harvest (>= 2)
+        uint32                  entry;     // gameobject_template entry (for ObjectGuid)
+        ObjectGuid::LowType     spawnId;   // DB spawn guid low (for ObjectGuid)
+    };
+    // Per-map coarse spatial grid of gather nodes, built ONCE at boot in PrepareDestinationCache()
+    // from static spawn data and only READ afterwards -> immutable, so runtime reads need NO
+    // synchronization (same lock-free contract as capitalPropLocations). NO lazy/runtime build.
+    // Index: [mapId] -> [cellKey] -> nodes falling in that coarse cell.
+    std::unordered_map<uint32, std::unordered_map<uint64, std::vector<GatherNode>>> gatherNodeIndex;
+    // Coarse cell edge in world units. Queries sweep the bot's cell + its 8 neighbours (a 3x3
+    // block), so any radius <= GATHER_CELL_SIZE is fully covered; larger radii sweep
+    // ceil(radius / GATHER_CELL_SIZE) rings around the bot's cell.
+    static constexpr float GATHER_CELL_SIZE = 2000.0f;
+    // Coarse cell coordinate for one world-axis value (floor division; handles negatives).
+    static int32 GatherCellCoord(float v) { return static_cast<int32>(std::floor(v / GATHER_CELL_SIZE)); }
+    // Pack coarse cell coords into a single 64-bit key. Build and query MUST use this identical
+    // packing; the signed->unsigned reinterpret of negative coords is fine as long as it matches.
+    static uint64 GatherCellKey(int32 cx, int32 cy)
+    {
+        return (static_cast<uint64>(static_cast<uint32>(cx)) << 32) ^ static_cast<uint64>(static_cast<uint32>(cy));
+    }
 };
 
 #define sTravelMgr TravelMgr::instance()
