@@ -1041,8 +1041,14 @@ void RaidSimulationMgr::ReconcileOrphans(uint32 diff)
     uint32 const batch = sPlayerbotAIConfig.raidSimReaperBatch;
 
     // --- Lock-free scan: candidate groups via online bots, deduped by group GUID. ---
+    struct OrphanGroup
+    {
+        ObjectGuid leaderGuid;
+        ObjectGuid groupGuid;
+        std::vector<ObjectGuid> memberGuids;
+    };
     std::unordered_set<ObjectGuid> seenGroups;
-    std::vector<Group*> toDisband;   // capped at batch
+    std::vector<OrphanGroup> toDisband;   // capped at batch; value-captures GUIDs (crash rule)
     uint32 totalOrphans = 0;
 
     for (auto const& it : ObjectAccessor::GetPlayers())
@@ -1087,22 +1093,73 @@ void RaidSimulationMgr::ReconcileOrphans(uint32 diff)
         // Orphan confirmed.
         ++totalOrphans;
         if (toDisband.size() < batch)
-            toDisband.push_back(grp);
+        {
+            OrphanGroup og;
+            og.leaderGuid = grp->GetLeaderGUID();
+            og.groupGuid  = grp->GetGUID();
+            for (auto const& ms : slots)
+                og.memberGuids.push_back(ms.guid);
+            toDisband.push_back(std::move(og));
+        }
     }
 
-    if (toDisband.empty())
-        return;
-
     uint32 disbanded = 0;
-    for (Group* g : toDisband)
+    for (auto const& og : toDisband)
     {
-        g->Disband(true);
+        if (!PlayerbotWorldThreadProcessor::instance().QueueOperation(
+                std::make_unique<RaidSimTeardownOperation>(
+                    og.leaderGuid, og.groupGuid, og.memberGuids, "orphan cleanup")))
+        {
+            LOG_ERROR("playerbots",
+                      "RaidSim: orphan teardown op dropped for group {};"
+                      " bots remain until next pass.",
+                      og.groupGuid.ToString());
+            continue;
+        }
         ++disbanded;
     }
 
+    // --- Solo rescue: ungrouped bots stuck in dungeon instances with no live run. ---
+    uint32 soloRescued = 0;
+    if (sPlayerbotAIConfig.raidSimReaperRescueSolo)
+    {
+        uint32 const soloBudget = (uint32(toDisband.size()) < batch)
+                                  ? (batch - uint32(toDisband.size())) : 0u;
+        for (auto const& it : ObjectAccessor::GetPlayers())
+        {
+            if (soloRescued >= soloBudget)
+                break;
+            Player* bot = it.second;
+            if (!bot || !bot->IsInWorld() || !GET_PLAYERBOT_AI(bot))
+                continue;
+            if (bot->GetGroup())
+                continue;
+            Map* m = bot->GetMap();
+            if (!m || !m->IsDungeon())
+                continue;
+            if (IsRaiding(bot->GetGUID()))
+                continue;
+            uint32 const acc =
+                sCharacterCache->GetCharacterAccountIdByGuid(bot->GetGUID());
+            if (!sPlayerbotAIConfig.IsInRandomAccountList(acc))
+                continue;
+            if (bot->IsInCombat())
+                continue;
+            UnparkBot(bot);
+            bot->RemoveAurasWithInterruptFlags(
+                AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+            bot->TeleportTo(HOME_MAP, HOME_X, HOME_Y, HOME_Z, HOME_O);
+            ClearRaidingFlags({ bot->GetGUID() });
+            ++soloRescued;
+        }
+    }
+
     uint32 remaining = (totalOrphans > disbanded) ? (totalOrphans - disbanded) : 0u;
-    LOG_INFO("playerbots", "RaidSim: reaper disbanded {} orphan group(s) ({} remaining)",
-             disbanded, remaining);
+    if (disbanded || soloRescued)
+        LOG_INFO("playerbots",
+                 "RaidSim: reaper disbanded {} orphan group(s) ({} remaining),"
+                 " rescued {} solo bot(s)",
+                 disbanded, remaining, soloRescued);
 }
 
 std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
