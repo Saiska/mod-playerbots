@@ -52,6 +52,17 @@ bool SmartDestroyItemAction::Execute(Event /*event*/)
     if (bagSpace < 90)
         return false;
 
+    // Disenchant-before-destroy: reclaim a DE-eligible item into shards instead of destroying it.
+    // The DE action casts spell 13262 (ASYNC) and carries its own green-only real-player/guild guard,
+    // so fire ONE per tick and return — SmartDestroy re-fires next tick to drain the rest; the destroy
+    // branches below only run once no DE-eligible items remain (DoSpecificAction returns false).
+    if (sPlayerbotAIConfig.disenchantBeforeDestroy && !botAI->HasActivePlayerMaster() &&
+        botAI->HasSkill(SKILL_ENCHANTING) && !bot->IsInCombat() &&
+        botAI->DoSpecificAction("disenchant random item"))
+    {
+        return true;
+    }
+
     // only destoy grey items if with real player/guild
     if (botAI->HasRealPlayerMaster() && botAI->IsInRealGuild())
     {

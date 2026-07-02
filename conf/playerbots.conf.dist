@@ -634,6 +634,11 @@ AiPlayerbot.AltMaintenancePotions = 1
 # initial gear and topped up at maintenance. Tools (pickaxe/knife) are provisioned separately.
 AiPlayerbot.BotProvisionConsumables = 1
 
+# bot-autonomous-disenchant: when a masterless bot would destroy a DE-eligible item to free bags,
+# disenchant it into shards instead (reuses the enchanting bot's own green-only real-player/guild
+# guard). 1 = enabled (default); 0 = old destroy-only behaviour.
+AiPlayerbot.DisenchantBeforeDestroy = 1
+
 AiPlayerbot.AltMaintenanceBags = 1
 AiPlayerbot.AltMaintenanceMounts = 1
 AiPlayerbot.AltMaintenanceSkills = 1

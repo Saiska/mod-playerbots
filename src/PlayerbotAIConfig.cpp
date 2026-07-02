@@ -678,6 +678,7 @@ bool PlayerbotAIConfig::Initialize()
     altMaintenanceConsumables = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceConsumables", true);
     altMaintenancePotions = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePotions", true);
     botProvisionConsumables = sConfigMgr->GetOption<bool>("AiPlayerbot.BotProvisionConsumables", true);
+    disenchantBeforeDestroy = sConfigMgr->GetOption<bool>("AiPlayerbot.DisenchantBeforeDestroy", true);
     altMaintenanceTalentTree = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceTalentTree", true);
     altMaintenancePet = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePet", true);
     altMaintenancePetTalents = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePetTalents", true);
