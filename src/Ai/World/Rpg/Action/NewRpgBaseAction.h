@@ -173,6 +173,8 @@ protected:
     bool HasActionableQuest();          // held quest with resolvable POI, or complete-unturned
     bool HasGatherProfAndTool();        // gathering profession (mining/herb) + required tool present
     bool NodeInRange(float r);          // a gather node within r yards (uses SelectGatherNode cap)
+    bool IsGatherNodeGo(GameObject* go);     // bot-independent: CHEST + mining/herb lock slot present
+    uint32 GatherSkillOfGo(GameObject* go);  // first MINING/HERBALISM skill in lock slots, else 0
     bool VendorInRange();               // vendor/repair NPC within pastimeRepairSellRadius
     bool EnemyNearForPvp();             // open-world PvP zone AND nearest hostile player present
 

@@ -1237,6 +1237,54 @@ ObjectGuid NewRpgBaseAction::SelectTrainingDummy()
 }
 
 
+bool NewRpgBaseAction::IsGatherNodeGo(GameObject* go)
+{
+    if (!go || !go->isSpawned())
+        return false;
+
+    if (go->GetGoType() != GAMEOBJECT_TYPE_CHEST)
+        return false;
+
+    LockEntry const* lockInfo = sLockStore.LookupEntry(go->GetGOInfo()->GetLockId());
+    if (!lockInfo)
+        return false;
+
+    for (uint8 i = 0; i < 8; ++i)
+    {
+        if (lockInfo->Type[i] != LOCK_KEY_SKILL)
+            continue;
+
+        uint32 skillId = SkillByLockType(LockType(lockInfo->Index[i]));
+        if (skillId == SKILL_MINING || skillId == SKILL_HERBALISM)
+            return true;
+    }
+    return false;
+}
+
+uint32 NewRpgBaseAction::GatherSkillOfGo(GameObject* go)
+{
+    if (!go || !go->isSpawned())
+        return 0;
+
+    if (go->GetGoType() != GAMEOBJECT_TYPE_CHEST)
+        return 0;
+
+    LockEntry const* lockInfo = sLockStore.LookupEntry(go->GetGOInfo()->GetLockId());
+    if (!lockInfo)
+        return 0;
+
+    for (uint8 i = 0; i < 8; ++i)
+    {
+        if (lockInfo->Type[i] != LOCK_KEY_SKILL)
+            continue;
+
+        uint32 skillId = SkillByLockType(LockType(lockInfo->Index[i]));
+        if (skillId == SKILL_MINING || skillId == SKILL_HERBALISM)
+            return skillId;
+    }
+    return 0;
+}
+
 ObjectGuid NewRpgBaseAction::SelectGatherNode()
 {
     GuidVector gos = context->GetValue<GuidVector>("nearest game objects")->Get();
@@ -1249,15 +1297,12 @@ ObjectGuid NewRpgBaseAction::SelectGatherNode()
         if (!go || !go->isSpawned())
             continue;
 
-        if (go->GetGoType() != GAMEOBJECT_TYPE_CHEST)
-            continue;
-
-        LockEntry const* lockInfo = sLockStore.LookupEntry(go->GetGOInfo()->GetLockId());
-        if (!lockInfo)
+        if (!IsGatherNodeGo(go))
             continue;
 
         float dist = bot->GetExactDist(go);
 
+        LockEntry const* lockInfo = sLockStore.LookupEntry(go->GetGOInfo()->GetLockId());
         bool eligible = false;
         for (uint8 i = 0; i < 8; ++i)
         {
