@@ -709,6 +709,7 @@ public:
     bool   raidSimOrphanReaper;    // master switch for the reaper
     uint32 raidSimReaperInterval;  // seconds between reaper passes
     uint32 raidSimReaperBatch;     // max orphan groups disbanded per pass (drip budget)
+    bool   raidSimReaperRescueSolo; // rescue solo bots found on dungeon maps (no live run)
 
     // Population dynamics (server-population-dynamics). Per-LEVEL targeting: each 10-level band has one
     // "bots per level" knob (populationBracket[b]); level 80 is the remainder (MaxPopulation - sum of bands).
