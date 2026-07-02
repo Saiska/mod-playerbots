@@ -837,14 +837,12 @@ bool PlayerbotAIConfig::Initialize()
     travelMountDistMin = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMin", 300.0f);
     travelMountDistMax = sConfigMgr->GetOption<float>("AiPlayerbot.TravelMount.DistMax", 2000.0f);
     if (travelMountDistMax < travelMountDistMin) std::swap(travelMountDistMin, travelMountDistMax);
-    gatheringCircuitMinNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MinNodes", 3);
-    gatheringCircuitMaxNodes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.MaxNodes", 6);
-    if (gatheringCircuitMaxNodes < gatheringCircuitMinNodes) std::swap(gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
     gatheringCircuitRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.Radius", 120.0f);
     gatheringCircuitTravelRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.TravelRadius", 2000.0f);
-    LOG_INFO("playerbots", "[MoreOccupations] mountDist={}-{} circuitNodes={}-{}",
+    gatheringCircuitDurationSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.DurationSec", 3600);
+    LOG_INFO("playerbots", "[MoreOccupations] mountDist={}-{} circuitTravelRadius={} durationSec={}",
              travelMountDistMin, travelMountDistMax,
-             gatheringCircuitMinNodes, gatheringCircuitMaxNodes);
+             gatheringCircuitTravelRadius, gatheringCircuitDurationSec);
 
     // --- occupation-machine config ---
     occupationWeight[RPG_DO_QUEST]          = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.DoQuest",   25);

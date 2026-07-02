@@ -2181,10 +2181,10 @@ void NewRpgBaseAction::EnterOccupation(NewRpgStatus status)
         }
         case RPG_GATHERING_CIRCUIT:
         {
-            uint32 maxNodes = urand(sPlayerbotAIConfig.gatheringCircuitMinNodes,
-                                    sPlayerbotAIConfig.gatheringCircuitMaxNodes);
-            botAI->rpgInfo.ChangeToGatheringCircuit(maxNodes);
-            return;                                             // CRASH RULE
+            // gather is DURATION-bound (GatheringCircuit.DurationSec); node count is only a runaway safety cap.
+            static constexpr uint32 kGatherNodeSafetyCap = 10000;
+            botAI->rpgInfo.ChangeToGatheringCircuit(kGatherNodeSafetyCap);
+            return;                                             // CRASH RULE — ChangeTo* is the last statement
         }
         case RPG_OUTDOOR_PVP:
         {

@@ -555,7 +555,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_GATHERING_CIRCUIT:
         {
             // GatheringCircuit finish — Task 6: stamp lastFinished + re-Decide (flat field; CRASH RULE).
-            if (info.HasStatusPersisted(statusGatheringDuration))
+            if (info.HasStatusPersisted(sPlayerbotAIConfig.gatheringCircuitDurationSec * IN_MILLISECONDS))
             {
                 info.lastFinished[RPG_GATHERING_CIRCUIT] = getMSTime();
                 Decide();
