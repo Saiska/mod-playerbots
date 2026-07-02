@@ -128,7 +128,7 @@ void PopulationDynamicsMgr::ConsiderPlayerLevel(Player* player)
     }
 }
 
-bool PopulationDynamicsMgr::IsSafeBot(Player* bot) const
+bool PopulationDynamicsMgr::IsPromotable(Player* bot) const
 {
     if (!bot || !bot->GetSession() || bot->GetSession()->isLogingOut() || bot->IsDuringRemoveFromWorld())
         return false;
@@ -140,7 +140,8 @@ bool PopulationDynamicsMgr::IsSafeBot(Player* bot) const
         return false;
     if (bot->IsInFlight())
         return false;
-    if (bot->GetMap() && bot->GetMap()->IsDungeon())     // in an instance map (raid-sim parks bots here)
+    if (!sPlayerbotAIConfig.populationPromoteInInstances &&
+        bot->GetMap() && bot->GetMap()->IsDungeon())
         return false;
     if (sRaidSimulationMgr.IsRaiding(bot->GetGUID()))    // never touch a bot being geared by raid-sim
         return false;
@@ -154,6 +155,13 @@ bool PopulationDynamicsMgr::IsSafeBot(Player* bot) const
         }
     }
     return true;
+}
+
+bool PopulationDynamicsMgr::IsSafeBot(Player* bot) const
+{
+    // Strict gatekeeper — always excludes dungeon maps regardless of PromoteInInstances.
+    // Promotion sites use IsPromotable, which may relax the IsDungeon gate via config.
+    return IsPromotable(bot) && !(bot->GetMap() && bot->GetMap()->IsDungeon());
 }
 
 void PopulationDynamicsMgr::TakeCensus(Census& out) const
@@ -215,7 +223,7 @@ void PopulationDynamicsMgr::CollectSafeBots(SafeBotPool& pool) const
         Player* p = it.second;
         if (!p || !p->IsInWorld() || !p->GetSession()->IsBot())
             continue;
-        if (!IsSafeBot(p))
+        if (!IsPromotable(p))
             continue;
         uint8 lvl = p->GetLevel();
         if (lvl < 1 || lvl > 80)
@@ -367,7 +375,7 @@ void PopulationDynamicsMgr::DripDrain()
         --toDrain;
 
         Player* bot = ObjectAccessor::FindPlayer(pp.guid);
-        if (!bot || !IsSafeBot(bot) || bot->GetLevel() != pp.expectLevel)
+        if (!bot || !IsPromotable(bot) || bot->GetLevel() != pp.expectLevel)
         {
             ++_planSkipped;
             continue;
