@@ -726,6 +726,9 @@ public:
     // Provision First-Aid bandages (and the fishing pole) to bots that have the matching skill.
     bool botProvisionConsumables{true};
 
+    // When a masterless bot would destroy a DE-eligible item, disenchant it first instead.
+    bool disenchantBeforeDestroy{true};
+
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)
     {
