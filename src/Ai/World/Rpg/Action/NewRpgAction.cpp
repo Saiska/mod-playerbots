@@ -1241,6 +1241,19 @@ bool NewRpgTravelMountAction::Execute(Event /*event*/)
     return false;
 }
 
+// gather-travel-to-node: bounded recent-visited ring. Remember up to this many just-finished
+// nodes so the next NearestGatherNode seed skips them (prevents A<->B ping-pong between the two
+// closest nodes). Oldest guid drops when the ring is full.
+static constexpr size_t GATHER_RECENT_VISITED_CAP = 16;
+static void PushGatherRecentVisited(NewRpgInfo::GatheringCircuit& gc, ObjectGuid guid)
+{
+    if (guid.IsEmpty())
+        return;
+    gc.recentVisited.push_back(guid);
+    if (gc.recentVisited.size() > GATHER_RECENT_VISITED_CAP)
+        gc.recentVisited.erase(gc.recentVisited.begin());
+}
+
 bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
@@ -1250,25 +1263,42 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
     if (data->visited >= data->maxNodes)
     {
         info.ChangeToIdle();
-        return true;
+        return true;                    // CRASH RULE — ChangeToIdle is the last statement
     }
+    // Seed the next target node from the boot-built index (reachable up to the travel radius),
+    // skipping every recently visited/abandoned node so the circuit advances instead of looping.
     if (data->node.IsEmpty())
     {
-        data->node = SelectGatherNode();
-        if (data->node.IsEmpty())
+        TravelMgr::GatherNodeHit hit;
+        if (!sTravelMgr.NearestGatherNode(bot, sPlayerbotAIConfig.gatheringCircuitTravelRadius,
+                                          data->recentVisited, hit))
         {
-            info.ChangeToIdle();   // no node nearby -> done
-            return true;
+            info.ChangeToIdle();        // no reachable node left -> done
+            return true;                // CRASH RULE — ChangeToIdle is the last statement
         }
+        data->node = hit.guid;
+        data->nodePos = hit.pos;
         data->harvesting = false;       // fresh node — no harvest in progress
         data->harvestStartMs = 0;
     }
     GameObject* node = ObjectAccessor::GetGameObject(*bot, data->node);
     if (!node || !node->isSpawned())
     {
+        // Far target whose grid isn't loaded yet -> travel leg: move toward the indexed position
+        // and wait for the grid (and the live object) to resolve on approach. R1: never treat
+        // MoveFarTo's return as an arrival test — use an explicit distance below SightDistance.
+        if (bot->GetExactDist(data->nodePos.GetPositionX(), data->nodePos.GetPositionY(),
+                              data->nodePos.GetPositionZ()) > 30.0f)
+        {
+            MoveFarTo(data->nodePos);
+            return true;
+        }
+        // We ARE at the position but there is no live object -> already harvested/despawned.
         if (data->harvesting)           // we were harvesting this one -> success
             ++data->visited;
+        PushGatherRecentVisited(*data, data->node);
         data->node = ObjectGuid();
+        data->nodePos = WorldPosition();
         data->harvesting = false;
         data->harvestStartMs = 0;
         return true;
@@ -1277,7 +1307,9 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
     {
         if (MoveWorldObjectTo(data->node))
             return true;
+        PushGatherRecentVisited(*data, data->node);
         data->node = ObjectGuid();      // unreachable -> try another
+        data->nodePos = WorldPosition();
         data->harvesting = false;
         data->harvestStartMs = 0;
         return true;
@@ -1303,7 +1335,9 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
     if (GetMSTimeDiffToNow(data->harvestStartMs) >= sPlayerbotAIConfig.gatherHarvestHoldMs)
     {
         ++data->visited;                 // gave up on this node -> count it and move on
+        PushGatherRecentVisited(*data, data->node);
         data->node = ObjectGuid();
+        data->nodePos = WorldPosition();
         data->harvesting = false;
         data->harvestStartMs = 0;
         return true;

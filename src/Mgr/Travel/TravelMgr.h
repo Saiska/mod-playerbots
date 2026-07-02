@@ -914,6 +914,10 @@ public:
     bool AnyGatherNodeWithin(Player* bot, float radius) const;
     // Nearest gatherable node to the bot within `radius`, skipping `excludeGuid`; false if none.
     bool NearestGatherNode(Player* bot, float radius, ObjectGuid excludeGuid, GatherNodeHit& out) const;
+    // Overload that skips an entire SET of guids (the circuit's recent-visited ring) so a bot
+    // doesn't ping-pong between the two closest nodes. Same lock-free neighbourhood sweep.
+    bool NearestGatherNode(Player* bot, float radius, std::vector<ObjectGuid> const& exclude,
+                           GatherNodeHit& out) const;
 
     template <class D, class W, class URBG>
     void weighted_shuffle(D first, D last, W first_weight, W last_weight, URBG&& g)

@@ -5234,8 +5234,20 @@ bool TravelMgr::AnyGatherNodeWithin(Player* bot, float radius) const
 }
 
 // gather-travel-to-node: nearest gatherable node within `radius` (2D), skipping `excludeGuid`.
-// Same lock-free neighbourhood sweep as AnyGatherNodeWithin; returns the node closest to the bot.
+// Thin adapter over the set-exclusion overload below (single guid -> one-element exclude set).
 bool TravelMgr::NearestGatherNode(Player* bot, float radius, ObjectGuid excludeGuid, GatherNodeHit& out) const
+{
+    std::vector<ObjectGuid> exclude;
+    if (!excludeGuid.IsEmpty())
+        exclude.push_back(excludeGuid);
+    return NearestGatherNode(bot, radius, exclude, out);
+}
+
+// gather-travel-to-node: nearest gatherable node within `radius` (2D), skipping every guid in
+// `exclude` (the circuit's recent-visited ring). Same lock-free neighbourhood sweep as
+// AnyGatherNodeWithin; returns the node closest to the bot.
+bool TravelMgr::NearestGatherNode(Player* bot, float radius, std::vector<ObjectGuid> const& exclude,
+                                  GatherNodeHit& out) const
 {
     if (!bot)
         return false;
@@ -5264,7 +5276,8 @@ bool TravelMgr::NearestGatherNode(Player* bot, float radius, ObjectGuid excludeG
 
             for (GatherNode const& node : cellIt->second)
             {
-                if (ObjectGuid::Create<HighGuid::GameObject>(node.entry, node.spawnId) == excludeGuid)
+                ObjectGuid const nodeGuid = ObjectGuid::Create<HighGuid::GameObject>(node.entry, node.spawnId);
+                if (std::find(exclude.begin(), exclude.end(), nodeGuid) != exclude.end())
                     continue;
 
                 if (!bot->HasSkill(node.skillId) || bot->GetSkillValue(node.skillId) < node.reqValue)
