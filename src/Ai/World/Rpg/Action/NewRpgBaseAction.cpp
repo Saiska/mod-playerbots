@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "AiFactory.h"
 #include "AiObjectContext.h"
 #include "BroadcastHelper.h"
 #include "CellImpl.h"
@@ -1990,6 +1991,39 @@ bool NewRpgBaseAction::EnemyNearForPvp()
     return !enemies.empty();
 }
 
+// farm-lean-by-class: returns (gatherMult, grindMult) — a soft per-bot tilt of the
+// gather-vs-grind occupation weights by class + active talent spec.
+// Healer branch is evaluated FIRST so a Resto Druid (tab 2 = healer) is never misclassified
+// as a grinder. The !IsHeal guard on the grinder branch is belt-and-suspenders.
+// Never returns a hard 0; caller should floor each multiplier with max(1u, ...).
+// Pure + const: reads bot via static helpers only; no state transitions; no side effects.
+std::pair<float, float> NewRpgBaseAction::FarmLean() const
+{
+    // Multiplier constants (named for Task 2 reference and readability).
+    static constexpr float kHealerGather  = 3.0f;  // healers prefer peaceful gathering
+    static constexpr float kHealerGrind   = 0.5f;  // healers avoid active combat grinding
+    static constexpr float kGrinderGather = 0.5f;  // grinders rarely stop to pick flowers
+    static constexpr float kGrinderGrind  = 2.0f;  // grinders prefer killing over gathering
+
+    // 1. Healer spec: strong gather lean.
+    //    IsHeal(bySpec=true) covers Holy/Disc Priest, Resto Druid (tab 2), Resto Shaman, Holy Paladin.
+    if (PlayerbotAI::IsHeal(bot, true))
+        return { kHealerGather, kHealerGrind };
+
+    // 2. Grinder: Hunter (natural solo combat class) or Feral Druid (tab 1 = Feral Combat).
+    //    Reach here only when IsHeal is false (branch 1 returned), so Resto Druid (tab 2)
+    //    can never satisfy the tab == 1 check — the healer-first ordering is the true guard.
+    uint8 cls = bot->getClass();
+    if (cls == CLASS_HUNTER ||
+        (cls == CLASS_DRUID && AiFactory::GetPlayerSpecTab(bot) == 1))
+    {
+        return { kGrinderGather, kGrinderGrind };
+    }
+
+    // 3. Neutral (all other classes/specs).
+    return { 1.0f, 1.0f };
+}
+
 // ── end occupation-machine Task 2 predicates ─────────────────────────────────
 
 // ── occupation-state-machine Task 4: NEEDS→DECIDE resolver ───────────────────
@@ -2130,6 +2164,7 @@ void NewRpgBaseAction::Decide()
     struct Cand { NewRpgStatus s; uint32 w; };
     std::vector<Cand> feasible;
     uint32 sum = 0;
+    auto const [gatherMult, grindMult] = FarmLean();   // per-bot class/spec lean (Task 2)
     for (NewRpgStatus s : {RPG_DO_QUEST, RPG_GATHERING_CIRCUIT, RPG_OUTDOOR_PVP,
                            RPG_REST /*HubLife*/, RPG_GO_GRIND /*+RestAtHub default*/})
     {
@@ -2141,6 +2176,11 @@ void NewRpgBaseAction::Decide()
         uint32 cdMs = sPlayerbotAIConfig.occupationCooldownMs[s];
         if (cdMs && GetMSTimeDiffToNow(botAI->rpgInfo.lastFinished[s]) < cdMs)
             w = std::max<uint32>(1u, static_cast<uint32>(std::lround(w * sPlayerbotAIConfig.occupationCooldownFrac)));
+        // Apply per-bot farm lean (soft tilt — max(1u,...) guarantees neither option is excluded).
+        if (s == RPG_GATHERING_CIRCUIT)
+            w = std::max<uint32>(1u, static_cast<uint32>(std::lround(w * gatherMult * sPlayerbotAIConfig.gatherLeanBias)));
+        else if (s == RPG_GO_GRIND)
+            w = std::max<uint32>(1u, static_cast<uint32>(std::lround(w * grindMult)));
         feasible.push_back({s, w});
         sum += w;
     }

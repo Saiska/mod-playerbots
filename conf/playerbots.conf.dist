@@ -1277,6 +1277,10 @@ AiPlayerbot.TravelMount.DistMin = 300.0
 AiPlayerbot.TravelMount.DistMax = 2000.0
 AiPlayerbot.GatheringCircuit.TravelRadius = 2000.0
 AiPlayerbot.GatheringCircuit.DurationSec = 3600
+# farm-lean-by-class: GatherLeanBias is a global nudge (>1 = bots lean gather more, <1 = less)
+# applied on top of the per-bot class/spec tilt (healer specs lean gather; feral druid & hunter
+# lean grind; others neutral). Soft tilt only — grind stays the always-feasible fallback. Default 1.0.
+AiPlayerbot.GatherLeanBias = 1.0
 #
 #    AiPlayerbot.Gather.HarvestHoldMs
 #        How long (ms) a bot on the gathering_circuit occupation holds at a node for its mining/herb
