@@ -85,7 +85,6 @@ protected:
     ObjectGuid SelectVendorNpc();
     ObjectGuid SelectTrainingDummy();
     bool       SelectFarTaxiDest(WorldPosition& out);
-    ObjectGuid SelectGatherNode();   // promoted from file-static
     // Town-sized grid-scan prop resolvers (promoted from NewRpgStatusUpdateAction so both the rest
     // engine AND the upkeep capital poses (PoseAtProp) resolve props identically — no drift).
     // SelectNearestNpcWithFlag: nearest friendly creature carrying `npcFlag` (banker/auctioneer/
@@ -101,7 +100,7 @@ protected:
     // unresolvable (caller advances up.step and clears up.target). `up` is a live reference into the
     // variant — caller already did the get_if; never re-enters throwing variant access.
     bool PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo::Upkeep& up);
-    // Nearest GAMEOBJECT_TYPE_CHAIR within `radius` (mirrors SelectGatherNode's scan).
+    // Nearest GAMEOBJECT_TYPE_CHAIR within `radius` (nearest-spawned-GO grid scan).
     // Empty if none — RPG_REST then floor-sits in place.
     ObjectGuid SelectInnChair(float radius);
     bool HasQuestToAcceptOrReward(WorldObject* object);
@@ -172,9 +171,6 @@ protected:
     bool MaintenanceOverdue();          // time since lastUpkeepMs > maintenanceOverdueMs
     bool HasActionableQuest();          // held quest with resolvable POI, or complete-unturned
     bool HasGatherProfAndTool();        // gathering profession (mining/herb) + required tool present
-    bool NodeInRange(float r);          // a gather node within r yards (uses SelectGatherNode cap)
-    bool IsGatherNodeGo(GameObject* go);     // bot-independent: CHEST + mining/herb lock slot present
-    uint32 GatherSkillOfGo(GameObject* go);  // first MINING/HERBALISM skill in lock slots, else 0
     bool VendorInRange();               // vendor/repair NPC within pastimeRepairSellRadius
     bool EnemyNearForPvp();             // open-world PvP zone AND nearest hostile player present
 

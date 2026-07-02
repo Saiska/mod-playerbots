@@ -905,18 +905,21 @@ public:
     // gather-travel-to-node: results from a nearest-node query against the boot-built index.
     struct GatherNodeHit
     {
-        WorldPosition   pos;
-        ObjectGuid      guid;
-        uint32          skillId;
+        WorldPosition       pos;
+        ObjectGuid::LowType spawnId;   // DB spawn low guid — the STABLE key; the live GameObject's
+                                       // runtime guid is generated at LoadFromDB and is NOT this,
+                                       // so callers resolve the object via GetGameObjectBySpawnIdStore.
+        uint32              entry;     // gameobject_template entry (disambiguates the spawn store)
+        uint32              skillId;
     };
     // True if any gather node the bot can harvest sits within `radius` of the bot on its map.
     // Reads the immutable boot-built index (lock-free); sweeps only the bot's cell neighbourhood.
     bool AnyGatherNodeWithin(Player* bot, float radius) const;
-    // Nearest gatherable node to the bot within `radius`, skipping `excludeGuid`; false if none.
-    bool NearestGatherNode(Player* bot, float radius, ObjectGuid excludeGuid, GatherNodeHit& out) const;
-    // Overload that skips an entire SET of guids (the circuit's recent-visited ring) so a bot
-    // doesn't ping-pong between the two closest nodes. Same lock-free neighbourhood sweep.
-    bool NearestGatherNode(Player* bot, float radius, std::vector<ObjectGuid> const& exclude,
+    // Nearest gatherable node to the bot within `radius`, skipping every spawnId in
+    // `excludeSpawnIds` (the circuit's recent-visited ring) so a bot doesn't ping-pong between the
+    // two closest nodes. Lock-free neighbourhood sweep; false if none. Keyed on the STABLE DB
+    // spawnId (never a fabricated runtime guid).
+    bool NearestGatherNode(Player* bot, float radius, std::vector<ObjectGuid::LowType> const& excludeSpawnIds,
                            GatherNodeHit& out) const;
 
     template <class D, class W, class URBG>

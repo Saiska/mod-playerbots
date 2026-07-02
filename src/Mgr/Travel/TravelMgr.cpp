@@ -5141,8 +5141,8 @@ void TravelMgr::PrepareDestinationCache()
         if (!got)
             continue;
 
-        // mirrors NewRpgBaseAction::IsGatherNodeGo, classified from spawn template
-        // (bot-independent): a CHEST whose LockEntry has a MINING/HERBALISM skill slot.
+        // classified from spawn template (bot-independent): a CHEST whose LockEntry
+        // has a MINING/HERBALISM skill slot.
         if (got->type != GAMEOBJECT_TYPE_CHEST)
             continue;
 
@@ -5233,20 +5233,12 @@ bool TravelMgr::AnyGatherNodeWithin(Player* bot, float radius) const
     return false;
 }
 
-// gather-travel-to-node: nearest gatherable node within `radius` (2D), skipping `excludeGuid`.
-// Thin adapter over the set-exclusion overload below (single guid -> one-element exclude set).
-bool TravelMgr::NearestGatherNode(Player* bot, float radius, ObjectGuid excludeGuid, GatherNodeHit& out) const
-{
-    std::vector<ObjectGuid> exclude;
-    if (!excludeGuid.IsEmpty())
-        exclude.push_back(excludeGuid);
-    return NearestGatherNode(bot, radius, exclude, out);
-}
-
-// gather-travel-to-node: nearest gatherable node within `radius` (2D), skipping every guid in
-// `exclude` (the circuit's recent-visited ring). Same lock-free neighbourhood sweep as
-// AnyGatherNodeWithin; returns the node closest to the bot.
-bool TravelMgr::NearestGatherNode(Player* bot, float radius, std::vector<ObjectGuid> const& exclude,
+// gather-travel-to-node: nearest gatherable node within `radius` (2D), skipping every spawnId in
+// `excludeSpawnIds` (the circuit's recent-visited ring). Same lock-free neighbourhood sweep as
+// AnyGatherNodeWithin; returns the node closest to the bot. Keyed on the STABLE DB spawnId — the
+// live GameObject is resolved by the caller via GetGameObjectBySpawnIdStore (a runtime guid
+// fabricated from entry+spawnId does NOT match LoadFromDB's generated guid).
+bool TravelMgr::NearestGatherNode(Player* bot, float radius, std::vector<ObjectGuid::LowType> const& excludeSpawnIds,
                                   GatherNodeHit& out) const
 {
     if (!bot)
@@ -5276,8 +5268,7 @@ bool TravelMgr::NearestGatherNode(Player* bot, float radius, std::vector<ObjectG
 
             for (GatherNode const& node : cellIt->second)
             {
-                ObjectGuid const nodeGuid = ObjectGuid::Create<HighGuid::GameObject>(node.entry, node.spawnId);
-                if (std::find(exclude.begin(), exclude.end(), nodeGuid) != exclude.end())
+                if (std::find(excludeSpawnIds.begin(), excludeSpawnIds.end(), node.spawnId) != excludeSpawnIds.end())
                     continue;
 
                 if (!bot->HasSkill(node.skillId) || bot->GetSkillValue(node.skillId) < node.reqValue)
@@ -5299,7 +5290,8 @@ bool TravelMgr::NearestGatherNode(Player* bot, float radius, std::vector<ObjectG
         return false;
 
     out.pos = WorldPosition(bot->GetMapId(), best->posX, best->posY, best->posZ);
-    out.guid = ObjectGuid::Create<HighGuid::GameObject>(best->entry, best->spawnId);
+    out.spawnId = best->spawnId;
+    out.entry = best->entry;
     out.skillId = best->skillId;
     return true;
 }
