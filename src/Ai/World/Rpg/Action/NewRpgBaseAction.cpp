@@ -1781,14 +1781,8 @@ float NewRpgBaseAction::DistToPoi(POIInfo const& poi)
 
 bool NewRpgBaseAction::FallToFarmOrRest()
 {
-    if (IsNearRestHub(sPlayerbotAIConfig.rpgNearHubRadius))
-    {
-        botAI->rpgInfo.ChangeToRest();
-        bot->SetStandState(UNIT_STAND_STATE_SIT);
-        return true;
-    }
-    // Farm in place: anchor GoGrind to the bot's current position, which is always non-empty
-    // so the commit cannot fail — this is the guarantee that breaks the Idle leak.
+    // rest-upkeep-consolidation: REST is a post-upkeep coda only, never a standalone fallback.
+    // Farm in place — the current-pos anchor is non-empty so the commit cannot fail (no Idle leak).
     botAI->rpgInfo.ChangeToGoGrind(WorldPosition(bot));
     return true;
 }
@@ -2060,9 +2054,6 @@ bool NewRpgBaseAction::OccupationFeasible(NewRpgStatus status)
             return HasGatherProfAndTool() && sTravelMgr.AnyGatherNodeWithin(bot, sPlayerbotAIConfig.gatheringCircuitTravelRadius);
         case RPG_OUTDOOR_PVP:
             return EnemyNearForPvp();
-        case RPG_REST:
-            // HubLife is now hub-gated: a far bot never strands in FISH/FIELD_REST.
-            return NearHub(sPlayerbotAIConfig.rpgNearHubRadius);
         case RPG_GO_GRIND:
             // Always-feasible wild default; EnterOccupation does the Grind-vs-RestAtHub split.
             return InOpenWorld();
@@ -2121,21 +2112,10 @@ void NewRpgBaseAction::EnterOccupation(NewRpgStatus status)
             botAI->rpgInfo.ChangeToOutdoorPvp();
             return;                                             // CRASH RULE
         }
-        case RPG_REST:
-        {
-            botAI->rpgInfo.ChangeToRest();
-            return;                                             // CRASH RULE
-        }
         case RPG_GO_GRIND:
         {
-            // Grind-vs-RestAtHub default split (FallToFarmOrRest semantics): near a hub → rest in
-            // place; else grind at a real grind pos, falling back to the current-pos anchor (always
-            // non-empty so the commit cannot fail). Never dead-ends to Idle.
-            if (NearHub(sPlayerbotAIConfig.rpgNearHubRadius))
-            {
-                botAI->rpgInfo.ChangeToRest();
-                return;                                         // CRASH RULE
-            }
+            // rest-upkeep-consolidation: REST is coda-only now — never enter it here. Near a hub
+            // we still grind (in place if no grind pos); the current-pos anchor is always non-empty.
             WorldPosition pos = SelectRandomGrindPos(bot);
             if (pos != WorldPosition())
             {
@@ -2166,7 +2146,7 @@ void NewRpgBaseAction::Decide()
     uint32 sum = 0;
     auto const [gatherMult, grindMult] = FarmLean();   // per-bot class/spec lean (Task 2)
     for (NewRpgStatus s : {RPG_DO_QUEST, RPG_GATHERING_CIRCUIT, RPG_OUTDOOR_PVP,
-                           RPG_REST /*HubLife*/, RPG_GO_GRIND /*+RestAtHub default*/})
+                           RPG_GO_GRIND /*+RestAtHub default*/})
     {
         if (!OccupationFeasible(s))
             continue;                                       // precondition ONLY (spec §5.1)
