@@ -393,40 +393,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             auto& rest = *restp;
 
-            // P0 SELECT (ONCE per episode — only before a hub has been chosen). The hub path
-            // intentionally leaves subtype == RS_NONE to defer the pick to arrival (P2), so we
-            // must NOT also gate P0 on subtype alone or it re-enters every tick and the P1/P2
-            // travel block below (also keyed on subtype == RS_NONE) becomes unreachable. Gating
-            // additionally on "no hub chosen yet" lets P0 run once, then fall through to P1/P2.
-            if (rest.subtype == RS_NONE && rest.hubPos == WorldPosition())
-            {
-                WorldPosition hub = SelectRandomCampPos(bot);          // curated hub or empty
-                bool hubReachable = (hub != WorldPosition());
-                rest.hubPos = hub;
-                if (!hubReachable)
-                {
-                    RestSubtype st = PickRestSubtype(false);           // anywhere subtype or FIELD_REST
-                    rest.subtype = st;
-                    if (st != RS_FIELD_REST && !AcquireSubtypeTarget(st)) rest.subtype = RS_FIELD_REST;
-                }
-                // hub path defers subtype pick to arrival (P2)
-                return true;
-            }
-
-            // P1 TRAVEL (hub path; subtype stays RS_NONE until arrival). On arrival, stamp
-            // hubArriveT and STOP — do not resolve the subtype the same tick as the teleport:
-            // the bot's "nearest npcs"/"nearest game objects" still hold the STALE pre-teleport
-            // grid, so acquire would fail and everything would collapse to FIELD_REST.
-            if (rest.hubPos != WorldPosition() && rest.subtype == RS_NONE && rest.hubArriveT == 0)
-            {
-                HubTravel t = TravelToHubOrTeleport(rest.hubPos);
-                if (t == HUB_EN_ROUTE) return true;                    // still traveling -> stay in P1
-                if (t == HUB_GIVE_UP)                                  // beyond budget -> field-rest in place
-                { rest.hubPos = WorldPosition(); rest.subtype = RS_FIELD_REST; return true; }
-                rest.hubArriveT = getMSTime();                         // arrived -> settle, then P2 next tick
-                return true;
-            }
-
             // rest-sit-render-diagnostic (TEMP): one read-only line per throttled tick, all phases.
             bool sitDiag = SitDiagDue(bot, info);
             if (sitDiag)
@@ -695,11 +661,9 @@ bool NewRpgStatusUpdateAction::UpkeepDwell(NewRpgInfo::Upkeep& up, uint32 secs, 
 // last statement before return; nothing reads `up` after a Decide().
 bool NewRpgStatusUpdateAction::TickUpkeepLocal(NewRpgInfo::Upkeep& up)
 {
-    NewRpgInfo& info = botAI->rpgInfo;
-
-    // Travel to the hub first — but the inn step (Task 7) drives its own movement, so don't re-drive
-    // toward the upkeep hub once we've reached the inn step.
-    if (!UpkeepStepIsInn(up.step) && bot->GetExactDist(up.hubPos) > 10.0f)
+    // Only the SELL/MAINT errands need the bot anchored at the hub; the questgiver pose and the
+    // finish/coda drive their own movement (or none).
+    if (up.step <= 2 && bot->GetExactDist(up.hubPos) > 10.0f)
     {
         if (DriveTravel(up.hubPos) == TravelResult::EN_ROUTE)
             return true;
@@ -725,29 +689,30 @@ bool NewRpgStatusUpdateAction::TickUpkeepLocal(NewRpgInfo::Upkeep& up)
             up.stepStartMs = 0;
             return true;
         }
-        case 3:   // INN — reuse the shared inn rest step (Task 7); it ends with Decide().
-            return TickUpkeepInn(up);
+        case 3:   // QUESTGIVER — cosmetic loiter pose (skip if none nearby).
+        {
+            if (PoseAtNearbyNpc(UNIT_NPC_FLAG_QUESTGIVER,
+                                urand(sPlayerbotAIConfig.upkeepQuestGiverMinSec,
+                                      sPlayerbotAIConfig.upkeepQuestGiverMaxSec) * IN_MILLISECONDS, up))
+                return true;
+            up.step = 4;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 4:   // TERMINAL — post-upkeep rest coda.
         default:
-            info.lastUpkeepMs = getMSTime();
-            Decide();
-            return true;   // CRASH RULE
+            return TickUpkeepFinish(up);
     }
 }
 
-// occupation-upkeep-two-tier Task 7 — the tier's inn step. The LOCAL pipeline ends at step 3
-// (sell->maintenance->inn); the CAPITAL pipeline ends at step 8. Both delegate their final inn step
-// to TickUpkeepInn, so this predicate must report the inn step of BOTH tiers.
-bool NewRpgStatusUpdateAction::UpkeepStepIsInn(uint8 step) const
-{
-    return step == 3 || step == 8;   // LOCAL inn = 3, CAPITAL inn = 8
-}
 
 // CAPITAL upkeep: sell, cosmetic city poses (bank/AH/mail/trainer), maintenance, a gated combat-dummy
-// tail, then the shared inn rest. Steps 1..8 (step 0 = acquire, handled in the RPG_UPKEEP case).
+// tail, then the post-upkeep rest coda. Steps 1..8 (step 0 = acquire, handled in the RPG_UPKEEP case).
 // PoseAtProp drives its own intra-city hop to each prop; only the leading SELL/MAINTENANCE errands
 // need the bot anchored at the capital hub, so the initial hub travel is gated on step 1. CRASH RULE:
-// `up` is the caller's already-get_if'd reference; no Decide()/ChangeTo* lives here (the inn step,
-// which owns the terminal Decide(), is reached via TickUpkeepInn).
+// `up` is the caller's already-get_if'd reference; no Decide()/ChangeTo* lives here (the terminal
+// rest coda, which owns those ops, is reached via TickUpkeepFinish at step 8).
 bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
 {
     // Travel to the capital anchor before the errand chain. The pose steps resolve + hop to their own
@@ -861,50 +826,89 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             up.stepStartMs = 0;
             return true;
         }
-        case 8:   // INN — shared inn rest step; it owns its movement and ends with Decide().
+        case 8:   // QUESTGIVER — cosmetic loiter pose (skip if none nearby).
+        {
+            if (PoseAtNearbyNpc(UNIT_NPC_FLAG_QUESTGIVER,
+                                urand(sPlayerbotAIConfig.upkeepQuestGiverMinSec,
+                                      sPlayerbotAIConfig.upkeepQuestGiverMaxSec) * IN_MILLISECONDS, up))
+                return true;
+            up.step = 9;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 9:   // TERMINAL — post-upkeep rest coda.
         default:
-            return TickUpkeepInn(up);
+            return TickUpkeepFinish(up);
     }
 }
 
-// Shared inn rest step for BOTH tiers (LOCAL step 3 / CAPITAL step 8). This is the REAL functional
-// rest — it reuses the rest engine's TAVERN sit/seat behavior (HoldSeat) verbatim so the bot earns
-// rested XP, NOT a cosmetic emote pose. The inn step owns its own movement: HoldSeat paths the bot to
-// the resolved chair (and floor-sits in place if none is reachable). Terminal path ends with Decide()
-// as its LAST statement (CRASH RULE). `up` is the caller's already-get_if'd reference.
-bool NewRpgStatusUpdateAction::TickUpkeepInn(NewRpgInfo::Upkeep& up)
+// rest-upkeep-consolidation — cosmetic loiter pose at a nearby NPC of `npcFlag`, for both upkeep
+// tiers. The bot is already at its hub, so a local grid-scan resolves the prop (no capital-coord
+// lookup). No transaction — pure ambiance. Returns true = still posing (caller returns this tick),
+// false = done OR none nearby (caller advances the step). CRASH RULE: no ChangeTo*/Decide() here.
+bool NewRpgStatusUpdateAction::PoseAtNearbyNpc(uint32 npcFlag, uint32 dwellMs, NewRpgInfo::Upkeep& up)
 {
-    NewRpgInfo& info = botAI->rpgInfo;
-
-    // Entry tick: stamp the inn dwell (reuse the existing inn dwell knobs) and resolve a chair once.
-    // up.target is free at the inn step (the prior pose/errand steps cleared it on advance); we reuse
-    // it to persist the chair guid across ticks. An empty chair → HoldSeat floor-sits in place.
-    if (up.stepStartMs == 0)
+    // ACQUIRE (once): nearest matching NPC in the loaded grid.
+    if (up.target.IsEmpty())
     {
-        up.stepStartMs = getMSTime();
-        up.dwellMs = urand(sPlayerbotAIConfig.restHubDwellMinSec,
-                           sPlayerbotAIConfig.restHubDwellMaxSec) * IN_MILLISECONDS;
-        up.target = SelectInnChair(15.0f);   // chair optional — empty = floor-sit (still real rest)
+        ObjectGuid npc = SelectNearestNpcWithFlag(npcFlag);
+        if (npc.IsEmpty())
+            return false;   // none nearby → clean skip
+        up.target          = npc;
+        up.stepStartMs     = 0;
+        up.chosenDwellPose = ResolveHeldPose(BEH_WANDER_NPC, (uint8)POI_NONE, (uint8)urand(0, 5));
     }
 
-    // Reconstruct the minimal Rest state HoldSeat operates on, seeded from the Upkeep fields. The chair
-    // guid persists in up.target; the seated flags are DERIVED from the bot's live stand state each tick
-    // (so we never re-Use a chair we're already sitting on, and no Rest-only struct fields are needed).
-    NewRpgInfo::Rest seat;
-    seat.subtype = RS_TAVERN;
-    seat.chair = up.target;
-    seat.onChair = up.target && bot->getStandState() >= UNIT_STAND_STATE_SIT_LOW_CHAIR;
-    seat.seatState = seat.onChair ? bot->getStandState() : uint8(UNIT_STAND_STATE_SIT);
-    bool sitDiag = SitDiagDue(bot, info);   // rest-sit-render-diagnostic: also instrument the UPKEEP arm
-    HoldSeat(seat, sitDiag);                 // paths to + sits the chair (or floor-sits), holds the pose
-    up.target = seat.chair;                  // reflect a HoldSeat chair-abandon (despawn/path fail) back
+    WorldObject* npcObj = ObjectAccessor::GetWorldObject(*bot, up.target);
+    if (!npcObj)
+        return false;   // despawned → skip
 
-    if (GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs)
-        return true;                         // still resting at the inn
+    // TRAVEL: walk within interaction range (witness-gated; teleports unwitnessed).
+    if (bot->GetExactDist(npcObj) > INTERACTION_DISTANCE)
+    {
+        TravelResult const tr = DriveTravel(WorldPosition(npcObj));
+        if (tr == TravelResult::GAVE_UP)
+            return false;
+        if (tr != TravelResult::ARRIVED)
+            return true;
+    }
 
-    info.lastUpkeepMs = getMSTime();         // flat field — safe to stamp before Decide()
+    // PERFORM: face + hold the loiter pose for the dwell.
+    if (up.stepStartMs == 0)
+    {
+        bot->SetFacingToObject(npcObj);
+        up.stepStartMs = getMSTime();
+        up.dwellMs     = dwellMs;
+    }
+    TickEmoteCadence(BEH_WANDER_NPC, (uint8)POI_NONE, /*skipSustainedPose=*/false, up.chosenDwellPose);
+    return GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs;
+}
+
+// rest-upkeep-consolidation — terminal step of BOTH tiers. Replaces the old always-on inn sit.
+// Roll AfterUpkeepChance: yes → enter REST in place (bot is already in the hub; TAVERN reproduces
+// the old inn rest); no → back to work. CRASH RULE: ChangeTo*/Decide() is the LAST statement.
+bool NewRpgStatusUpdateAction::TickUpkeepFinish(NewRpgInfo::Upkeep& up)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    info.lastUpkeepMs = getMSTime();   // flat field — safe to stamp before any ChangeTo*/Decide()
+
+    if (roll_chance_f(sPlayerbotAIConfig.restAfterUpkeepChance * 100.0f))
+    {
+        info.ChangeToRest();
+        // Seed REST in place so it skips the hub-travel path (removed in the next task) and lands
+        // straight in the P2 acquire: bot is already at the hub, no teleport/settle needed.
+        if (auto* rp = std::get_if<NewRpgInfo::Rest>(&info.data))
+        {
+            rp->hubPos     = WorldPosition(bot);
+            rp->hubArriveT = getMSTime();   // settle window elapses harmlessly (grid already loaded)
+            rp->subtype    = RS_NONE;       // P2 picks an ambient subtype next tick
+        }
+        return true;   // CRASH RULE — touch nothing after ChangeTo*
+    }
+
     Decide();
-    return true;                             // CRASH RULE — Decide() is the last statement
+    return true;       // CRASH RULE
 }
 
 bool NewRpgGoGrindAction::Execute(Event /*event*/)

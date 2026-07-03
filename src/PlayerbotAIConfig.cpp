@@ -807,6 +807,11 @@ bool PlayerbotAIConfig::Initialize()
     restHubHubRange         = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.HubRange", 2500.0f);
     restHubWitnessRange     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.WitnessRange", 120.0f);
     restHubTravelBudget     = sConfigMgr->GetOption<float>("AiPlayerbot.RestHub.TravelBudget", 4000.0f);
+    restAfterUpkeepChance   = sConfigMgr->GetOption<float>("AiPlayerbot.Rest.AfterUpkeepChance", 0.50f);
+    upkeepQuestGiverMinSec  = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.QuestGiverMinSec", 45);
+    upkeepQuestGiverMaxSec  = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.QuestGiverMaxSec", 90);
+    // clamp: urand requires min<=max (matches the upkeep min/max swap block above)
+    if (upkeepQuestGiverMinSec > upkeepQuestGiverMaxSec) std::swap(upkeepQuestGiverMinSec, upkeepQuestGiverMaxSec);
     restHubStrollPoiCount   = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.Stroll.PoiCount", 3);
     restHubStrollPausePerPoiSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.RestHub.Stroll.PausePerPoi", 45);
     restHubTrainerTypeFidelity  = sConfigMgr->GetOption<bool>("AiPlayerbot.RestHub.TrainerTypeFidelity", true);

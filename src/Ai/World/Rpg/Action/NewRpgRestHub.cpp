@@ -727,6 +727,25 @@ RestSubtype PickRestSubtypePure(const uint16 weight[RS_COUNT], const bool avail[
     return RS_FIELD_REST;   // nothing available, or roll fell through rounding
 }
 
+bool RestSubtypePickerEligible(RestSubtype st)
+{
+    switch (st)
+    {
+        case RS_TAVERN:
+        case RS_FIELD_REST:
+        case RS_FISH:
+        case RS_STROLL:
+        case RS_DUEL:
+        case RS_SPECTATE:
+        case RS_PROFESSION_CRAFT:
+            return true;
+        default:
+            // VENDOR/BANK/AH/MAIL/CLASS_TRAINER/DUMMY (owned by UPKEEP), FLIGHT, QUEST_GIVER
+            // (moved to UPKEEP), SOCIAL (retired).
+            return false;
+    }
+}
+
 RestSubtype NewRpgStatusUpdateAction::PickRestSubtype(bool hubReachable)
 {
     uint16 w[RS_COUNT];
@@ -734,7 +753,7 @@ RestSubtype NewRpgStatusUpdateAction::PickRestSubtype(bool hubReachable)
     for (uint8 i = 0; i < RS_COUNT; ++i)
     {
         RestSubtype st = (RestSubtype)i;
-        if (st == RS_SOCIAL)        // upkeep-sociability: SOCIAL retired (folded into upkeep/loiter dwell)
+        if (!RestSubtypePickerEligible(st))
         {
             avail[i] = false;
             w[i] = 0;

@@ -78,8 +78,7 @@ protected:
     // one of the per-tier pipeline ticks. Both tiers share the dwell/one-shot-action primitive below.
     bool TickUpkeepLocal(NewRpgInfo::Upkeep& up);    // Task 6: travel->sell->maintenance->inn (steps 1..3)
     bool TickUpkeepCapital(NewRpgInfo::Upkeep& up);  // Task 7: capital errand chain + city poses
-    bool TickUpkeepInn(NewRpgInfo::Upkeep& up);      // Task 7: shared inn rest step (ends with Decide())
-    bool UpkeepStepIsInn(uint8 step) const;          // Task 7: true for the tier's inn step
+    bool TickUpkeepFinish(NewRpgInfo::Upkeep& up);   // rest-upkeep-consolidation: terminal step (rest coda)
 
     // Shared dwell + one-shot-action primitive used by BOTH tiers. On the entry tick of a step
     // (up.stepStartMs == 0) it stamps stepStartMs = getMSTime(), sets up.dwellMs = secs*IN_MILLISECONDS,
@@ -87,6 +86,9 @@ protected:
     // Subsequent ticks issue nothing and return GetMSTimeDiffToNow(up.stepStartMs) >= up.dwellMs.
     // `vendorEvent` selects the SellAction "rpg action"/"vendor" event form (only meaningful for "sell").
     bool UpkeepDwell(NewRpgInfo::Upkeep& up, uint32 secs, std::string const& action, bool vendorEvent = false);
+
+    // rest-upkeep-consolidation: cosmetic loiter pose at a nearby NPC (local grid-scan; both tiers).
+    bool PoseAtNearbyNpc(uint32 npcFlag, uint32 dwellMs, NewRpgInfo::Upkeep& up);
 
     // static NewRpgStatusTransitionProb transitionMat;
     const int32 statusWanderNpcDuration = 5 * MINUTE  * IN_MILLISECONDS ;

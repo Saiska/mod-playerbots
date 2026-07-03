@@ -2860,6 +2860,7 @@ void RandomPlayerbotMgr::PrintStats()
     uint32 supByBlock[IB_GROUPED + 1] = {};        // indexed by RpgIdleBlock
     std::unordered_map<NewRpgStatus, int> openWorldStatus;
     uint32 upkeepLocal = 0, upkeepCapital = 0;
+    uint32 upkeepQuestGiver = 0;   // rest-upkeep-consolidation: bots currently in the questgiver pose step
     uint32 restSubCount[RS_COUNT] = {};
     // static NewRpgStatistic rpgStasticTotal;
     std::unordered_map<uint32, int> zoneCount;
@@ -2962,7 +2963,14 @@ void RandomPlayerbotMgr::PrintStats()
             if (status == RPG_UPKEEP)
             {
                 if (auto const* up = std::get_if<NewRpgInfo::Upkeep>(&botAI->rpgInfo.data))
+                {
                     (up->tier == NewRpgInfo::UPKEEP_TIER_CAPITAL ? upkeepCapital : upkeepLocal)++;
+                    // questgiver step is LOCAL=3 / CAPITAL=8 (see the tier pipelines).
+                    bool qgStep = (up->tier == NewRpgInfo::UPKEEP_TIER_CAPITAL) ? (up->step == 8)
+                                                                                : (up->step == 3);
+                    if (qgStep)
+                        ++upkeepQuestGiver;
+                }
             }
             if (status == RPG_REST)
             {
@@ -3052,7 +3060,7 @@ void RandomPlayerbotMgr::PrintStats()
                  rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_OUTDOOR_PVP],
                  rpgStatusCount[RPG_GATHERING_CIRCUIT],
                  rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_TRAVEL_MOUNT]);
-        LOG_INFO("playerbots", "    UpkeepTier: L={} C={}", upkeepLocal, upkeepCapital);
+        LOG_INFO("playerbots", "    UpkeepTier: L={} C={} questgiver={}", upkeepLocal, upkeepCapital, upkeepQuestGiver);
         LOG_INFO("playerbots",
                  "    Suppressed: {} [raidsim={} instance={} combat={} grouped={} vehicle={} dead/tp={}]",
                  idleSuppressed, supByBlock[IB_RAIDSIM], supByBlock[IB_INSTANCE], supByBlock[IB_COMBAT],
