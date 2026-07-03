@@ -575,6 +575,10 @@ public:
     uint32 upkeepDummyTestMinMin{10}, upkeepDummyTestMaxMin{20};
     float    restHubWitnessRange{120.0f};      // real-player witness radius for TP gate
     float    restHubTravelBudget{4000.0f};     // max foot/mount distance before field-rest (witnessed)
+    // rest-upkeep-consolidation
+    float    restAfterUpkeepChance{0.50f};   // Rest.AfterUpkeepChance — post-upkeep rest coda roll (0–1)
+    uint32   upkeepQuestGiverMinSec{45};     // cosmetic questgiver loiter pose dwell (both tiers)
+    uint32   upkeepQuestGiverMaxSec{90};
     uint8    restHubStrollPoiCount{3};
     uint16   restHubStrollPausePerPoiSec{45};
     bool     restHubTrainerTypeFidelity{true};

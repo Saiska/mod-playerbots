@@ -1516,6 +1516,19 @@ AiPlayerbot.RestHub.Weight.Fish = 12
 AiPlayerbot.RestHub.Weight.FieldRest = 5
 
 #
+#    AiPlayerbot.Rest.AfterUpkeepChance
+#        At the end of an upkeep errand chain, chance (0–1) the bot winds down in a
+#        REST episode in the hub before returning to work. Primary UPKEEP:REST ratio dial.
+#        Default: 0.50
+AiPlayerbot.Rest.AfterUpkeepChance = 0.50
+
+#    AiPlayerbot.Upkeep.QuestGiverMinSec / MaxSec
+#        Dwell (sec) of the cosmetic questgiver loiter pose during upkeep (both tiers).
+#        Default: 45 / 90
+AiPlayerbot.Upkeep.QuestGiverMinSec = 45
+AiPlayerbot.Upkeep.QuestGiverMaxSec = 90
+
+#
 #    AiPlayerbot.Upkeep.CapitalChance
 #        Probability (0..1) an UPKEEP trip is the scenic CAPITAL run vs a quick LOCAL run.
 #        Live-tunable. Default 0.45
