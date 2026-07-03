@@ -78,8 +78,7 @@ protected:
     // one of the per-tier pipeline ticks. Both tiers share the dwell/one-shot-action primitive below.
     bool TickUpkeepLocal(NewRpgInfo::Upkeep& up);    // Task 6: travel->sell->maintenance->inn (steps 1..3)
     bool TickUpkeepCapital(NewRpgInfo::Upkeep& up);  // Task 7: capital errand chain + city poses
-    bool TickUpkeepInn(NewRpgInfo::Upkeep& up);      // Task 7: shared inn rest step (ends with Decide())
-    bool UpkeepStepIsInn(uint8 step) const;          // Task 7: true for the tier's inn step
+    bool TickUpkeepFinish(NewRpgInfo::Upkeep& up);   // rest-upkeep-consolidation: terminal step (rest coda)
 
     // Shared dwell + one-shot-action primitive used by BOTH tiers. On the entry tick of a step
     // (up.stepStartMs == 0) it stamps stepStartMs = getMSTime(), sets up.dwellMs = secs*IN_MILLISECONDS,
