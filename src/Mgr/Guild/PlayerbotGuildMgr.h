@@ -52,6 +52,11 @@ public:
     bool IsRealGuild(uint32 guildId);
     bool IsRealGuild(Player* bot);
 
+    // True only if EVERY current member is a random bot. Any real-player member => false
+    // (the controller leaves such guilds entirely alone). Generalizes the leader-only
+    // hasRealPlayer flag to an any-member scan.
+    bool IsBotManagedGuild(uint32 guildId) const;
+
 private:
     PlayerbotGuildMgr() = default;
     ~PlayerbotGuildMgr() = default;
@@ -62,10 +67,6 @@ private:
     PlayerbotGuildMgr(PlayerbotGuildMgr&&) = delete;
     PlayerbotGuildMgr& operator=(PlayerbotGuildMgr&&) = delete;
 
-    // True only if EVERY current member is a random bot. Any real-player member => false
-    // (the controller leaves such guilds entirely alone). Generalizes the leader-only
-    // hasRealPlayer flag to an any-member scan.
-    bool IsBotManagedGuild(uint32 guildId) const;
     // The level a member must reach for `th`'s purpose: raid guilds (raidOffset>=0) need
     // max level; casual guilds need their min_level.
     uint8 GoalLevel(GuildTheme const& th) const;

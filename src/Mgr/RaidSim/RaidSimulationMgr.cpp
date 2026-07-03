@@ -766,6 +766,16 @@ bool RaidSimulationMgr::Start(ChatHandler* handler, std::string const& guildName
         return false;
     }
 
+    // RaidSim only conscripts fully bot-managed guilds; never touch a guild that
+    // contains a real player (mirrors the GuildLifecycle guard).
+    if (!PlayerbotGuildMgr::instance().IsBotManagedGuild(guild->GetId()))
+    {
+        handler->PSendSysMessage(
+            "RaidSim: '{}' contains real players — RaidSim only runs bot-managed guilds.",
+            guildName);
+        return false;
+    }
+
     {
         std::lock_guard<std::mutex> lock(_mutex);
         if (_runs.count(guild->GetId()))
@@ -953,6 +963,17 @@ void RaidSimulationMgr::Update(uint32 diff)
             continue;
         if (Guild* g = sGuildMgr->GetGuildById(gid))
             candidateGuilds[gid] = g->GetName();
+    }
+
+    // Drop any candidate guild that contains a real player — RaidSim only runs
+    // fully bot-managed guilds (mirrors the GuildLifecycle guard). One DB test per
+    // distinct candidate guild per pass; candidateGuilds is already deduped by id.
+    for (auto it = candidateGuilds.begin(); it != candidateGuilds.end();)
+    {
+        if (!PlayerbotGuildMgr::instance().IsBotManagedGuild(it->first))
+            it = candidateGuilds.erase(it);
+        else
+            ++it;
     }
 
     for (auto const& cg : candidateGuilds)
