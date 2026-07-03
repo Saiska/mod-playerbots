@@ -393,40 +393,6 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             auto& rest = *restp;
 
-            // P0 SELECT (ONCE per episode — only before a hub has been chosen). The hub path
-            // intentionally leaves subtype == RS_NONE to defer the pick to arrival (P2), so we
-            // must NOT also gate P0 on subtype alone or it re-enters every tick and the P1/P2
-            // travel block below (also keyed on subtype == RS_NONE) becomes unreachable. Gating
-            // additionally on "no hub chosen yet" lets P0 run once, then fall through to P1/P2.
-            if (rest.subtype == RS_NONE && rest.hubPos == WorldPosition())
-            {
-                WorldPosition hub = SelectRandomCampPos(bot);          // curated hub or empty
-                bool hubReachable = (hub != WorldPosition());
-                rest.hubPos = hub;
-                if (!hubReachable)
-                {
-                    RestSubtype st = PickRestSubtype(false);           // anywhere subtype or FIELD_REST
-                    rest.subtype = st;
-                    if (st != RS_FIELD_REST && !AcquireSubtypeTarget(st)) rest.subtype = RS_FIELD_REST;
-                }
-                // hub path defers subtype pick to arrival (P2)
-                return true;
-            }
-
-            // P1 TRAVEL (hub path; subtype stays RS_NONE until arrival). On arrival, stamp
-            // hubArriveT and STOP — do not resolve the subtype the same tick as the teleport:
-            // the bot's "nearest npcs"/"nearest game objects" still hold the STALE pre-teleport
-            // grid, so acquire would fail and everything would collapse to FIELD_REST.
-            if (rest.hubPos != WorldPosition() && rest.subtype == RS_NONE && rest.hubArriveT == 0)
-            {
-                HubTravel t = TravelToHubOrTeleport(rest.hubPos);
-                if (t == HUB_EN_ROUTE) return true;                    // still traveling -> stay in P1
-                if (t == HUB_GIVE_UP)                                  // beyond budget -> field-rest in place
-                { rest.hubPos = WorldPosition(); rest.subtype = RS_FIELD_REST; return true; }
-                rest.hubArriveT = getMSTime();                         // arrived -> settle, then P2 next tick
-                return true;
-            }
-
             // rest-sit-render-diagnostic (TEMP): one read-only line per throttled tick, all phases.
             bool sitDiag = SitDiagDue(bot, info);
             if (sitDiag)
