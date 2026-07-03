@@ -136,6 +136,8 @@ protected:
     // LAYER 1 NEEDS (strict priority RECOVER>UPKEEP), then LAYER 2 weighted-random over the
     // FEASIBLE productive set. Replaces the deleted satiation-roulette RandomChangeStatus.
     void Decide();
+    // Layer-0 stranded guard: relocate a bot displaced off its content band. Returns true = handled.
+    bool TryRelocateStranded();
     // Maps a candidate status to its Task-2 precondition (precondition ONLY — weights/cooldowns
     // are applied by Decide()). Deliberately changes behaviour vs the old CheckRpgStatusAvailable
     // (e.g. RPG_REST is now hub-gated, so a far bot never strands in field-rest).
