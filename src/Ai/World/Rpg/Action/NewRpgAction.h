@@ -87,6 +87,9 @@ protected:
     // `vendorEvent` selects the SellAction "rpg action"/"vendor" event form (only meaningful for "sell").
     bool UpkeepDwell(NewRpgInfo::Upkeep& up, uint32 secs, std::string const& action, bool vendorEvent = false);
 
+    // rest-upkeep-consolidation: cosmetic loiter pose at a nearby NPC (local grid-scan; both tiers).
+    bool PoseAtNearbyNpc(uint32 npcFlag, uint32 dwellMs, NewRpgInfo::Upkeep& up);
+
     // static NewRpgStatusTransitionProb transitionMat;
     const int32 statusWanderNpcDuration = 5 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusPastimeDuration = 10 * MINUTE * IN_MILLISECONDS;

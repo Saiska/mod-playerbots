@@ -689,7 +689,18 @@ bool NewRpgStatusUpdateAction::TickUpkeepLocal(NewRpgInfo::Upkeep& up)
             up.stepStartMs = 0;
             return true;
         }
-        case 3:   // TERMINAL — post-upkeep rest coda (replaces the old inn step).
+        case 3:   // QUESTGIVER — cosmetic loiter pose (skip if none nearby).
+        {
+            if (PoseAtNearbyNpc(UNIT_NPC_FLAG_QUESTGIVER,
+                                urand(sPlayerbotAIConfig.upkeepQuestGiverMinSec,
+                                      sPlayerbotAIConfig.upkeepQuestGiverMaxSec) * IN_MILLISECONDS, up))
+                return true;
+            up.step = 4;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 4:   // TERMINAL — post-upkeep rest coda.
         default:
             return TickUpkeepFinish(up);
     }
@@ -815,10 +826,63 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
             up.stepStartMs = 0;
             return true;
         }
-        case 8:   // TERMINAL — post-upkeep rest coda.
+        case 8:   // QUESTGIVER — cosmetic loiter pose (skip if none nearby).
+        {
+            if (PoseAtNearbyNpc(UNIT_NPC_FLAG_QUESTGIVER,
+                                urand(sPlayerbotAIConfig.upkeepQuestGiverMinSec,
+                                      sPlayerbotAIConfig.upkeepQuestGiverMaxSec) * IN_MILLISECONDS, up))
+                return true;
+            up.step = 9;
+            up.target.Clear();
+            up.stepStartMs = 0;
+            return true;
+        }
+        case 9:   // TERMINAL — post-upkeep rest coda.
         default:
             return TickUpkeepFinish(up);
     }
+}
+
+// rest-upkeep-consolidation — cosmetic loiter pose at a nearby NPC of `npcFlag`, for both upkeep
+// tiers. The bot is already at its hub, so a local grid-scan resolves the prop (no capital-coord
+// lookup). No transaction — pure ambiance. Returns true = still posing (caller returns this tick),
+// false = done OR none nearby (caller advances the step). CRASH RULE: no ChangeTo*/Decide() here.
+bool NewRpgStatusUpdateAction::PoseAtNearbyNpc(uint32 npcFlag, uint32 dwellMs, NewRpgInfo::Upkeep& up)
+{
+    // ACQUIRE (once): nearest matching NPC in the loaded grid.
+    if (up.target.IsEmpty())
+    {
+        ObjectGuid npc = SelectNearestNpcWithFlag(npcFlag);
+        if (npc.IsEmpty())
+            return false;   // none nearby → clean skip
+        up.target          = npc;
+        up.stepStartMs     = 0;
+        up.chosenDwellPose = ResolveHeldPose(BEH_WANDER_NPC, (uint8)POI_NONE, (uint8)urand(0, 5));
+    }
+
+    WorldObject* npcObj = ObjectAccessor::GetWorldObject(*bot, up.target);
+    if (!npcObj)
+        return false;   // despawned → skip
+
+    // TRAVEL: walk within interaction range (witness-gated; teleports unwitnessed).
+    if (bot->GetExactDist(npcObj) > INTERACTION_DISTANCE)
+    {
+        TravelResult const tr = DriveTravel(WorldPosition(npcObj));
+        if (tr == TravelResult::GAVE_UP)
+            return false;
+        if (tr != TravelResult::ARRIVED)
+            return true;
+    }
+
+    // PERFORM: face + hold the loiter pose for the dwell.
+    if (up.stepStartMs == 0)
+    {
+        bot->SetFacingToObject(npcObj);
+        up.stepStartMs = getMSTime();
+        up.dwellMs     = dwellMs;
+    }
+    TickEmoteCadence(BEH_WANDER_NPC, (uint8)POI_NONE, /*skipSustainedPose=*/false, up.chosenDwellPose);
+    return GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs;
 }
 
 // rest-upkeep-consolidation — terminal step of BOTH tiers. Replaces the old always-on inn sit.
