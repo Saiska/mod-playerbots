@@ -899,8 +899,11 @@ bool PlayerbotAIConfig::Initialize()
     lowHealthSelfPreservation = sConfigMgr->GetOption<bool>("AiPlayerbot.LowHealthSelfPreservation", true);
     healSayOncePerEpisode = sConfigMgr->GetOption<bool>("AiPlayerbot.HealSayOncePerEpisode", true);
     healSayMinIntervalSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.HealSayMinIntervalSec", 240);
-    rpgNearHubRadius  = sConfigMgr->GetOption<float>("AiPlayerbot.RpgNearHubRadius", 60.0f);
-    gatherLeanBias    = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLeanBias", 1.0f);
+    rpgNearHubRadius      = sConfigMgr->GetOption<float>("AiPlayerbot.RpgNearHubRadius", 60.0f);
+    rpgStrandedRelocate   = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgStrandedRelocate", true);
+    rpgStrandedDwellMs    = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgStrandedDwellMs", 8000);
+    rpgStrandedCooldownMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgStrandedCooldownMs", 60000);
+    gatherLeanBias        = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLeanBias", 1.0f);
     lowPriorityQuestDecayMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.LowPriorityQuestDecayMs", 1800000);
     doQuestSuppressScatter = sConfigMgr->GetOption<bool>("AiPlayerbot.DoQuestSuppressScatter", true);
     randomTeleportEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomTeleportEnable", false);

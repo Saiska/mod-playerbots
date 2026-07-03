@@ -512,6 +512,10 @@ public:
     // Radius (yards) within which a bot is considered "at a rest hub" and rests in place instead of
     // farming in place. Beyond this the bot farms (kill in place) rather than sitting in the open world.
     float rpgNearHubRadius{60.0f};
+    // --- newrpg-stranded-relocate: Layer-0 guard knobs (Task 3) ---
+    bool rpgStrandedRelocate{true};         // master toggle: relocate bots stranded outside hubs
+    uint32 rpgStrandedDwellMs{8000};        // ms a bot must dwell outside a hub before it is considered stranded
+    uint32 rpgStrandedCooldownMs{60000};    // ms between successive relocations for the same bot
     // Global bias applied on top of FarmLean()'s per-bot gather multiplier (default 1.0 = no nudge).
     float gatherLeanBias{1.0f};
     // --- occupation-rebalance: lowPriorityQuest decay (Task 8) ---
