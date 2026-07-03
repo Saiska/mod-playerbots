@@ -4542,6 +4542,13 @@ std::vector<std::vector<uint32>> TravelMgr::GetOptimalFlightDestinations(Player*
     return validDestinations;
 }
 
+WorldLocation TravelMgr::SelectRelocateDest(Player* bot)
+{
+    auto& locs = locsPerLevelCache[bot->GetLevel()];
+    if (locs.empty()) return WorldLocation();
+    return locs[urand(0, locs.size() - 1)];
+}
+
 const std::vector<WorldLocation> TravelMgr::GetTeleportLocations(Player* bot)
 {
     uint32 level = bot->GetLevel();
@@ -5082,6 +5089,7 @@ void TravelMgr::PrepareDestinationCache()
                         static_cast<float>(std::get<1>(gridTuple)) * 50.0f,
                         static_cast<float>(std::get<2>(gridTuple)) * 50.0f,
                         static_cast<float>(std::get<3>(gridTuple)) * 50.0f));
+                    mapsWithLevelContent[(uint8)l].insert(std::get<0>(gridTuple));
             }
         }
     }
