@@ -136,6 +136,10 @@ struct NewRpgInfo
     uint32 lastFinished[RPG_STATUS_END] = {0};  // getMSTime() when each occupation last ended; 0=never
     uint32 lastUpkeepMs{0};                     // getMSTime() of the last completed UPKEEP episode; 0=never
 
+    // --- stranded-relocate guard ---
+    uint32 strandedSinceT{0};   // 0 = not currently stranded; else getMSTime() when bot first became stranded
+    uint32 lastRelocateT{0};    // getMSTime() of last stranded relocate (anti-thrash); 0 = never relocated
+
     // MOVE_FAR
     float nearestMoveFarDis{FLT_MAX};
     uint32 stuckTs{0};
