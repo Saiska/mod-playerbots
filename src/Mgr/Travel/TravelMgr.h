@@ -12,6 +12,7 @@
 #include <map>
 #include <random>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "AiObject.h"
@@ -901,6 +902,10 @@ public:
     std::vector<uint32> GetFlightNodesInZone(uint32 zoneId, TeamId team, uint32 excludeNode = 0) const;
     bool SelectAuctioneerByMap(Player* bot, NpcLocation& outAuctioneer);
     const std::vector<WorldLocation>& GetLocsPerLevelCache(uint8 level) { return locsPerLevelCache[level]; }
+    bool HasLevelContentOnMap(uint8 level, uint32 mapId)
+    { auto it = mapsWithLevelContent.find(level);
+      return it != mapsWithLevelContent.end() && it->second.count(mapId) > 0; }
+    WorldLocation SelectRelocateDest(Player* bot);   // random locsPerLevelCache[level] entry, or WorldLocation() if empty
 
     // gather-travel-to-node: results from a nearest-node query against the boot-built index.
     struct GatherNodeHit
@@ -1038,6 +1043,7 @@ private:
     std::map<uint8, std::vector<BankerLocation>> bankerLocsPerLevelCache;
     std::unordered_map<uint32, WorldLocation> bankerEntryToLocation;
     std::map<uint8, std::vector<WorldLocation>> locsPerLevelCache;
+    std::map<uint8, std::unordered_set<uint32>> mapsWithLevelContent;
     std::unordered_map<uint32, std::vector<WorldLocation>> creatureSpawnsByTemplate;
     std::map<uint32, LevelBracket> zone2LevelBracket;
     // upkeep-capital-pose-prop-resolve — per-capital-zone prop coordinates, built once at boot.

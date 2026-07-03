@@ -2136,6 +2136,9 @@ void NewRpgBaseAction::EnterOccupation(NewRpgStatus status)
 
 void NewRpgBaseAction::Decide()
 {
+    if (TryRelocateStranded())
+        return;   // handled: either committed a relocate/idle, or waiting out the dwell
+
     // LAYER 1 — NEEDS (strict priority). Inert until Task 5 fills the bodies.
     if (RecoverNeeded())  { botAI->rpgInfo.ChangeToRecover(); return; }   // RECOVER first (survival)
     if (UpkeepNeeded())   { botAI->rpgInfo.ChangeToUpkeep();  return; }
@@ -2191,4 +2194,41 @@ void NewRpgBaseAction::Decide()
         LOG_DEBUG("playerbots", "[RpgMachine] {} DECIDE pick={} (nFeasible={})",
                   bot->GetName(), static_cast<uint32>(pick), feasible.size());
     EnterOccupation(pick);   // ChangeTo* + ACQUIRE seed
+}
+
+bool NewRpgBaseAction::TryRelocateStranded()
+{
+    if (!sPlayerbotAIConfig.rpgStrandedRelocate) { botAI->rpgInfo.strandedSinceT = 0; return false; }
+    if (botAI->HasActivePlayerMaster() || !InOpenWorld()) { botAI->rpgInfo.strandedSinceT = 0; return false; }
+    if (sTravelMgr.HasLevelContentOnMap(bot->GetLevel(), bot->GetMapId()))
+    { botAI->rpgInfo.strandedSinceT = 0; return false; }   // not stranded — normal Decide
+
+    // stranded from here
+    if (botAI->rpgInfo.strandedSinceT == 0)
+        botAI->rpgInfo.strandedSinceT = getMSTime();
+
+    // confirm-dwell: give a just-ungrouped bot a beat
+    if (GetMSTimeDiffToNow(botAI->rpgInfo.strandedSinceT) < sPlayerbotAIConfig.rpgStrandedDwellMs)
+    { botAI->rpgInfo.ChangeToIdle(); return true; }
+
+    // anti-thrash cooldown
+    if (botAI->rpgInfo.lastRelocateT &&
+        GetMSTimeDiffToNow(botAI->rpgInfo.lastRelocateT) < sPlayerbotAIConfig.rpgStrandedCooldownMs)
+    { botAI->rpgInfo.ChangeToIdle(); return true; }
+
+    WorldLocation dest = sTravelMgr.SelectRelocateDest(bot);
+    if (dest == WorldLocation())          // level cache empty (extreme edge)
+    { botAI->rpgInfo.ChangeToIdle(); return true; }
+
+    LOG_DEBUG("playerbots",
+        "[New RPG] {} stranded on map {} (no L{} content) -> relocating to map {} ({},{},{})",
+        bot->GetName(), bot->GetMapId(), uint32(bot->GetLevel()),
+        dest.GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+
+    bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+    bot->TeleportTo(dest);
+    botAI->rpgInfo.lastRelocateT  = getMSTime();
+    botAI->rpgInfo.strandedSinceT = 0;
+    botAI->rpgInfo.ChangeToIdle();   // CRASH RULE: last statement; nothing reads info/data after
+    return true;
 }

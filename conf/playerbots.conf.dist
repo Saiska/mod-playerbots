@@ -1310,6 +1310,30 @@ AiPlayerbot.LowHealthSelfPreservation = 1
 #
 AiPlayerbot.RpgNearHubRadius = 60
 #
+#    AiPlayerbot.RpgStrandedRelocate
+#        newrpg-stranded-relocate: a free NewRpg bot displaced off its content band (no level-appropriate
+#        grind content anywhere on its current map, e.g. an ungrouped L80 stranded in a low-level zone)
+#        teleports to a guaranteed content map instead of idling until the slow 1-5h random-teleport
+#        timer fires. Occupation-agnostic Layer-0 guard at Decide().
+#        1 = on (default), 0 = legacy grind-in-place.
+#        Default: 1
+#
+AiPlayerbot.RpgStrandedRelocate = 1
+#
+#    AiPlayerbot.RpgStrandedDwellMs
+#        A bot must be continuously stranded this many milliseconds before it relocates (confirm-dwell) —
+#        gives a just-ungrouped or mid-transit bot a beat to be re-grouped/moved first.
+#        Default: 8000
+#
+AiPlayerbot.RpgStrandedDwellMs = 8000
+#
+#    AiPlayerbot.RpgStrandedCooldownMs
+#        Minimum milliseconds between stranded relocations for one bot (anti-thrash backstop; at most
+#        one relocate per minute worst case).
+#        Default: 60000
+#
+AiPlayerbot.RpgStrandedCooldownMs = 60000
+#
 #    AiPlayerbot.HealSayOncePerEpisode
 #        Announce "need heal" once when health drops into the low band, then stay quiet until health
 #        recovers above AiPlayerbot.AlmostFullHealth and drops again (no back-to-back spam). 1 = on, 0 = legacy.
