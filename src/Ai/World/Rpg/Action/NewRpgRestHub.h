@@ -75,4 +75,8 @@ RestSubtype PickRestSubtypePure(const uint16 weight[RS_COUNT], const bool avail[
 uint32 RestSubtypeEffectiveSum(const uint16 weight[RS_COUNT], const bool avail[RS_COUNT],
                                RestSubtype last);
 
+// rest-upkeep-consolidation: picker-eligible ambient subtypes. Service subtypes stay in
+// kRestTable (UPKEEP's PoseAtProp indexes them) but REST never picks them. Pure/testable.
+bool RestSubtypePickerEligible(RestSubtype st);
+
 #endif
