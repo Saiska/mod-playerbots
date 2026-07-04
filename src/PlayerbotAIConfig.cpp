@@ -656,6 +656,7 @@ bool PlayerbotAIConfig::Initialize()
     guildBankDepositDebugGuildId = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBankDeposit.DebugGuildId", 0);
     guildBankDepositProactiveEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildBankDeposit.ProactiveEnable", true);
     guildBankDepositKeepStacks = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBankDeposit.KeepStacks", 1);
+    guildReagentVaultEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildReagentVault.Enable", true);
     groupInvitationPermission = sConfigMgr->GetOption<int32>("AiPlayerbot.GroupInvitationPermission", 1);
     keepAltsInGroup = sConfigMgr->GetOption<bool>("AiPlayerbot.KeepAltsInGroup", false);
     allowSummonInCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowSummonInCombat", true);

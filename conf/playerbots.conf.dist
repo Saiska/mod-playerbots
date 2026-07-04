@@ -621,6 +621,11 @@ AiPlayerbot.GuildBankDeposit.DebugGuildId = 0
 AiPlayerbot.GuildBankDeposit.ProactiveEnable = 1
 AiPlayerbot.GuildBankDeposit.KeepStacks = 1
 
+#    AiPlayerbot.GuildReagentVault.Enable
+#        Bots deposit stackable trade goods / gems into the guild's unlimited reagent vault
+#        (custom_reagent_bank) instead of the 588-slot guild bank. 1 = on (default), 0 = off.
+AiPlayerbot.GuildReagentVault.Enable = 1
+
 # Enable/Disable specific maintenance command functionality for altbots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their altbots
 # Default: 1 (enabled)
