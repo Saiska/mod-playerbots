@@ -196,7 +196,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
         factory.InitConsumables();
         factory.InitPotions();
         factory.InitBandages();
-        factory.InitTalentsTree(true);
+        factory.InitTalentsTree(true, true, true);
         factory.InitPet();
         factory.InitPetTalents();
         factory.InitSkills();
@@ -237,7 +237,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
             factory.InitBandages();
 
         if (sPlayerbotAIConfig.altMaintenanceTalentTree)
-            factory.InitTalentsTree(true);
+            factory.InitTalentsTree(true, true, true);
 
         if (sPlayerbotAIConfig.altMaintenancePet)
             factory.InitPet();
@@ -278,6 +278,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
 
     bot->DurabilityRepairAll(false, 1.0f, false);
     bot->SendTalentsInfoData(false);
+    botAI->ResetStrategies();
 
     if (sPlayerbotAIConfig.maintenanceGearFloor)
         sGearFloorMgr.Enqueue(bot);
