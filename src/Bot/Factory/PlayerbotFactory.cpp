@@ -1611,12 +1611,11 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
     {
         InitTalentsByTemplate(specTab);
     }
-    // if LimitTalentsExpansion = 1 there may be unused talent points
+    // Spend any surplus talent points (e.g. from Rate.Talent > 1) in the PRIMARY
+    // tree only. InitTalents fills greedily and no-ops on already-maxed talents,
+    // so remaining points stay UNSPENT rather than spilling into off-spec trees.
     if (bot->GetFreeTalentPoints())
-        InitTalents((specTab + 1) % 3);
-
-    if (bot->GetFreeTalentPoints())
-        InitTalents((specTab + 2) % 3);
+        InitTalents(specTab);
 
     if (bot->getClass() == CLASS_SHAMAN && bot->HasSpell(SPELL_SHAMAN_DUAL_WIELD))
     {
