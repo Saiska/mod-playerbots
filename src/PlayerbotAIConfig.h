@@ -569,6 +569,7 @@ public:
     uint16   restHubDwellMaxSec{600};
     float    restHubHubRange{2500.0f};         // curated-hub in-range radius
     float  upkeepCapitalChance{0.45f};
+    bool   upkeepInstrument{false};   // upkeep-reentry-instrument: gate the 3 diagnostic status-dump lines (live-toggleable)
     uint32 upkeepSellMinSec{90},     upkeepSellMaxSec{180};
     uint32 upkeepMaintMinSec{60},    upkeepMaintMaxSec{120};
     uint32 upkeepBankMinSec{300},    upkeepBankMaxSec{600};

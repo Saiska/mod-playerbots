@@ -2861,6 +2861,20 @@ void RandomPlayerbotMgr::PrintStats()
     std::unordered_map<NewRpgStatus, int> openWorldStatus;
     uint32 upkeepLocal = 0, upkeepCapital = 0;
     uint32 upkeepQuestGiver = 0;   // rest-upkeep-consolidation: bots currently in the questgiver pose step
+    // upkeep-reentry-instrument: episode-age histogram + never-completed tally (M2/M3)
+    uint32 upkeepAge[5] = {};      // buckets: [0-5m, 5-15m, 15-30m, 30-60m, >60m]
+    uint32 upkeepNeverDone = 0, upkeepDone = 0;
+    // upkeep-reentry-instrument (step probe): which step stuck bots pile at + hub-travel-gate test (M4)
+    uint32 upkeepStepL[5] = {};    // LOCAL steps 0..4 (0=acquire,1=sell,2=maint,3=questgiver,4=finish)
+    uint32 upkeepStepC[9] = {};    // CAPITAL steps 0..8 (0=acquire ... 8=finish)
+    uint32 upkeepHubStall = 0;     // hub-anchored bots (LOCAL step 1-2 / CAPITAL step 1) still >10yd from hubPos (line 666 gate)
+    uint32 upkeepHubOk = 0;        // same hub-anchored steps but arrived (<=10yd) — separates transit-stall from step-stall
+    // M5 dwell-state of hub-anchored bots: distinguishes the 3 candidate SELL-stall mechanisms
+    uint32 upkeepDwUnstarted = 0;  // stepStartMs==0 (dwell never latched → sell re-firing / variant reset)
+    uint32 upkeepDwelling = 0;     // stepStartMs!=0 && elapsed < dwellMs (normal wait)
+    uint32 upkeepDwDoneStuck = 0;  // stepStartMs!=0 && elapsed >= dwellMs (dwell finished but not advanced)
+    uint32 upkeepDwDoneGate = 0;   // of done-stuck: also >10yd from hub (travel gate starving the switch)
+    uint64 upkeepDwStepAgeSum = 0; // sum of stepStartMs-age (ms) over done-stuck, for an avg
     uint32 restSubCount[RS_COUNT] = {};
     // static NewRpgStatistic rpgStasticTotal;
     std::unordered_map<uint32, int> zoneCount;
@@ -2970,7 +2984,51 @@ void RandomPlayerbotMgr::PrintStats()
                                                                                 : (up->step == 3);
                     if (qgStep)
                         ++upkeepQuestGiver;
+                    // step probe (M4): bucket by step per tier + test the line-666 hub-travel gate.
+                    bool hubAnchored;
+                    if (up->tier == NewRpgInfo::UPKEEP_TIER_CAPITAL)
+                    {
+                        ++upkeepStepC[std::min<uint32>(up->step, 8)];
+                        hubAnchored = (up->step == 1);   // CAPITAL: only the leading SELL is hub-anchored
+                    }
+                    else
+                    {
+                        ++upkeepStepL[std::min<uint32>(up->step, 4)];
+                        hubAnchored = (up->step == 1 || up->step == 2);   // LOCAL: sell + maint are hub-anchored
+                    }
+                    if (hubAnchored)
+                    {
+                        bool gateActive = bot->GetExactDist(up->hubPos) > 10.0f;
+                        (gateActive ? upkeepHubStall : upkeepHubOk)++;
+                        // M5: dwell-state classification (up->stepStartMs / up->dwellMs persist across ticks).
+                        if (up->stepStartMs == 0)
+                            ++upkeepDwUnstarted;
+                        else
+                        {
+                            uint32 stepAge = GetMSTimeDiffToNow(up->stepStartMs);
+                            if (stepAge < up->dwellMs)
+                                ++upkeepDwelling;
+                            else
+                            {
+                                ++upkeepDwDoneStuck;
+                                upkeepDwStepAgeSum += stepAge;
+                                if (gateActive)
+                                    ++upkeepDwDoneGate;
+                            }
+                        }
+                    }
                 }
+                // upkeep-reentry-instrument: whole-episode age + never-completed (M2/M3).
+                // upkeepEnterMs is on rpgInfo (not the variant), stamped in ChangeToUpkeep.
+                uint32 enterMs = botAI->rpgInfo.upkeepEnterMs;
+                uint32 ageMs = enterMs ? GetMSTimeDiffToNow(enterMs) : 0;
+                uint32 ageMin = ageMs / 60000;
+                if (ageMin < 5)        ++upkeepAge[0];
+                else if (ageMin < 15)  ++upkeepAge[1];
+                else if (ageMin < 30)  ++upkeepAge[2];
+                else if (ageMin < 60)  ++upkeepAge[3];
+                else                   ++upkeepAge[4];
+                (botAI->rpgInfo.lastUpkeepMs == 0 ? upkeepNeverDone : upkeepDone)++;
             }
             if (status == RPG_REST)
             {
@@ -3061,6 +3119,45 @@ void RandomPlayerbotMgr::PrintStats()
                  rpgStatusCount[RPG_GATHERING_CIRCUIT],
                  rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_TRAVEL_MOUNT]);
         LOG_INFO("playerbots", "    UpkeepTier: L={} C={} questgiver={}", upkeepLocal, upkeepCapital, upkeepQuestGiver);
+        // upkeep-reentry-instrument: three diagnostic lines, gated + live-toggleable via UpkeepInstrument.
+        if (sPlayerbotAIConfig.upkeepInstrument)
+        {
+            static uint32 lastDumpMs = 0;
+            static uint32 lastEntries = 0;
+            uint32 nowMs = getMSTime();
+            uint32 curEntries = g_upkeepEntries.load();
+            uint32 elapsedMs = lastDumpMs ? getMSTimeDiff(lastDumpMs, nowMs) : 0;
+            uint32 deltaEntries = curEntries - lastEntries;
+            double entriesPerHour = elapsedMs ? (double(deltaEntries) * 3600000.0 / double(elapsedMs)) : 0.0;
+            LOG_INFO("playerbots",
+                     "    [UpkeepInstr] M1 entries: +{} in {}s => {:.0f}/hr (total {})",
+                     deltaEntries, elapsedMs / 1000, entriesPerHour, curEntries);
+            LOG_INFO("playerbots",
+                     "    [UpkeepInstr] M2 age(min) [0-5]={} [5-15]={} [15-30]={} [30-60]={} [>60]={} (sum={} vs Upkeep={})",
+                     upkeepAge[0], upkeepAge[1], upkeepAge[2], upkeepAge[3], upkeepAge[4],
+                     upkeepAge[0] + upkeepAge[1] + upkeepAge[2] + upkeepAge[3] + upkeepAge[4],
+                     rpgStatusCount[RPG_UPKEEP]);
+            LOG_INFO("playerbots",
+                     "    [UpkeepInstr] M3 never-completed={} completed={}", upkeepNeverDone, upkeepDone);
+            LOG_INFO("playerbots",
+                     "    [UpkeepInstr] M4 stepL[0acq={} 1sell={} 2maint={} 3qg={} 4fin={}] "
+                     "stepC[0acq={} 1sell={} 2={} 3={} 4={} 5={} 6={} 7={} 8fin={}]",
+                     upkeepStepL[0], upkeepStepL[1], upkeepStepL[2], upkeepStepL[3], upkeepStepL[4],
+                     upkeepStepC[0], upkeepStepC[1], upkeepStepC[2], upkeepStepC[3], upkeepStepC[4],
+                     upkeepStepC[5], upkeepStepC[6], upkeepStepC[7], upkeepStepC[8]);
+            LOG_INFO("playerbots",
+                     "    [UpkeepInstr] M4 hub-travel gate: stalled(>10yd)={} arrived(<=10yd)={}",
+                     upkeepHubStall, upkeepHubOk);
+            {
+                uint32 avgStepAgeSec = upkeepDwDoneStuck ? uint32(upkeepDwStepAgeSum / upkeepDwDoneStuck / 1000) : 0;
+                LOG_INFO("playerbots",
+                         "    [UpkeepInstr] M5 dwell-state(hub-anchored): unstarted={} dwelling={} done-stuck={} "
+                         "(of done-stuck: gate>10yd={} avgStepAge={}s)",
+                         upkeepDwUnstarted, upkeepDwelling, upkeepDwDoneStuck, upkeepDwDoneGate, avgStepAgeSec);
+            }
+            lastDumpMs = nowMs;
+            lastEntries = curEntries;
+        }
         LOG_INFO("playerbots",
                  "    Suppressed: {} [raidsim={} instance={} combat={} grouped={} vehicle={} dead/tp={}]",
                  idleSuppressed, supByBlock[IB_RAIDSIM], supByBlock[IB_INSTANCE], supByBlock[IB_COMBAT],

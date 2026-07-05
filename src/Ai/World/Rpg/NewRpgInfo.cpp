@@ -1,10 +1,14 @@
 #include "NewRpgInfo.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 
 #include "Random.h"
 #include "Timer.h"
+
+// upkeep-reentry-instrument: definition of the entry counter declared extern in NewRpgInfo.h.
+std::atomic<uint32> g_upkeepEntries{0};
 
 void NewRpgInfo::ChangeToGoGrind(WorldPosition pos)
 {
@@ -80,6 +84,8 @@ void NewRpgInfo::ChangeToUpkeep()
     bool capital = roll_chance_f(sPlayerbotAIConfig.upkeepCapitalChance * 100.0f);
     up.tier = capital ? UPKEEP_TIER_CAPITAL : UPKEEP_TIER_LOCAL;
     startT = getMSTime();
+    upkeepEnterMs = startT;   // upkeep-reentry-instrument: whole-episode entry stamp (M2 age histogram)
+    ++g_upkeepEntries;        // upkeep-reentry-instrument: entry-rate counter (M1)
     data = up;
     lastEmoteMs = 0;
     nextEmoteGapMs = 0;

@@ -10,9 +10,14 @@
 #include "Strategy.h"
 #include "Timer.h"
 #include "TravelMgr.h"
+#include <atomic>
 #include <vector>
 
 using NewRpgStatusTransitionProb = std::vector<std::vector<int>>;
+
+// upkeep-reentry-instrument: global count of UPKEEP entries (incremented in ChangeToUpkeep);
+// the status dump reads its delta to derive entries/hour. Defined in NewRpgInfo.cpp.
+extern std::atomic<uint32> g_upkeepEntries;
 
 struct NewRpgInfo
 {
@@ -135,6 +140,7 @@ struct NewRpgInfo
     // --- occupation-machine tracking ---
     uint32 lastFinished[RPG_STATUS_END] = {0};  // getMSTime() when each occupation last ended; 0=never
     uint32 lastUpkeepMs{0};                     // getMSTime() of the last completed UPKEEP episode; 0=never
+    uint32 upkeepEnterMs{0};                     // upkeep-reentry-instrument: getMSTime() the current UPKEEP episode was entered (stamped only in ChangeToUpkeep); whole-episode age for the stuck histogram
 
     // --- stranded-relocate guard ---
     uint32 strandedSinceT{0};   // 0 = not currently stranded; else getMSTime() when bot first became stranded
