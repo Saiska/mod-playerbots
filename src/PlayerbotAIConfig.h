@@ -570,6 +570,10 @@ public:
     float    restHubHubRange{2500.0f};         // curated-hub in-range radius
     float  upkeepCapitalChance{0.45f};
     bool   upkeepInstrument{false};   // upkeep-reentry-instrument: gate the 3 diagnostic status-dump lines (live-toggleable)
+    // upkeep-share-reduction fix: minimal-mode occupation escape (rel-100 'new rpg minimal escape')
+    bool   minimalEscapeEnable{true};        // master kill-switch for the inactive-bot escape action
+    uint32 upkeepEscapeCeilingSec{300};      // inactive-bot: max time in UPKEEP before escape (short — inactive bots never complete)
+    uint32 upkeepActiveWatchdogSec{3600};    // active-bot RPG_UPKEEP stall watchdog; MUST exceed a legit capital episode (~15-30m)
     uint32 upkeepSellMinSec{90},     upkeepSellMaxSec{180};
     uint32 upkeepMaintMinSec{60},    upkeepMaintMaxSec{120};
     uint32 upkeepBankMinSec{300},    upkeepBankMaxSec{600};

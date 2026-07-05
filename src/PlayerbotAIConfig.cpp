@@ -779,6 +779,9 @@ bool PlayerbotAIConfig::Initialize()
         restHubDwellMinSec = 1;
     upkeepCapitalChance   = sConfigMgr->GetOption<float>("AiPlayerbot.Upkeep.CapitalChance", 0.45f);
     upkeepInstrument      = sConfigMgr->GetOption<bool>("AiPlayerbot.UpkeepInstrument", false);
+    minimalEscapeEnable     = sConfigMgr->GetOption<bool>("AiPlayerbot.MinimalEscapeEnable", true);
+    upkeepEscapeCeilingSec  = sConfigMgr->GetOption<uint32>("AiPlayerbot.UpkeepEscapeCeilingSec", 300);
+    upkeepActiveWatchdogSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.UpkeepActiveWatchdogSec", 3600);
     upkeepSellMinSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.SellMinSec", 90);
     upkeepSellMaxSec      = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.SellMaxSec", 180);
     upkeepMaintMinSec     = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.MaintMinSec", 60);
