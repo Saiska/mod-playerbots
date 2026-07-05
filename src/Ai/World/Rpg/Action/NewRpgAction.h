@@ -141,4 +141,17 @@ public:
     bool Execute(Event event) override;
 };
 
+// upkeep-share-reduction fix: minimal-mode occupation escape. Registered at relevance 100 so it runs
+// even when an AI-throttled bot's engine is in minimal mode (Engine.cpp:172 skips relevance < 100).
+// isUseful() gates it to INACTIVE bots only (!AllowActivity()); active bots fall through USELESS to
+// the rel-11 'new rpg status update' machine. Execute() is ONE self-contained tick (no multi-tick
+// dwell) so it completes regardless of throttling.
+class NewRpgMinimalEscapeAction : public NewRpgBaseAction
+{
+public:
+    NewRpgMinimalEscapeAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg minimal escape") {}
+    bool isUseful() override;
+    bool Execute(Event event) override;
+};
+
 #endif

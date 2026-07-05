@@ -581,6 +581,17 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             auto& up = *upkp;
 
+            // upkeep-share-reduction fix: active-bot stall watchdog (parity with DO_QUEST/PVP/GATHER;
+            // UPKEEP previously had none). Inactive bots are rescued by the rel-100 escape action; this
+            // catches a genuinely-stuck ACTIVE bot. Long ceiling so it never aborts a legit capital
+            // episode (~15-30m). CRASH RULE: Decide() is the last statement; nothing reads up/data after.
+            if (info.HasStatusPersisted(sPlayerbotAIConfig.upkeepActiveWatchdogSec * IN_MILLISECONDS))
+            {
+                info.lastUpkeepMs = getMSTime();
+                Decide();
+                return true;
+            }
+
             // ACQUIRE the hub once (step 0), honoring the tier + the LOCAL->CAPITAL fallthrough.
             if (up.hubPos == WorldPosition())
             {
@@ -909,6 +920,63 @@ bool NewRpgStatusUpdateAction::TickUpkeepFinish(NewRpgInfo::Upkeep& up)
 
     Decide();
     return true;       // CRASH RULE
+}
+
+// upkeep-share-reduction fix — rescue an AI-throttled bot stranded in an occupation whose only exit
+// is a rel-11 duration/dwell check it can never reach. Rescuable set = the duration-watchdog
+// occupations + UPKEEP; travel legs / REST / IDLE / RECOVER are deliberately excluded (see spec §3.1).
+bool NewRpgMinimalEscapeAction::isUseful()
+{
+    if (!sPlayerbotAIConfig.minimalEscapeEnable)
+        return false;
+    // Active bots run the full rel-11 machine; only rescue the throttled (minimal-mode) pool.
+    // Same derivation as Engine's `minimal = !AllowActivity()` (PlayerbotAI.cpp:1597), so they agree.
+    if (botAI->AllowActivity())
+        return false;
+
+    NewRpgInfo& info = botAI->rpgInfo;
+    switch (info.GetStatus())
+    {
+        case RPG_UPKEEP:
+            return info.HasStatusPersisted(sPlayerbotAIConfig.upkeepEscapeCeilingSec * IN_MILLISECONDS);
+        case RPG_DO_QUEST:
+            return info.HasStatusPersisted(30 * MINUTE * IN_MILLISECONDS);   // mirrors statusDoQuestDuration
+        case RPG_OUTDOOR_PVP:
+            return info.HasStatusPersisted(HOUR * IN_MILLISECONDS);          // mirrors statusOutDoorPvPDuration
+        case RPG_GATHERING_CIRCUIT:
+            return info.HasStatusPersisted(sPlayerbotAIConfig.gatheringCircuitDurationSec * IN_MILLISECONDS);
+        default:
+            return false;
+    }
+}
+
+bool NewRpgMinimalEscapeAction::Execute(Event /*event*/)
+{
+    // One self-contained tick: essential side-effect -> stamp completion -> drop to IDLE.
+    // CRASH RULE: every ChangeToIdle() is the last statement; nothing reads info.data afterward.
+    NewRpgInfo& info = botAI->rpgInfo;
+    switch (info.GetStatus())
+    {
+        case RPG_UPKEEP:
+            botAI->DoSpecificAction("maintenance");   // real one-tick work (mirrors NewRpgAction.cpp:611)
+            info.lastUpkeepMs = getMSTime();           // resets the 2h MaintenanceOverdue timer
+            info.ChangeToIdle();
+            return true;
+        case RPG_DO_QUEST:
+            info.lastFinished[RPG_DO_QUEST] = getMSTime();
+            info.ChangeToIdle();
+            return true;
+        case RPG_OUTDOOR_PVP:
+            info.lastFinished[RPG_OUTDOOR_PVP] = getMSTime();
+            info.ChangeToIdle();
+            return true;
+        case RPG_GATHERING_CIRCUIT:
+            info.lastFinished[RPG_GATHERING_CIRCUIT] = getMSTime();
+            info.ChangeToIdle();
+            return true;
+        default:
+            return false;   // isUseful() already filtered; defensive
+    }
 }
 
 bool NewRpgGoGrindAction::Execute(Event /*event*/)

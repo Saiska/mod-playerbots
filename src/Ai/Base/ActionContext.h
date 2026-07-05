@@ -270,6 +270,7 @@ public:
         creators["set pet stance"] = &ActionContext::set_pet_stance;
 
         creators["new rpg status update"] = &ActionContext::new_rpg_status_update;
+        creators["new rpg minimal escape"] = &ActionContext::new_rpg_minimal_escape;
         creators["new rpg go grind"] = &ActionContext::new_rpg_go_grind;
 
         creators["new rpg travel mount"] = &ActionContext::new_rpg_travel_mount;
@@ -477,6 +478,7 @@ private:
     static Action* set_pet_stance(PlayerbotAI* ai) { return new SetPetStanceAction(ai); }
 
     static Action* new_rpg_status_update(PlayerbotAI* ai) { return new NewRpgStatusUpdateAction(ai); }
+    static Action* new_rpg_minimal_escape(PlayerbotAI* ai) { return new NewRpgMinimalEscapeAction(ai); }
     static Action* new_rpg_go_grind(PlayerbotAI* ai) { return new NewRpgGoGrindAction(ai); }
 
     static Action* new_rpg_travel_mount(PlayerbotAI* ai) { return new NewRpgTravelMountAction(ai); }

@@ -11,6 +11,10 @@ std::vector<NextAction> NewRpgStrategy::getDefaultActions()
 {
     // the releavance should be greater than grind
     return {
+        // upkeep-share-reduction fix: rel-100 so it runs in minimal mode (Engine.cpp:172) and can
+        // rescue AI-throttled bots stuck in a rel-11-exit occupation; out-ranks the rel-11 machine
+        // so queue.Peek() surfaces it first. isUseful() no-ops it for active bots.
+        NextAction("new rpg minimal escape", 100.0f),
         NextAction("new rpg status update", 11.0f)
     };
 }
