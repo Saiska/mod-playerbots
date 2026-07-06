@@ -6326,6 +6326,10 @@ void PlayerbotAI::DepositEpicsToGuildBank()
     // load/randomize/logout) holds a freed Item* that the bag scan below would deref -> C0000005. Same guard as redeem.
     if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() || bot->IsDuringRemoveFromWorld())
         return;
+    // Stand down while the fleet is still loading/randomizing after boot (login ramp) — inventories are being
+    // rebuilt then, and walking one derefs a freed Item*. Same guard as redeem.
+    if (sRandomPlayerbotMgr.IsBotInitializing())
+        return;
     Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
     if (!guild)
         return;

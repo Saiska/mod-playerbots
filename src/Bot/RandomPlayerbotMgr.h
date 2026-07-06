@@ -104,6 +104,9 @@ public:
     static bool HandlePlayerbotConsoleCommand(ChatHandler* handler, char const* args);
     bool IsRandomBot(Player* bot);
     bool IsRandomBot(ObjectGuid::LowType bot);
+    // True while the fleet is still loading/randomizing after boot (the login ramp). During this window bots are
+    // being RandomizeFirst'd (inventory rebuilt), so inventory-walking bot AI must stand down. See RedeemCurrencyAction.
+    bool IsBotInitializing() const { return _isBotInitializing; }
     bool IsAddclassBot(Player* bot);
     bool IsAddclassBot(ObjectGuid::LowType bot);
     void Randomize(Player* bot);

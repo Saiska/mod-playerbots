@@ -81,6 +81,11 @@ public:
         // Standard bot-safety guard used across the codebase (e.g. PlayerbotAI.cpp:540).
         if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() || bot->IsDuringRemoveFromWorld())
             return false;
+        // Stand down entirely while the bot fleet is still loading/randomizing after boot (the login ramp): during
+        // that window bots are mass-RandomizeFirst'd (inventories torn down + rebuilt), and walking one mid-rebuild
+        // derefs a freed Item*. This is the reproduced ramp crash; redeem resumes once the fleet has settled.
+        if (sRandomPlayerbotMgr.IsBotInitializing())
+            return false;
 
         static uint32 const CURR[] = {49426, 47241, 45624, 40753, 40752, 29434}; // high->low
         uint32 const cap = sPlayerbotAIConfig.tokenRedeemMaxBuysPerUpkeep;
