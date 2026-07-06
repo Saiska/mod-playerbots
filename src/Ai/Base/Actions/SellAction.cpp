@@ -8,8 +8,40 @@
 #include "Event.h"
 #include "ItemUsageValue.h"
 #include "ItemVisitors.h"
+#include "ObjectAccessor.h"
+#include "PlayerbotOperation.h"
+#include "PlayerbotWorldThreadProcessor.h"
 #include "Playerbots.h"
 #include "ItemPackets.h"
+
+// Depositing tradeable surplus epics into guild-bank tabs mutates the bot's inventory + guild bank; that is
+// not safe on the MapUpdater worker SellAction runs on (races the world thread -> dangling Item* / C0000005,
+// same family as the redeem crash fixed 2026-07-06). Defer it to the world thread via the operation processor.
+namespace
+{
+    class DepositEpicsOperation : public PlayerbotOperation
+    {
+    public:
+        explicit DepositEpicsOperation(ObjectGuid botGuid) : m_botGuid(botGuid) {}
+
+        ObjectGuid GetBotGuid() const override { return m_botGuid; }
+        std::string GetName() const override { return "DepositEpics"; }
+        uint32 GetPriority() const override { return 10; }
+
+        bool Execute() override
+        {
+            Player* bot = ObjectAccessor::FindPlayer(m_botGuid);
+            if (!bot)
+                return false;
+            if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
+                botAI->DepositEpicsToGuildBank();
+            return true;
+        }
+
+    private:
+        ObjectGuid m_botGuid;
+    };
+}
 
 class SellItemsVisitor : public IterateItemsVisitor
 {
@@ -70,7 +102,8 @@ bool SellAction::Execute(Event event)
     if (text == "vendor")
     {
         botAI->DepositSurplusToGuildBank();   // bank stocked surplus (incl. SKILL cloth) before vendoring the rest
-        botAI->DepositEpicsToGuildBank();   // tradeable epics -> any tab (bypass top-up), keep-guarded
+        // tradeable epics -> any tab (bypass top-up), keep-guarded; deferred to the world thread (inventory-safe)
+        PlayerbotWorldThreadProcessor::instance().QueueOperation(std::make_unique<DepositEpicsOperation>(bot->GetGUID()));
         SellVendorItemsVisitor visitor(this, context);
         IterateItems(&visitor);
         return true;
