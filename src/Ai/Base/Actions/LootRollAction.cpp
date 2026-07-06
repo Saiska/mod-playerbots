@@ -63,9 +63,9 @@ bool LootRollAction::Execute(Event /*event*/)
             {
                 case ITEM_CLASS_WEAPON:
                 case ITEM_CLASS_ARMOR:
-                    if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
-                        vote = NEED;
-                    else if (usage != ITEM_USAGE_NONE)
+                    if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)
+                        vote = NEED;                        // genuine upgrade only
+                    else if (usage != ITEM_USAGE_NONE)      // incl. BAD_EQUIP (equippable, not an upgrade)
                         vote = GREED;
                     break;
                 case ITEM_CLASS_RECIPE:
