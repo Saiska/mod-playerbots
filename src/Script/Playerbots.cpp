@@ -36,6 +36,7 @@
 #include "PlayerbotCommandScript.h"
 #include "cmath"
 #include "BattleGroundTactics.h"
+#include "CurrencyGearIndex.h"
 
 class PlayerbotsDatabaseScript : public DatabaseScript
 {
@@ -397,6 +398,11 @@ public:
         // Runs at world init (post-DB-connect, pre-tick); queries CharacterDatabase + WorldDatabase.
         sRaidSimulationMgr.LoadFromDB();
         sPopulationDynamicsMgr.LoadFromDB();
+
+        // Build the currency->gear reverse index once at startup (DBC + npc_vendor SQL).
+        // TEMPORARY: DebugDump() removed after Task 2 golden-check passes.
+        sCurrencyGearIndex.Build();
+        sCurrencyGearIndex.DebugDump();
     }
 
     void OnUpdate(uint32 diff) override
