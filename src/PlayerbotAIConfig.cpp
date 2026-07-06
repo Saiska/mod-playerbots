@@ -726,6 +726,8 @@ bool PlayerbotAIConfig::Initialize()
     botActiveAloneSmartScaleDiffLimitCeiling = sConfigMgr->GetOption<uint32>("AiPlayerbot.botActiveAloneSmartScaleDiffLimitCeiling", 200);
     botActiveAloneSmartScaleWhenMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.botActiveAloneSmartScaleWhenMinLevel", 1);
     botActiveAloneSmartScaleWhenMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel", 80);
+    activityScaleStatistic = sConfigMgr->GetOption<uint32>("AiPlayerbot.ActivityScaleStatistic", 1);
+    activityScalePercentile = sConfigMgr->GetOption<uint32>("AiPlayerbot.ActivityScalePercentile", 90);
 
     randombotsWalkingRPG = sConfigMgr->GetOption<bool>("AiPlayerbot.RandombotsWalkingRPG", false);
     randombotsWalkingRPGInDoors = sConfigMgr->GetOption<bool>("AiPlayerbot.RandombotsWalkingRPG.InDoors", false);

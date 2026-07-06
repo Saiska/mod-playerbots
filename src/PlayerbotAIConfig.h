@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <string>
 #include <chrono>
+#include <atomic>
 
 #include "DBCEnums.h"
 #include "SharedDefines.h"
@@ -453,6 +454,9 @@ public:
     uint32 botActiveAloneSmartScaleDiffLimitCeiling;
     uint32 botActiveAloneSmartScaleWhenMinLevel;
     uint32 botActiveAloneSmartScaleWhenMaxLevel;
+    uint32 activityScaleStatistic;
+    uint32 activityScalePercentile;
+    std::atomic<uint32> activityScaleCachedDiff{0};
 
     bool freeMethodLoot;
     int32 lootNeedRollLevel;

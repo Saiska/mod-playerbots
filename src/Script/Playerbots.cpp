@@ -33,6 +33,7 @@
 #include "GearFloorMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
+#include "UpdateTime.h"
 #include "PlayerbotCommandScript.h"
 #include "cmath"
 #include "BattleGroundTactics.h"
@@ -479,6 +480,26 @@ public:
 
     void OnPlayerbotUpdate(uint32 /*diff*/) override
     {
+        // Once-per-tick, MAIN thread: compute the SmartScale input statistic and cache
+        // it. AutoScaleActivity runs on MapUpdater worker threads and must NOT call the
+        // non-const, sorting GetPercentile concurrently (data race) — it reads this cached
+        // scalar instead. Statistic: 0=legacy worst-case max, 1=percentile, 2=time-weighted avg.
+        uint32 scaleDiff;
+        switch (sPlayerbotAIConfig.activityScaleStatistic)
+        {
+            case 1:
+                scaleDiff = sWorldUpdateTime.GetPercentile(
+                    static_cast<uint8>(std::min<uint32>(sPlayerbotAIConfig.activityScalePercentile, 100)));
+                break;
+            case 2:
+                scaleDiff = sWorldUpdateTime.GetTimeWeightedAverageUpdateTime();
+                break;
+            default:
+                scaleDiff = sWorldUpdateTime.GetMaxUpdateTimeOfCurrentTable();
+                break;
+        }
+        sPlayerbotAIConfig.activityScaleCachedDiff.store(scaleDiff, std::memory_order_relaxed);
+
         sRandomPlayerbotMgr.UpdateSessions();  // Per-bot updates only
     }
 
