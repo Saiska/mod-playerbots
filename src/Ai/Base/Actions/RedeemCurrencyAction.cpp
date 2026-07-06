@@ -82,15 +82,23 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 float sc = calc.CalculateItem(o.gearId, 0);
                 if (!haveGear || sc > bestScore) { best = o; bestScore = sc; haveGear = true; }
             }
-            if (haveGear && PayCost(best.extendedCostId))
+            if (haveGear)
             {
-                if (GrantAndEquip(best.gearId))
+                // Verify a slot can receive the gear BEFORE paying — PayCost destroys the currency, so
+                // (like the sink/convert paths below) never pay unless the item can actually be stored.
+                ItemPosCountVec gdest;
+                bool const canStore = bot->CanStoreNewItem(INVENTORY_SLOT_BAG_0, NULL_SLOT, gdest, best.gearId, 1) == EQUIP_ERR_OK;
+                if (canStore && PayCost(best.extendedCostId))
                 {
-                    ++_buys; acted = true;
-                    LOG_INFO("playerbots", "Bots redeem: {} bought+equipped {} for {}x {}", bot->GetName(), best.gearId, best.cost, c);
-                    continue;   // only loop again on a real, stored upgrade
+                    if (GrantAndEquip(best.gearId))
+                    {
+                        ++_buys; acted = true;
+                        LOG_INFO("playerbots", "Bots redeem: {} bought+equipped {} for {}x {}", bot->GetName(), best.gearId, best.cost, c);
+                        continue;   // only loop again on a real, stored upgrade
+                    }
+                    break;   // room was verified; a store failure here is not expected — stop, don't re-drain
                 }
-                break;   // paid but the gear couldn't be stored (bags full) — stop, don't re-drain currency
+                // no room, or PayCost failed (missing a non-currency reqitem) -> fall through to the sink
             }
 
             // 2) no upgrade -> random affordable sink (gems/mats -> reagent vault)
