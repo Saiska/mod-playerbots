@@ -400,9 +400,9 @@ public:
         sPopulationDynamicsMgr.LoadFromDB();
 
         // Build the currency->gear reverse index once at startup (DBC + npc_vendor SQL).
-        // TEMPORARY: DebugDump() removed after Task 2 golden-check passes.
+        // Golden dump verified 2026-07-06 (token 45644->6, thresholds + convert chain exact);
+        // DebugDump() retained on the class for on-demand use.
         sCurrencyGearIndex.Build();
-        sCurrencyGearIndex.DebugDump();
     }
 
     void OnUpdate(uint32 diff) override
