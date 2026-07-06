@@ -47,6 +47,7 @@
 #include "QueryItemUsageAction.h"
 #include "QueryQuestAction.h"
 #include "RangeAction.h"
+#include "RedeemCurrencyAction.h"
 #include "ReleaseSpiritAction.h"
 #include "RepairAllAction.h"
 #include "ResetAiAction.h"
@@ -127,6 +128,7 @@ public:
         creators["equip"] = &ChatActionContext::equip;
         creators["unequip"] = &ChatActionContext::unequip;
         creators["sell"] = &ChatActionContext::sell;
+        creators["redeem currency"] = &ChatActionContext::redeem_currency;
         creators["buy"] = &ChatActionContext::buy;
         creators["reward"] = &ChatActionContext::reward;
         creators["trade"] = &ChatActionContext::trade;
@@ -273,6 +275,7 @@ private:
     static Action* equip(PlayerbotAI* botAI) { return new EquipAction(botAI); }
     static Action* unequip(PlayerbotAI* botAI) { return new UnequipAction(botAI); }
     static Action* sell(PlayerbotAI* botAI) { return new SellAction(botAI); }
+    static Action* redeem_currency(PlayerbotAI* botAI) { return new RedeemCurrencyAction(botAI); }
     static Action* buy(PlayerbotAI* botAI) { return new BuyAction(botAI); }
     static Action* reward(PlayerbotAI* botAI) { return new RewardAction(botAI); }
     static Action* trade(PlayerbotAI* botAI) { return new TradeAction(botAI); }

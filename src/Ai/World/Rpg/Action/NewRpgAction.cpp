@@ -684,6 +684,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepLocal(NewRpgInfo::Upkeep& up)
     {
         case 1:   // SELL (+guild-bank deposit) — fire once, hold a randomized dwell.
         {
+            if (up.stepStartMs == 0 && sPlayerbotAIConfig.tokenRedeemEnable)
+                botAI->DoSpecificAction("redeem currency");   // synthetic, in-place; once, before the sell/deposit dwell
             if (!UpkeepDwell(up, urand(sPlayerbotAIConfig.upkeepSellMinSec, sPlayerbotAIConfig.upkeepSellMaxSec),
                              "sell", true))
                 return true;
@@ -738,6 +740,8 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
     {
         case 1:   // SELL (+guild-bank deposit) — fire once, hold a randomized dwell.
         {
+            if (up.stepStartMs == 0 && sPlayerbotAIConfig.tokenRedeemEnable)
+                botAI->DoSpecificAction("redeem currency");   // synthetic, in-place; once, before the sell/deposit dwell
             if (!UpkeepDwell(up, urand(sPlayerbotAIConfig.upkeepSellMinSec, sPlayerbotAIConfig.upkeepSellMaxSec),
                              "sell", true))
                 return true;
