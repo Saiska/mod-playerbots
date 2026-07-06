@@ -41,7 +41,10 @@ public:
     std::vector<SinkOption> const& SinkFor(uint32 currencyItemId) const;
     uint32 ConvertTargetFor(uint32 currencyItemId) const;
     uint32 ThresholdFor(uint32 currencyItemId) const;
-    bool IsCurrency(uint32 itemId) const { return _gear.find(itemId) != _gear.end() || _sink.find(itemId) != _sink.end(); }
+    bool IsCurrency(uint32 itemId) const
+    {
+        return _gear.find(itemId) != _gear.end() || _sink.find(itemId) != _sink.end();
+    }
     void DebugDump() const;
 
 private:

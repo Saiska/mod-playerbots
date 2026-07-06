@@ -6,6 +6,8 @@
 #include "DBCStores.h"      // sItemExtendedCostStore
 #include "DBCStructure.h"   // ItemExtendedCostEntry, MAX_ITEM_EXTENDED_COST_REQUIREMENTS
 #include "DatabaseEnv.h"    // WorldDatabase
+#include "QueryResult.h"    // ResultSet (full def for Fetch/NextRow)
+#include "Field.h"          // Field::Get
 #include "ItemTemplate.h"   // ITEM_CLASS_*
 #include "ObjectMgr.h"      // sObjectMgr->GetItemTemplate
 #include "Log.h"
