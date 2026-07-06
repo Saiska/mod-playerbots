@@ -75,6 +75,13 @@ public:
         if (!botAI)
             return false;
 
+        // Only walk inventory when the bot is fully valid and stable. During the login ramp bots are being
+        // loaded / randomized / rotated out (RandomizeFirst, logout); a mid-setup or mid-teardown inventory
+        // holds a freed Item* that GetItemCount would deref -> C0000005 (live crash 2026-07-06, reproduced).
+        // Standard bot-safety guard used across the codebase (e.g. PlayerbotAI.cpp:540).
+        if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() || bot->IsDuringRemoveFromWorld())
+            return false;
+
         static uint32 const CURR[] = {49426, 47241, 45624, 40753, 40752, 29434}; // high->low
         uint32 const cap = sPlayerbotAIConfig.tokenRedeemMaxBuysPerUpkeep;
         uint32 buys = 0;

@@ -6322,6 +6322,10 @@ void PlayerbotAI::DepositEpicsToGuildBank()
 {
     if (!sPlayerbotAIConfig.guildBankDepositEpics || !IsInRealGuild())
         return;
+    // Only walk inventory when the bot is fully valid and stable — a mid-setup/teardown inventory (login-ramp
+    // load/randomize/logout) holds a freed Item* that the bag scan below would deref -> C0000005. Same guard as redeem.
+    if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() || bot->IsDuringRemoveFromWorld())
+        return;
     Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
     if (!guild)
         return;
