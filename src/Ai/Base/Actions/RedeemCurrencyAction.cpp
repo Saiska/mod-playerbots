@@ -6,6 +6,7 @@
 #include "ItemTemplate.h"
 #include "ObjectMgr.h"
 #include "Playerbots.h"
+#include "StatsWeightCalculator.h"
 
 // Mirrors the inline helper in PlayerbotFactory.cpp:2958.
 static Item* StoreNewItemInInventorySlot(Player* player, uint32 newItemId, uint32 count)
@@ -40,4 +41,89 @@ bool RedeemCurrencyAction::GrantAndEquip(uint32 gearId)
     if (bot->CanEquipItem(NULL_SLOT, dest, item, true, true) == EQUIP_ERR_OK)
         bot->EquipItem(dest, item, true);   // equip immediately if it slots
     return true;
+}
+
+bool RedeemCurrencyAction::Execute(Event /*event*/)
+{
+    if (!sPlayerbotAIConfig.tokenRedeemEnable)
+        return false;
+
+    static uint32 const CURR[] = {49426, 47241, 45624, 40753, 40752, 29434}; // high->low
+    uint32 const cap = sPlayerbotAIConfig.tokenRedeemMaxBuysPerUpkeep;
+    bool acted = false;
+
+    for (uint32 c : CURR)
+    {
+        uint32 bal = bot->GetItemCount(c, false);
+
+        // cadence guard: skip if balance has not risen since the last pass
+        auto it = botAI->tokenRedeemLastBalance.find(c);
+        if (it != botAI->tokenRedeemLastBalance.end() && bal <= it->second)
+            continue;
+
+        uint32 T = sCurrencyGearIndex.ThresholdFor(c);
+        if (T == 0 || bal < T)    // dormant below threshold
+            continue;
+
+        while (_buys < cap)
+        {
+            bal = bot->GetItemCount(c, false);
+
+            // 1) best affordable genuine upgrade
+            CurrencyGearIndex::GearOption best{}; float bestScore = 0.0f; bool haveGear = false;
+            for (auto const& o : sCurrencyGearIndex.GearFor(c))
+            {
+                if (o.cost > bal) continue;
+                ItemTemplate const* p = sObjectMgr->GetItemTemplate(o.gearId);
+                if (!p || bot->BotCanUseItem(p) != EQUIP_ERR_OK) continue;
+                ItemUsage u = botAI->GetAiObjectContext()->GetValue<ItemUsage>("item upgrade", std::to_string(o.gearId))->Get();
+                if (u != ITEM_USAGE_EQUIP && u != ITEM_USAGE_REPLACE) continue;
+                StatsWeightCalculator calc(bot); calc.SetItemSetBonus(false); calc.SetOverflowPenalty(false);
+                float sc = calc.CalculateItem(o.gearId, 0);
+                if (!haveGear || sc > bestScore) { best = o; bestScore = sc; haveGear = true; }
+            }
+            if (haveGear && PayCost(best.extendedCostId))
+            {
+                if (GrantAndEquip(best.gearId))
+                {
+                    ++_buys; acted = true;
+                    LOG_INFO("playerbots", "Bots redeem: {} bought+equipped {} for {}x {}", bot->GetName(), best.gearId, best.cost, c);
+                }
+                continue;
+            }
+
+            // 2) no upgrade -> random affordable sink (gems/mats -> reagent vault)
+            std::vector<CurrencyGearIndex::SinkOption> aff;
+            for (auto const& s : sCurrencyGearIndex.SinkFor(c))
+                if (s.cost <= bal) aff.push_back(s);
+            if (!aff.empty())
+            {
+                CurrencyGearIndex::SinkOption s = aff[urand(0, aff.size() - 1)];
+                if (bot->GetItemCount(c, false) >= s.cost)
+                {
+                    bot->DestroyItemCount(c, s.cost, true);
+                    StoreNewItemInInventorySlot(bot, s.itemId, 1);
+                    ++_buys; acted = true;
+                    continue;
+                }
+            }
+
+            // 3) no gear, no sink -> convert then let the target currency drain next pass
+            uint32 tgt = sCurrencyGearIndex.ConvertTargetFor(c);
+            if (tgt && bal > 0)
+            {
+                bot->DestroyItemCount(c, bal, true);
+                StoreNewItemInInventorySlot(bot, tgt, bal);  // 1:1 conversion
+                acted = true;
+            }
+            break;   // this currency done for the pass
+        }
+    }
+
+    // record post-pass balances for cadence guard on the next upkeep call
+    for (uint32 c : CURR)
+        botAI->tokenRedeemLastBalance[c] = bot->GetItemCount(c, false);
+
+    _buys = 0;   // reset per upkeep invocation
+    return acted;
 }
