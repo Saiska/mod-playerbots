@@ -69,24 +69,17 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
         return false;
 
     static uint32 const CURR[] = {49426, 47241, 45624, 40753, 40752, 29434}; // high->low
-    uint32 const cap = sPlayerbotAIConfig.tokenRedeemMaxBuysPerUpkeep;
-    uint32 buys = 0;
     bool acted = false;
 
     for (uint32 c : CURR)
     {
         uint32 bal = bot->GetItemCount(c, false);
 
-        // cadence guard: skip if balance has not risen since the last pass
-        auto it = botAI->tokenRedeemLastBalance.find(c);
-        if (it != botAI->tokenRedeemLastBalance.end() && bal <= it->second)
-            continue;
-
         uint32 T = sCurrencyGearIndex.ThresholdFor(c);
         if (T == 0 || bal < T)    // dormant below threshold
             continue;
 
-        while (buys < cap)
+        while (true)
         {
             bal = bot->GetItemCount(c, false);
 
@@ -112,7 +105,7 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 {
                     if (GrantAndEquip(bot, best.gearId))
                     {
-                        ++buys; acted = true;
+                        acted = true;
                         LOG_INFO("playerbots", "Bots redeem: {} bought+equipped {} for {}x {}", bot->GetName(), best.gearId, best.cost, c);
                         continue;   // only loop again on a real, stored upgrade
                     }
@@ -134,7 +127,7 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 {
                     bot->DestroyItemCount(c, s.cost, true);            // room verified above; no currency lost
                     StoreNewItemInInventorySlot(bot, s.itemId, 1);
-                    ++buys; acted = true;
+                    acted = true;
                     continue;
                 }
             }
@@ -154,10 +147,6 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
             break;   // this currency done for the pass
         }
     }
-
-    // record post-pass balances for the cadence guard on the next upkeep call
-    for (uint32 c : CURR)
-        botAI->tokenRedeemLastBalance[c] = bot->GetItemCount(c, false);
 
     return acted;
 }
