@@ -5,6 +5,7 @@
 
 #include "LootRollAction.h"
 
+#include "CurrencyGearIndex.h"
 #include "Event.h"
 #include "Group.h"
 #include "ItemUsageValue.h"
@@ -184,14 +185,24 @@ bool MasterLootRollAction::Execute(Event event)
 
 bool CanBotUseToken(ItemTemplate const* proto, Player* bot)
 {
-    // Get the bitmask for the bot's class
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    auto const& opts = sCurrencyGearIndex.GearFor(proto->ItemId);
+    if (!opts.empty() && botAI)
+    {
+        for (auto const& o : opts)
+        {
+            ItemTemplate const* gp = sObjectMgr->GetItemTemplate(o.gearId);
+            if (!gp || bot->BotCanUseItem(gp) != EQUIP_ERR_OK)
+                continue;
+            ItemUsage u = botAI->GetAiObjectContext()->GetValue<ItemUsage>("item upgrade", std::to_string(o.gearId))->Get();
+            if (u == ITEM_USAGE_EQUIP || u == ITEM_USAGE_REPLACE)
+                return true;   // a redeemable piece is a genuine upgrade -> Need
+        }
+        return false;          // token resolves but nothing upgrades -> Greed
+    }
+    // Fallback (unresolvable token: quest/gossip-only, no npc_vendor row): original class-bitmask eligibility.
     uint32 botClassMask = (1 << (bot->getClass() - 1));
-
-    // Check if the bot's class is allowed to use the token
-    if (proto->AllowableClass & botClassMask)
-        return true; // Bot's class is eligible to use this token
-
-    return false; // Bot's class cannot use this token
+    return (proto->AllowableClass & botClassMask) != 0;
 }
 
 bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
