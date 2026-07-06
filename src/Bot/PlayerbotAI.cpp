@@ -6304,6 +6304,54 @@ void PlayerbotAI::DepositSurplusToGuildBank()
     }
 }
 
+// Try to auto-place (slot 255) an item into ANY tab the bot has deposit rights to; returns true on success.
+static bool FindAnyDepositTab(Player* bot, Guild* guild, uint8 bag, uint8 slot)
+{
+    for (uint8 tab = 0; tab < GUILD_BANK_MAX_TABS; ++tab)
+    {
+        if (!guild->MemberHasTabRights(bot->GetGUID(), tab, GUILD_BANK_RIGHT_DEPOSIT_ITEM))
+            continue;
+        guild->SwapItemsWithInventory(bot, false, tab, 255, bag, slot, 0);   // 255 = auto-place/stack
+        if (!bot->GetItemByPos(bag, slot))                                    // source emptied => deposited
+            return true;
+    }
+    return false;
+}
+
+void PlayerbotAI::DepositEpicsToGuildBank()
+{
+    if (!sPlayerbotAIConfig.guildBankDepositEpics || !IsInRealGuild())
+        return;
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
+    if (!guild)
+        return;
+
+    std::vector<ObjectGuid> guids;   // snapshot: SwapItems invalidates Item*
+    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+        if (Item* it = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            guids.push_back(it->GetGUID());
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+        if (Bag* pBag = bot->GetBagByPos(bag))
+            for (uint32 i = 0; i < pBag->GetBagSize(); ++i)
+                if (Item* it = bot->GetItemByPos(bag, i))
+                    guids.push_back(it->GetGUID());
+
+    for (ObjectGuid g : guids)
+    {
+        Item* item = bot->GetItemByGuid(g);
+        if (!item)
+            continue;
+        ItemTemplate const* p = item->GetTemplate();
+        if (!p || p->Quality < ITEM_QUALITY_EPIC || !item->CanBeTraded())
+            continue;
+        ItemUsage u = GetAiObjectContext()->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
+        if (u == ITEM_USAGE_EQUIP || u == ITEM_USAGE_REPLACE || u == ITEM_USAGE_QUEST)
+            continue;   // keep-guard: never bank a wanted/pending/quest item
+        if (FindAnyDepositTab(bot, guild, item->GetBagSlot(), item->GetSlot()))
+            LOG_INFO("playerbots", "Bots epic-deposit: {} -> {} (guild {})", bot->GetName(), p->Name1, bot->GetGuildId());
+    }
+}
+
 void PlayerbotAI::QueueChatResponse(const ChatQueuedReply chatReply) { chatReplies.push_back(std::move(chatReply)); }
 
 bool PlayerbotAI::EqualLowercaseName(std::string s1, std::string s2)

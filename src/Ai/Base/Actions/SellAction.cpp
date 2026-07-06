@@ -70,6 +70,7 @@ bool SellAction::Execute(Event event)
     if (text == "vendor")
     {
         botAI->DepositSurplusToGuildBank();   // bank stocked surplus (incl. SKILL cloth) before vendoring the rest
+        botAI->DepositEpicsToGuildBank();   // tradeable epics -> any tab (bypass top-up), keep-guarded
         SellVendorItemsVisitor visitor(this, context);
         IterateItems(&visitor);
         return true;
