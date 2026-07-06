@@ -11,6 +11,7 @@
 #include "ItemTemplate.h"   // ITEM_CLASS_*
 #include "ObjectMgr.h"      // sObjectMgr->GetItemTemplate
 #include "Log.h"
+#include <algorithm>
 
 std::vector<CurrencyGearIndex::GearOption> const CurrencyGearIndex::_emptyGear;
 std::vector<CurrencyGearIndex::SinkOption> const CurrencyGearIndex::_emptySink;
@@ -84,7 +85,51 @@ void CurrencyGearIndex::Build()
         }
     }
 
-    // Two-hop token expansion + sink refinement + threshold population are added in Task 2.
+    // Two-hop: if a currency's gear list actually points at a TIER TOKEN (misc/junk/epic that itself
+    // has gear in _gear), inline the token's leaves with viaTokenId set, and drop the raw-token entry.
+    for (auto& [currency, opts] : _gear)
+    {
+        std::vector<GearOption> expanded;
+        for (GearOption const& o : opts)
+        {
+            ItemTemplate const* p = sObjectMgr->GetItemTemplate(o.gearId);
+            bool const isToken = p && p->Class == ITEM_CLASS_MISC && p->SubClass == ITEM_SUBCLASS_JUNK &&
+                                 p->Quality == ITEM_QUALITY_EPIC && _gear.count(o.gearId);
+            if (!isToken)
+            {
+                expanded.push_back(o);
+                continue;
+            }
+            for (GearOption const& leaf : _gear[o.gearId])   // token -> gear (already one-hop built)
+                expanded.push_back({leaf.gearId, o.cost, o.extendedCostId, o.gearId});  // cost = emblem cost of the token
+        }
+        opts.swap(expanded);
+    }
+
+    // Sink: keep only repeatably-purchasable non-gear (npc_vendor.maxcount == 0), so a drain reaches 0.
+    std::unordered_map<uint32, bool> unlimited;   // itemId -> any vendor sells it with maxcount 0
+    if (QueryResult r = WorldDatabase.Query("SELECT item, MIN(maxcount) FROM npc_vendor GROUP BY item"))
+    {
+        do { Field* f = r->Fetch(); unlimited[f[0].Get<uint32>()] = (f[1].Get<uint32>() == 0); }
+        while (r->NextRow());
+    }
+    for (auto& [currency, sinks] : _sink)
+    {
+        std::vector<SinkOption> keep;
+        for (SinkOption const& s : sinks)
+            if (unlimited[s.itemId])
+                keep.push_back(s);
+        sinks.swap(keep);
+    }
+
+    // Threshold T[currency] = max gear cost (incl. token path).
+    for (auto const& [currency, opts] : _gear)
+    {
+        uint32 t = 0;
+        for (GearOption const& o : opts) t = std::max(t, o.cost);
+        _threshold[currency] = t;
+    }
+
     LOG_INFO("playerbots", "[CurrencyGearIndex] one-hop built: {} currencies with gear, {} with sink",
              uint32(_gear.size()), uint32(_sink.size()));
 }
