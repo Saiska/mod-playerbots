@@ -88,8 +88,9 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 {
                     ++_buys; acted = true;
                     LOG_INFO("playerbots", "Bots redeem: {} bought+equipped {} for {}x {}", bot->GetName(), best.gearId, best.cost, c);
+                    continue;   // only loop again on a real, stored upgrade
                 }
-                continue;
+                break;   // paid but the gear couldn't be stored (bags full) — stop, don't re-drain currency
             }
 
             // 2) no upgrade -> random affordable sink (gems/mats -> reagent vault)
@@ -99,9 +100,11 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
             if (!aff.empty())
             {
                 CurrencyGearIndex::SinkOption s = aff[urand(0, aff.size() - 1)];
-                if (bot->GetItemCount(c, false) >= s.cost)
+                ItemPosCountVec sdest;
+                if (bot->GetItemCount(c, false) >= s.cost &&
+                    bot->CanStoreNewItem(INVENTORY_SLOT_BAG_0, NULL_SLOT, sdest, s.itemId, 1) == EQUIP_ERR_OK)
                 {
-                    bot->DestroyItemCount(c, s.cost, true);
+                    bot->DestroyItemCount(c, s.cost, true);            // room verified above; no currency lost
                     StoreNewItemInInventorySlot(bot, s.itemId, 1);
                     ++_buys; acted = true;
                     continue;
@@ -112,9 +115,13 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
             uint32 tgt = sCurrencyGearIndex.ConvertTargetFor(c);
             if (tgt && bal > 0)
             {
-                bot->DestroyItemCount(c, bal, true);
-                StoreNewItemInInventorySlot(bot, tgt, bal);  // 1:1 conversion
-                acted = true;
+                ItemPosCountVec cdest;
+                if (bot->CanStoreNewItem(INVENTORY_SLOT_BAG_0, NULL_SLOT, cdest, tgt, bal) == EQUIP_ERR_OK)
+                {
+                    bot->DestroyItemCount(c, bal, true);         // room verified; no currency lost
+                    StoreNewItemInInventorySlot(bot, tgt, bal);  // 1:1 conversion
+                    acted = true;
+                }
             }
             break;   // this currency done for the pass
         }
