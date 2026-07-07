@@ -432,6 +432,7 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
         bool canReach = !(type & (~typeOk));
         if (canReach)
         {
+            botAI->rpgInfo.nopathAttempts = 0;   // a progressing route exists — clear the NOPATH streak
             const G3D::Vector3& endPos = path.GetActualEndPosition();
             // Only commit if the mmap endpoint actually makes progress
             // toward the destination. For pathological INCOMPLETE
@@ -442,6 +443,22 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
             if (endDistToDest + 5.0f < disToDest)
             {
                 return MoveTo(bot->GetMapId(), endPos.x, endPos.y, endPos.z, false, false, false, true);
+            }
+        }
+        else if (type & PATHFIND_NOPATH)
+        {
+            // mmap reports NO route at all to a far dest (unreachable mesh island — the Dalaran-below
+            // case surfaces here if the curated egress guard did not already catch it). Don't burn the
+            // full 90s stuck window oscillating: after a few consecutive NOPATH ticks, teleport.
+            if (++botAI->rpgInfo.nopathAttempts >= nopathTeleportAttempts)
+            {
+                botAI->rpgInfo.nopathAttempts = 0;
+                bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+                LOG_DEBUG("playerbots",
+                          "[New RPG] Teleport {} to ({},{},{},{}) as mmap reports NOPATH (x{})",
+                          bot->GetName(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(),
+                          dest.GetMapId(), nopathTeleportAttempts);
+                return bot->TeleportTo(dest);
             }
         }
     }

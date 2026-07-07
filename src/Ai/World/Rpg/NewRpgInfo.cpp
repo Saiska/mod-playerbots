@@ -120,6 +120,7 @@ void NewRpgInfo::SetMoveFarTo(WorldPosition pos)
     nearestMoveFarDis = FLT_MAX;
     stuckTs = 0;
     stuckAttempts = 0;
+    nopathAttempts = 0;
     moveFarPos = pos;
 }
 

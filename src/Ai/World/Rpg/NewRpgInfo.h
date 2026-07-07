@@ -150,6 +150,7 @@ struct NewRpgInfo
     float nearestMoveFarDis{FLT_MAX};
     uint32 stuckTs{0};
     uint32 stuckAttempts{0};
+    uint32 nopathAttempts{0};   // consecutive ticks the dest pathfind returned PATHFIND_NOPATH
     WorldPosition moveFarPos;
     // END MOVE_FAR
 

@@ -191,6 +191,7 @@ protected:
     // the teleport fires, but long enough that a genuine long
     // walk that is slowly making progress never triggers it.
     const uint32 stuckTime = 90 * 1000;
+    const uint32 nopathTeleportAttempts = 3;   // teleport after N consecutive NOPATH dest pathfinds
 };
 
 // rest-hub-unification: (behaviorId, variant) -> curated EmotePalette row. Defined in
