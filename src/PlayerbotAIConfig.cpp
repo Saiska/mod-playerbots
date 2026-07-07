@@ -745,7 +745,7 @@ bool PlayerbotAIConfig::Initialize()
     freeMethodLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.FreeMethodLoot", false);
     lootNeedRollLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.LootNeedRollLevel", 1);
     tokenRedeemEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.TokenRedeemEnable", true);
-    tokenRedeemMaxBuysPerUpkeep = sConfigMgr->GetOption<uint32>("AiPlayerbot.TokenRedeemMaxBuysPerUpkeep", 12);
+    tokenRedeemMaxBuysPerTick = sConfigMgr->GetOption<uint32>("AiPlayerbot.TokenRedeemMaxBuysPerTick", 40);
     guildBankDepositEpics = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildBankDepositEpics", true);
     lootRollRecipe = sConfigMgr->GetOption<bool>("AiPlayerbot.LootRollRecipe", false);
     lootRollDisenchant = sConfigMgr->GetOption<bool>("AiPlayerbot.LootRollDisenchant", false);

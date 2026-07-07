@@ -8,6 +8,7 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "StatsWeightCalculator.h"
+#include <atomic>
 
 // Mirrors the inline helper in PlayerbotFactory.cpp:2958.
 static Item* StoreNewItemInInventorySlot(Player* player, uint32 newItemId, uint32 count)
@@ -69,24 +70,51 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
         return false;
 
     static uint32 const CURR[] = {49426, 47241, 45624, 40753, 40752, 29434}; // high->low
-    uint32 const cap = sPlayerbotAIConfig.tokenRedeemMaxBuysPerUpkeep;
-    uint32 buys = 0;
     bool acted = false;
+
+    // Bound the inventory churn per Execute. The buy loop below mutates the bags (Destroy/Store/Equip) and
+    // re-walks every bag slot via GetItemCount each iteration; an UNBOUNDED pass over a large currency pile
+    // reopened a freed-Item* crash in Bag::GetItemCount (2026-07-07, redeem_unbounded_loop_crash.md). Cap the
+    // acting buys per tick — a large pile still fully drains, just over several upkeep passes (the
+    // maintenance / 90%-full pipeline empties bags to the reagent vault between passes).
+    uint32 const maxBuys = sPlayerbotAIConfig.tokenRedeemMaxBuysPerTick;
+    uint32 buys = 0;
+
+    // [RedeemProbe] confirm Execute is actually reached fleet-wide (rules out "action never dispatched").
+    static std::atomic<uint32> s_execCalls{0};
+    uint32 const probeN = ++s_execCalls;
+    if (probeN % 500 == 1)
+        LOG_INFO("playerbots", "[RedeemProbe] Execute reached (call #{}) by {}", probeN, bot->GetName());
 
     for (uint32 c : CURR)
     {
+        if (buys >= maxBuys)   // per-tick churn budget spent; remaining currencies wait for the next pass
+            break;
+
         uint32 bal = bot->GetItemCount(c, false);
 
-        // cadence guard: skip if balance has not risen since the last pass
-        auto it = botAI->tokenRedeemLastBalance.find(c);
-        if (it != botAI->tokenRedeemLastBalance.end() && bal <= it->second)
-            continue;
+        // [RedeemProbe] watch the two frozen currencies (Badge of Justice, Emblem of Triumph).
+        bool const probeWatch = (c == 29434 || c == 47241);
 
         uint32 T = sCurrencyGearIndex.ThresholdFor(c);
         if (T == 0 || bal < T)    // dormant below threshold
+        {
+            if (probeWatch && bal > 0)
+                LOG_INFO("playerbots", "[RedeemProbe] {} c={} bal={} T={} -> DORMANT (T=0 or bal<T, no drain)",
+                         bot->GetName(), c, bal, T);
             continue;
+        }
 
-        while (buys < cap)
+        uint32 const probeEnterBal = bal;   // [RedeemProbe] to measure how much this pass drained
+        char const* probeBranch = "none";   // [RedeemProbe] last branch that acted this pass
+
+        if (probeWatch)
+            LOG_INFO("playerbots",
+                     "[RedeemProbe] {} c={} ENTER bal={} T={} sink={} convert={} -> loop",
+                     bot->GetName(), c, bal, T, uint32(sCurrencyGearIndex.SinkFor(c).size()),
+                     sCurrencyGearIndex.ConvertTargetFor(c));
+
+        while (buys < maxBuys)
         {
             bal = bot->GetItemCount(c, false);
 
@@ -112,7 +140,9 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 {
                     if (GrantAndEquip(bot, best.gearId))
                     {
-                        ++buys; acted = true;
+                        acted = true;
+                        ++buys;
+                        probeBranch = "gear";
                         LOG_INFO("playerbots", "Bots redeem: {} bought+equipped {} for {}x {}", bot->GetName(), best.gearId, best.cost, c);
                         continue;   // only loop again on a real, stored upgrade
                     }
@@ -134,7 +164,9 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 {
                     bot->DestroyItemCount(c, s.cost, true);            // room verified above; no currency lost
                     StoreNewItemInInventorySlot(bot, s.itemId, 1);
-                    ++buys; acted = true;
+                    acted = true;
+                    ++buys;
+                    probeBranch = "sink";
                     continue;
                 }
             }
@@ -149,15 +181,20 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                     bot->DestroyItemCount(c, bal, true);         // room verified; no currency lost
                     StoreNewItemInInventorySlot(bot, tgt, bal);  // 1:1 conversion
                     acted = true;
+                    probeBranch = "convert";
                 }
             }
             break;   // this currency done for the pass
         }
-    }
 
-    // record post-pass balances for the cadence guard on the next upkeep call
-    for (uint32 c : CURR)
-        botAI->tokenRedeemLastBalance[c] = bot->GetItemCount(c, false);
+        // [RedeemProbe] per-pass outcome for the two frozen currencies: which branch drained, and how much.
+        if (probeWatch)
+        {
+            uint32 const probeEndBal = bot->GetItemCount(c, false);
+            LOG_INFO("playerbots", "[RedeemProbe] {} c={} DONE branch={} drained={} ({}->{})",
+                     bot->GetName(), c, probeBranch, probeEnterBal - probeEndBal, probeEnterBal, probeEndBal);
+        }
+    }
 
     return acted;
 }

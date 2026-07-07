@@ -619,7 +619,6 @@ public:
     NewRpgInfo rpgInfo;
     NewRpgStatistic rpgStatistic;
     std::unordered_map<uint32, uint32> lowPriorityQuest;   // questId -> getMSTime() when blacklisted
-    std::unordered_map<uint32, uint32> tokenRedeemLastBalance;   // currencyId -> balance at last redeem pass (cadence guard)
     bool IsQuestLowPriority(uint32 questId)
     {
         auto it = lowPriorityQuest.find(questId);
