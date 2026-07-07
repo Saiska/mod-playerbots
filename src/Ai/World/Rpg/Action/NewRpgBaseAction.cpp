@@ -1640,7 +1640,11 @@ WorldPosition NewRpgBaseAction::SelectRandomGrindPos(Player* bot)
         }
     }
     WorldPosition dest{};
-    if (urand(1, 100) <= 50 && !hi_prepared_locs.empty())
+    // In a capital the same-zone filter is bypassed, so hi_prepared_locs (within 500y, 3D) is
+    // dominated by spots directly below a *floating* capital (Dalaran over Crystalsong): over-
+    // concentrated and, without the egress teleport, unreachable. Skip the near-preference when
+    // inCity and draw uniformly from the wider loRange pool so bots spread across neighbouring zones.
+    if (!inCity && urand(1, 100) <= 50 && !hi_prepared_locs.empty())
     {
         uint32 idx = urand(0, hi_prepared_locs.size() - 1);
         dest = hi_prepared_locs[idx];
