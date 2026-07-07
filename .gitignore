@@ -50,3 +50,5 @@ local.properties
 .cproject
 .vscode
 .idea
+build.done
+build.log
