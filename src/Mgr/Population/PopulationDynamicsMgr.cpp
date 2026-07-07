@@ -102,6 +102,7 @@ void PopulationDynamicsMgr::LoadFromDB()
         std::array<uint32, 81> targets{};
         uint32 P = 0;
         ComputeTargets(_cap, census, targets, P);
+        _lastTargets = targets;                            // cache for RandomPlayerbotMgr::AddRandomBots (GetTargets)
         sRandomPlayerbotMgr.SetPopulationTarget(P);
         LOG_INFO("playerbots", "PopDyn: initial population target P={} set at world-init (cap={}).", P, uint32(_cap));
     }
@@ -485,6 +486,7 @@ void PopulationDynamicsMgr::Update(uint32 diff)
         std::array<uint32, 81> targets{};
         uint32 P = 0;
         ComputeTargets(cap, census, targets, P);           // P uses census.count[80] (spec §3)
+        _lastTargets = targets;                             // cache for RandomPlayerbotMgr::AddRandomBots (GetTargets)
 
         // Band-summed census (can't log 81 per-level numbers). One sum per band 0..7 + count[80], per faction,
         // plus min/max occupied level. Greppable for live verification.

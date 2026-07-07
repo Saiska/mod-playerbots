@@ -633,11 +633,13 @@ bool RandomPlayerbotMgr::IsAccountType(uint32 accountId, uint8 accountType)
     return result != nullptr;
 }
 
-// Logs-in bots in 4 phases. Phase 1 logs Alliance bots up to how much is expected according to the faction ratio,
-// and Phase 2 logs-in the remainder Horde bots to reach the total maxAllowedBotCount. If maxAllowedBotCount is not
-// reached after Phase 2, the function goes back to log-in Alliance bots and reach maxAllowedBotCount. This is done
-// because not every account is guaranteed 5A/5H bots, so the true ratio might be skewed by few percentages. Finally,
-// Phase 4 is reached if and only if the value of RandomBotAccountCount is lower than it should.
+// Logs-in bots with a DETERMINISTIC, per-(level, faction) target-driven fill. For each level 80 -> 1
+// and each faction, want = PopulationDynamicsMgr target[level] / 2; the first (want - have) characters
+// of exactly (level, faction), ordered by guid ascending, are logged in (short-fill when the pool
+// lacks enough — the population conveyor closes the gap over subsequent ticks). maxAllowedBotCount is
+// the overall per-interval safety cap and is never exceeded. On the very first boot tick, before
+// PopDyn has computed any targets, it falls back to the legacy random faction-ratio phased fill.
+// PHASE 4 (below) still reports when RandomBotAccountCount is lower than it should be.
 uint32 RandomPlayerbotMgr::AddRandomBots()
 {
     uint32 maxAllowedBotCount = GetEventValue(0, "bot_count");
@@ -688,22 +690,23 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
             accountsToUse = rndBotTypeAccounts;
         }
 
-        // Pre-map all characters from selected accounts
+        // Pre-map all characters from selected accounts. The prepared statement
+        // CHAR_SEL_CHARS_BY_ACCOUNT_ID only returns guid/class/race and is shared with core code;
+        // the deterministic fill also needs LEVEL, so query it directly here.
         struct CharacterInfo
         {
             uint32 guid;
             uint8 rClass;
             uint8 rRace;
+            uint8 rLevel;
             uint32 accountId;
         };
         std::vector<CharacterInfo> allCharacters;
 
         for (uint32 accountId : accountsToUse)
         {
-            CharacterDatabasePreparedStatement* stmt =
-                CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARS_BY_ACCOUNT_ID);
-            stmt->SetData(0, accountId);
-            PreparedQueryResult result = CharacterDatabase.Query(stmt);
+            QueryResult result = CharacterDatabase.Query(
+                "SELECT guid, race, class, level FROM characters WHERE account = {}", accountId);
             if (!result)
                 continue;
 
@@ -712,27 +715,12 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
                 Field* fields = result->Fetch();
                 CharacterInfo info;
                 info.guid = fields[0].Get<uint32>();
-                info.rClass = fields[1].Get<uint8>();
-                info.rRace = fields[2].Get<uint8>();
+                info.rRace = fields[1].Get<uint8>();
+                info.rClass = fields[2].Get<uint8>();
+                info.rLevel = fields[3].Get<uint8>();
                 info.accountId = accountId;
                 allCharacters.push_back(info);
             } while (result->NextRow());
-        }
-
-        // Shuffle for class balance
-        std::shuffle(allCharacters.begin(), allCharacters.end(), rng);
-
-        // Separate characters by faction for phased login
-        std::vector<CharacterInfo> allianceChars;
-        std::vector<CharacterInfo> hordeChars;
-
-        for (auto const& charInfo : allCharacters)
-        {
-            if (IsAlliance(charInfo.rRace))
-                allianceChars.push_back(charInfo);
-
-            else
-                hordeChars.push_back(charInfo);
         }
 
         // Lambda to handle bot login logic
@@ -761,41 +749,145 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
             return true;
         };
 
-        // PHASE 1: Log-in Alliance bots up to allowedAllianceCount
-        for (auto const& charInfo : allianceChars)
+        // Per-level, both-faction targets computed by PopulationDynamicsMgr (index 0 unused,
+        // target[80] = sink). If PopDyn hasn't computed them yet (very first boot tick), all are 0
+        // and we fall back to the legacy random phased fill so login isn't dead for that tick.
+        std::array<uint32, 81> const& targets = sPopulationDynamicsMgr.GetTargets();
+        bool haveTargets = false;
+        for (uint8 lvl = 1; lvl <= 80; ++lvl)
         {
-            if (!allowedAllianceCount)
-                break;
-
-            if (tryLoginBot(charInfo))
+            if (targets[lvl] > 0)
             {
-                maxAllowedBotCount--;
-                allowedAllianceCount--;
+                haveTargets = true;
+                break;
             }
         }
 
-        // PHASE 2: Log-in Horde bots up to maxAllowedBotCount
-        for (auto const& charInfo : hordeChars)
+        if (haveTargets)
         {
-            if (!maxAllowedBotCount)
-                break;
+            // DETERMINISTIC per-(level, faction) fill. For each level 80 -> 1 and each faction,
+            // want = target[level] / 2; log in the first (want - have) characters of exactly
+            // (level, faction), ordered by guid ascending. Short-fill when the pool lacks enough —
+            // the population conveyor fills the gap over subsequent ticks. maxAllowedBotCount is the
+            // overall per-interval safety cap and is never exceeded.
 
-            if (tryLoginBot(charInfo))
-                maxAllowedBotCount--;
+            // Bucket the bot-account characters by [faction][level], sorted by guid ascending.
+            std::vector<CharacterInfo> buckets[2][81];
+            for (auto const& charInfo : allCharacters)
+            {
+                if (charInfo.rLevel < 1 || charInfo.rLevel > 80)
+                    continue;
+                uint32 f = IsAlliance(charInfo.rRace) ? 0u : 1u;
+                buckets[f][charInfo.rLevel].push_back(charInfo);
+            }
+            for (uint32 f = 0; f < 2; ++f)
+            {
+                for (uint32 lvl = 1; lvl <= 80; ++lvl)
+                {
+                    auto& bucket = buckets[f][lvl];
+                    std::sort(bucket.begin(), bucket.end(),
+                              [](CharacterInfo const& a, CharacterInfo const& b) { return a.guid < b.guid; });
+                }
+            }
+
+            // Census of bots already online, binned by [faction][level] (module-tracked currentBots).
+            uint32 haveCount[2][81] = {};
+            for (uint32 guid : currentBots)
+            {
+                Player* p = GetPlayerBot(guid);
+                if (!p)
+                    continue;
+                uint8 lvl = p->GetLevel();
+                if (lvl < 1 || lvl > 80)
+                    continue;
+                uint32 f = IsAlliance(p->getRace()) ? 0u : 1u;
+                haveCount[f][lvl]++;
+            }
+
+            for (int lvl = 80; lvl >= 1 && maxAllowedBotCount; --lvl)
+            {
+                uint32 want = targets[lvl] / 2u;
+                if (!want)
+                    continue;
+
+                for (uint32 f = 0; f < 2 && maxAllowedBotCount; ++f)
+                {
+                    if (haveCount[f][lvl] >= want)
+                        continue;
+
+                    uint32 need = want - haveCount[f][lvl];
+                    for (auto const& charInfo : buckets[f][lvl])
+                    {
+                        if (!need || !maxAllowedBotCount)
+                            break;
+
+                        if (tryLoginBot(charInfo))
+                        {
+                            maxAllowedBotCount--;
+                            need--;
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // FALLBACK (first boot tick, before PopDyn has computed targets): the original random,
+            // level-blind phased fill so login isn't dead for one tick.
+            std::shuffle(allCharacters.begin(), allCharacters.end(), rng);
+
+            // Separate characters by faction for phased login
+            std::vector<CharacterInfo> allianceChars;
+            std::vector<CharacterInfo> hordeChars;
+
+            for (auto const& charInfo : allCharacters)
+            {
+                if (IsAlliance(charInfo.rRace))
+                    allianceChars.push_back(charInfo);
+
+                else
+                    hordeChars.push_back(charInfo);
+            }
+
+            // PHASE 1: Log-in Alliance bots up to allowedAllianceCount
+            for (auto const& charInfo : allianceChars)
+            {
+                if (!allowedAllianceCount)
+                    break;
+
+                if (tryLoginBot(charInfo))
+                {
+                    maxAllowedBotCount--;
+                    allowedAllianceCount--;
+                }
+            }
+
+            // PHASE 2: Log-in Horde bots up to maxAllowedBotCount
+            for (auto const& charInfo : hordeChars)
+            {
+                if (!maxAllowedBotCount)
+                    break;
+
+                if (tryLoginBot(charInfo))
+                    maxAllowedBotCount--;
+            }
+
+            // PHASE 3: If maxAllowedBotCount wasn't reached, log-in more Alliance bots
+            for (auto const& charInfo : allianceChars)
+            {
+                if (!maxAllowedBotCount)
+                    break;
+
+                if (tryLoginBot(charInfo))
+                    maxAllowedBotCount--;
+            }
         }
 
-        // PHASE 3: If maxAllowedBotCount wasn't reached, log-in more Alliance bots
-        for (auto const& charInfo : allianceChars)
-        {
-            if (!maxAllowedBotCount)
-                break;
-
-            if (tryLoginBot(charInfo))
-                maxAllowedBotCount--;
-        }
-
-        // PHASE 4: An error is given if maxAllowedBotCount is still not reached
-        if (maxAllowedBotCount)
+        // PHASE 4: missing-bots error applies ONLY to the legacy fallback path. Under the
+        // deterministic (haveTargets) path a leftover maxAllowedBotCount is EXPECTED — each level
+        // is short-filled from the DB and the population conveyor ("ascensor") closes the gap — so
+        // it is not an error and must not spam the log.
+        if (!haveTargets && maxAllowedBotCount)
         {
             if (missingBotsTimer == 0)
                 missingBotsTimer = time(nullptr);
@@ -812,7 +904,7 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
         }
         else
         {
-            missingBotsTimer = 0;       // Reset timer if logins for this interval were successful
+            missingBotsTimer = 0;       // deterministic path, or all logins satisfied
         }
     }
     else

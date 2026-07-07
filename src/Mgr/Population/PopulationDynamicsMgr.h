@@ -64,6 +64,10 @@ public:
     // level 80 -> remainder (MaxPopulation - sum of bands); any level > cap -> 0. Returns spawn target P.
     void   ComputeTargets(uint8 cap, Census const& census, std::array<uint32, 81>& targets, uint32& outP) const;
     uint8  CurrentCap() const { return _cap; }             // cached cap for DK-login gating (world-thread read)
+    // Last per-level targets computed by Update()/LoadFromDB() (both-faction total per level; index 0
+    // unused, target[80] = sink). Read by RandomPlayerbotMgr::AddRandomBots for the deterministic
+    // per-(level, faction) login fill. Unlocked read mirrors CurrentCap()'s cached-value pattern.
+    std::array<uint32, 81> const& GetTargets() const { return _lastTargets; }
 
 private:
     PopulationDynamicsMgr() = default;
@@ -106,6 +110,7 @@ private:
     std::mutex _mutex;
     uint8  _frontier = 0;                    // cached monotonic real-player max level (1..80)
     uint8  _cap = 0;                          // cached level cap = ComputeCap(_frontier); read by the DK-spawn gate
+    std::array<uint32, 81> _lastTargets{};    // cache of the last ComputeTargets() output (world-thread read via GetTargets)
     uint32 _tickTimerMs = 0;                 // accumulator for Period (conveyor) cadence
     uint32 _sinkTimerMs = 0;                 // accumulator for SinkPeriod (level-80 sink-gate) cadence
     // Conveyor drip state (BuildPlan fills once per Period; DripDrain consumes across ticks).
