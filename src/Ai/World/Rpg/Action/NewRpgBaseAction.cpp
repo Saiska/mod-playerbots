@@ -49,6 +49,14 @@ WorldPosition FindFishingHole(PlayerbotAI* botAI);
 // upkeep-sociability: per-POI held-pose set; file-scope so ResolveHeldPose (outside anon ns) can name it.
 struct PoseSet { const uint32* poses; uint8 count; };
 
+// The only WotLK capital with no walkable path to the ground: Dalaran floats over Crystalsong
+// Forest, so any destination outside its zone is unreachable on foot and egress must teleport.
+// Shattrath (3703) is ground-level and walkable — intentionally NOT listed.
+static bool IsNoGroundEgressCapitalZone(uint32 zoneId)
+{
+    return zoneId == 4395;   // Dalaran
+}
+
 namespace
 {
     // -----------------------------------------------------------------------
@@ -305,6 +313,27 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
 {
     if (dest == WorldPosition())
         return false;
+
+    // Floating-capital egress: you cannot walk off Dalaran. If the bot is in a no-ground-egress
+    // capital and the destination lies outside that zone, teleport instead of jamming the pathfinder
+    // for minutes (the 90s stuck recovery, reset by oscillation, took ~11 min in practice). Same-zone
+    // in-city hops fall through to normal movement below.
+    if (IsNoGroundEgressCapitalZone(bot->GetZoneId()))
+    {
+        bool leavingZone =
+            dest.GetMapId() != bot->GetMapId() ||
+            bot->GetMap()->GetZoneId(bot->GetPhaseMask(), dest.GetPositionX(), dest.GetPositionY(),
+                                     dest.GetPositionZ()) != bot->GetZoneId();
+        if (leavingZone)
+        {
+            bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+            LOG_DEBUG("playerbots",
+                      "[New RPG] Teleport {} out of no-ground-egress capital (zone {}) to ({},{},{},{})",
+                      bot->GetName(), bot->GetZoneId(), dest.GetPositionX(), dest.GetPositionY(),
+                      dest.GetPositionZ(), dest.GetMapId());
+            return bot->TeleportTo(dest);
+        }
+    }
 
     if (dest != botAI->rpgInfo.moveFarPos)
     {
