@@ -11,6 +11,7 @@
 #include "StatsWeightCalculator.h"
 #include "StringFormat.h"
 #include <atomic>
+#include <unordered_set>
 #ifdef _WIN32
 #include <excpt.h>
 #endif
@@ -178,6 +179,9 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
     // maintenance / 90%-full pipeline empties bags to the reagent vault between passes).
     uint32 const maxBuys = sPlayerbotAIConfig.tokenRedeemMaxBuysPerTick;
     uint32 buys = 0;
+    std::unordered_set<uint32> boughtGearIds;   // dedup: an item bought this Execute is no longer an
+                                                // upgrade, but the cached "item upgrade" value would still
+                                                // say so and the loop would re-buy it until currency drains.
 
     // [RedeemProbe] confirm Execute is actually reached fleet-wide (rules out "action never dispatched").
     static std::atomic<uint32> s_execCalls{0};
@@ -231,6 +235,7 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
             for (auto const& o : sCurrencyGearIndex.GearFor(c))
             {
                 if (o.cost > bal) continue;
+                if (boughtGearIds.count(o.gearId)) continue;   // already bought this Execute — don't re-buy the same item
                 ItemTemplate const* p = sObjectMgr->GetItemTemplate(o.gearId);
                 if (!p || bot->BotCanUseItem(p) != EQUIP_ERR_OK) continue;
                 ItemUsage u = botAI->GetAiObjectContext()->GetValue<ItemUsage>("item upgrade", std::to_string(o.gearId))->Get();
@@ -250,6 +255,7 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                     {
                         acted = true;
                         ++buys;
+                        boughtGearIds.insert(best.gearId);
                         probeBranch = "gear";
                         LOG_INFO("playerbots", "Bots redeem: {} bought+equipped {} for {}x {}", bot->GetName(), best.gearId, best.cost, c);
                         continue;   // only loop again on a real, stored upgrade
