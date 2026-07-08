@@ -887,6 +887,10 @@ public:
     std::vector<std::vector<uint32>> GetOptimalFlightDestinations(Player* bot);
     const std::vector<WorldLocation> GetTeleportLocations(Player* bot);
     const std::vector<WorldLocation> GetTravelHubs(Player* bot);
+    // upkeep-local-hub-proximity: level-agnostic counterpart to GetTravelHubs — every innkeeper/
+    // flightmaster hub in the bot's CURRENT ZONE, regardless of that zone's level bracket. Never
+    // inserts an empty entry (uses find, not operator[]).
+    const std::vector<WorldLocation> GetZoneHubs(Player* bot);
     std::vector<WorldLocation> GetCityLocations(Player* bot,
         uint32* outCapitalZone = nullptr);
     // upkeep-capital-pose-prop-resolve: like GetCityLocations' single weighted pick, but also
@@ -1040,6 +1044,11 @@ private:
     std::map<uint32, FlightMasterInfo> hordeFlightMasterCache;
     std::map<uint8, std::vector<WorldLocation>> allianceHubsPerLevelCache;
     std::map<uint8, std::vector<WorldLocation>> hordeHubsPerLevelCache;
+    // upkeep-local-hub-proximity: same hub data as the per-level caches above, but keyed by the
+    // hub's zone id instead of a level bracket — so an L80 bot standing in a sub-80 zone can still
+    // find the innkeeper that is physically right there.
+    std::unordered_map<uint32, std::vector<WorldLocation>> allianceHubsByZoneCache;
+    std::unordered_map<uint32, std::vector<WorldLocation>> hordeHubsByZoneCache;
     std::map<uint8, std::vector<BankerLocation>> bankerLocsPerLevelCache;
     std::unordered_map<uint32, WorldLocation> bankerEntryToLocation;
     std::map<uint8, std::vector<WorldLocation>> locsPerLevelCache;

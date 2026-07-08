@@ -4567,6 +4567,18 @@ const std::vector<WorldLocation> TravelMgr::GetTravelHubs(Player* bot)
     return locs;
 }
 
+// upkeep-local-hub-proximity: level-agnostic counterpart to GetTravelHubs — every hub in the bot's
+// CURRENT ZONE regardless of level bracket. Uses find (not operator[]) so an unmapped zone never
+// inserts an empty vector into the cache.
+const std::vector<WorldLocation> TravelMgr::GetZoneHubs(Player* bot)
+{
+    auto const& cache = bot->GetTeamId() == TEAM_ALLIANCE ? allianceHubsByZoneCache : hordeHubsByZoneCache;
+    auto it = cache.find(bot->GetZoneId());
+    if (it == cache.end())
+        return {};
+    return it->second;
+}
+
 std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot,
     uint32* outCapitalZone)
 {
@@ -4942,6 +4954,12 @@ void TravelMgr::PrepareDestinationCache()
                         if (forAlliance)
                             allianceHubsPerLevelCache[i].push_back(loc);
                     }
+                    // upkeep-local-hub-proximity: level-agnostic zone index — one push per faction,
+                    // unconditioned by bracket (unlike the per-level loop above).
+                    if (forHorde)
+                        hordeHubsByZoneCache[areaId].push_back(loc);
+                    if (forAlliance)
+                        allianceHubsByZoneCache[areaId].push_back(loc);
                 }
             }
             else if (creatureTemplate->npcflag & UNIT_NPC_FLAG_INNKEEPER)
@@ -4960,6 +4978,12 @@ void TravelMgr::PrepareDestinationCache()
                         allianceHubsPerLevelCache[i].push_back(loc);
                     innkeepersCount++;
                 }
+                // upkeep-local-hub-proximity: level-agnostic zone index — one push per faction,
+                // unconditioned by bracket (unlike the per-level loop above).
+                if (forHorde)
+                    hordeHubsByZoneCache[areaId].push_back(loc);
+                if (forAlliance)
+                    allianceHubsByZoneCache[areaId].push_back(loc);
             }
         }
         // === BANKERS ===
@@ -5196,6 +5220,10 @@ void TravelMgr::PrepareDestinationCache()
         LOG_INFO("playerbots", "   gather nodes on map {}: {}", mapId, count);
 
     LOG_INFO("playerbots", ">> {} flight masters and {} innkeepers and {} banker locations for level collected.", flightMastersCount, innkeepersCount, bankerCount);
+
+    // upkeep-local-hub-proximity: confirms the level-agnostic zone index populated.
+    LOG_INFO("playerbots", "[ZoneHubs] alliance-zones={} horde-zones={}",
+        allianceHubsByZoneCache.size(), hordeHubsByZoneCache.size());
 }
 
 // gather-travel-to-node: lock-free read of the immutable boot-built index. Sweeps only the cells a

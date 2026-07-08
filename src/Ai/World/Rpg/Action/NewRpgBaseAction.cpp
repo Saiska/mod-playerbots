@@ -1662,44 +1662,39 @@ WorldPosition NewRpgBaseAction::SelectRandomGrindPos(Player* bot)
 
 WorldPosition NewRpgBaseAction::SelectRandomCampPos(Player* bot)
 {
-    const std::vector<WorldLocation> locs = sTravelMgr.GetTravelHubs(bot);
+    // upkeep-local-hub-proximity: GetZoneHubs is already keyed on the bot's CURRENT ZONE (not a
+    // level bracket), so the old same-zone filter that used to live in this loop is redundant and
+    // has been dropped — every candidate here is already in-zone. Pick the nearest one.
+    const std::vector<WorldLocation> locs = sTravelMgr.GetZoneHubs(bot);
 
-    bool inCity = false;
-
-    if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(bot->GetZoneId()))
-    {
-        if (zone->flags & AREA_FLAG_CAPITAL)
-            inCity = true;
-    }
-
-    std::vector<WorldLocation> prepared_locs;
+    WorldPosition dest{};
+    bool found = false;
+    float nearestDist = 0.0f;
+    uint32 availableCount = 0;
     for (auto& loc : locs)
     {
         if (bot->GetMapId() != loc.GetMapId())
             continue;
 
         float range = bot->GetLevel() <= 5 ? 500.0f : 2500.0f;
-        if (bot->GetExactDist(loc) > range)
+        float dist = bot->GetExactDist(loc);
+        if (dist > range)
             continue;
 
-        if (bot->GetExactDist(loc) < 50.0f)
+        if (dist < 50.0f)
             continue;
 
-        if (!inCity && bot->GetMap()->GetZoneId(bot->GetPhaseMask(), loc.GetPositionX(), loc.GetPositionY(),
-                                                loc.GetPositionZ()) != bot->GetZoneId())
-            continue;
-
-        prepared_locs.push_back(loc);
-    }
-    WorldPosition dest{};
-    if (!prepared_locs.empty())
-    {
-        uint32 idx = urand(0, prepared_locs.size() - 1);
-        dest = prepared_locs[idx];
+        availableCount++;
+        if (!found || dist < nearestDist)
+        {
+            found = true;
+            nearestDist = dist;
+            dest = loc;
+        }
     }
     LOG_DEBUG("playerbots", "[New RPG] Bot {} select random inn keeper pos Map:{} X:{} Y:{} Z:{} ({} available in {})",
               bot->GetName(), dest.GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(),
-              prepared_locs.size(), locs.size());
+              availableCount, locs.size());
     return dest;
 }
 
