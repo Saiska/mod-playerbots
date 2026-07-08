@@ -956,7 +956,14 @@ void PlayerbotAI::Reset(bool full)
             ->setTarget(TravelMgr::instance().nullTravelDestination, TravelMgr::instance().nullWorldPosition, true);
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setStatus(TRAVEL_STATUS_EXPIRED);
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setExpireIn(1000);
+        // upkeep-on-group-leave: a pending maintenance request (pendingUpkeepMs, set by the
+        // PlayerbotsGroupScript when the bot leaves/loses its group) must SURVIVE this full reset.
+        // Otherwise the master-loss reset in UpdateAIGroupMaster() (SetMaster(nullptr) + Reset(true))
+        // wipes the flag before the bot's NewRpg tick can consume it, and a real-player-mastered bot
+        // that gets ungrouped never does its sell/redeem run.
+        uint32 const pendingUpkeepMs = rpgInfo.pendingUpkeepMs;
         rpgInfo = NewRpgInfo();
+        rpgInfo.pendingUpkeepMs = pendingUpkeepMs;
         // occupation-state-machine: stagger the first UPKEEP across the overdue window so a
         // fresh boot/relog does not send every bot to maintenance at once (the boot wave).
         // Back-date lastUpkeepMs by up to maintenanceOverdueMs, CLAMPED to getMSTime() to avoid
