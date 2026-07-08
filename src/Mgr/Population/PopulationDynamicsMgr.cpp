@@ -386,48 +386,128 @@ void PopulationDynamicsMgr::DripDrain()
     }
 }
 
+Player* PopulationDynamicsMgr::PullHighestOfClass(uint32 f, uint32 cls, uint8 floor,
+                                                  SafeBotPool& pool, uint8& outLevel, uint32& outClass)
+{
+    // Highest level first (79 down to floor) so a well-fed class is pulled from near the top and
+    // the jump stays small; only a starved class forces a deep reach.
+    for (int L = 79; L >= int(floor); --L)
+    {
+        if (cls != 0)
+        {
+            std::vector<Player*>& v = pool.bots[f][L][cls];
+            if (v.empty())
+                continue;
+            uint32 idx = urand(0, uint32(v.size()) - 1);
+            std::swap(v[idx], v.back());
+            Player* bot = v.back();
+            v.pop_back();
+            outLevel = uint8(L);
+            outClass = cls;
+            return bot;
+        }
+
+        for (uint32 c = 1; c < POPDYN_CLASS_SLOTS; ++c)      // cls == 0 -> any class at this level
+        {
+            if (c == 10u)
+                continue;
+            std::vector<Player*>& v = pool.bots[f][L][c];
+            if (v.empty())
+                continue;
+            uint32 idx = urand(0, uint32(v.size()) - 1);
+            std::swap(v[idx], v.back());
+            Player* bot = v.back();
+            v.pop_back();
+            outLevel = uint8(L);
+            outClass = c;
+            return bot;
+        }
+    }
+    return nullptr;
+}
+
 uint32 PopulationDynamicsMgr::SinkGate(std::array<uint32, 81> const& targets, Census const& census,
                                        float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool)
 {
-    // The ONLY path into level 80, on its own slow timer. Decoupled from the conveyor so the
-    // endgame fills gradually (spec §5). Returns early per faction when not applicable.
+    // The ONLY path into level 80. Greedy, deficit-targeted, widening: each promotion fills the single
+    // most under-represented L80 class, pulling it from the highest available level in [floor..79] and
+    // jumping it straight to 80. A live-mutable deficit copy makes a SinkBatch spread across classes.
     uint32 issuedPerFaction[2] = { 0, 0 };
+    uint8  minSrc = 80;                                     // deepest widen this cycle (for the log)
 
     if (CurrentCap() < 80)                                  // endgame not open (needs frontier >= 70)
     {
-        // Still emit the line for greppability/symmetry once we are near the cap; cheap.
         LOG_INFO("playerbots", "PopDyn sink: promoted=0 (A=0 H=0) count80={} (closed: cap<80)",
                  census.count[0][80] + census.count[1][80]);
         return 0;
     }
 
     uint32 batch = sPlayerbotAIConfig.populationSinkBatch;
+    // ClassFavor off -> legacy: any-class, from level 79 only (no widening).
+    uint8 floor = sPlayerbotAIConfig.populationClassFavor
+        ? uint8(std::clamp<uint32>(sPlayerbotAIConfig.populationSinkReachFloor, 1u, 79u))
+        : 79u;
+
     for (uint32 f = 0; f < 2; ++f)
     {
         uint32 want = targets[80] / 2;                      // per-faction level-80 target
         if (census.count[f][80] >= want)
-            continue;                                       // sink full for this faction
+            continue;
+        uint32 toMove = std::min(batch, want - census.count[f][80]);
 
-        uint32 room   = want - census.count[f][80];
-        uint32 toMove = std::min(batch, room);
+        // Live-mutable copy of the L80 per-class deficit (band 8) so this batch spreads across classes.
+        float d[POPDYN_CLASS_SLOTS];
+        for (uint32 c = 0; c < POPDYN_CLASS_SLOTS; ++c)
+            d[c] = deficit[f][8][c];
+
+        auto reachable = [&](uint32 c) -> bool
+        {
+            for (int L = 79; L >= int(floor); --L)
+                if (!pool.bots[f][L][c].empty())
+                    return true;
+            return false;
+        };
 
         while (toMove > 0)
         {
-            Player* bot = sPlayerbotAIConfig.populationClassFavor
-                ? PickFavoredSource(f, 79u, 8u, deficit, pool)
-                : PickAnySource(f, 79u, pool);
-            if (!bot)
+            uint32 chosen = 0;                              // 0 = fall back to any-class
+
+            if (sPlayerbotAIConfig.populationClassFavor)
+            {
+                float bestD = 0.0f;                         // strictly-positive deficit only
+                for (uint32 c = 1; c < POPDYN_CLASS_SLOTS; ++c)
+                {
+                    if (c == 10u)
+                        continue;
+                    if (d[c] <= bestD)
+                        continue;
+                    if (!reachable(c))
+                        continue;
+                    bestD = d[c];
+                    chosen = c;
+                }
+            }
+
+            uint8  srcLevel = 80;
+            uint32 pulledClass = 0;
+            Player* bot = PullHighestOfClass(f, chosen, floor, pool, srcLevel, pulledClass);
+            if (!bot)                                       // nothing reachable at all -> done this faction
                 break;
-            sRandomPlayerbotMgr.IncreaseLevel(bot);         // +1 (79 -> 80), slim LevelUp (gear/spec frozen)
+
+            sRandomPlayerbotMgr.IncreaseLevel(bot, 80);     // direct jump to 80, re-gears at 80
+            if (pulledClass < POPDYN_CLASS_SLOTS)
+                d[pulledClass] -= 1.0f;                     // decrement so the batch spreads
+            if (srcLevel < minSrc)
+                minSrc = srcLevel;
             ++issuedPerFaction[f];
             --toMove;
         }
     }
 
     uint32 total = issuedPerFaction[0] + issuedPerFaction[1];
-    LOG_INFO("playerbots", "PopDyn sink: promoted={} (A={} H={}) count80={}",
+    LOG_INFO("playerbots", "PopDyn sink: promoted={} (A={} H={}) count80={} minSrc={}",
              total, issuedPerFaction[0], issuedPerFaction[1],
-             census.count[0][80] + census.count[1][80]);
+             census.count[0][80] + census.count[1][80], uint32(minSrc));
     return total;
 }
 
@@ -526,6 +606,19 @@ void PopulationDynamicsMgr::Update(uint32 diff)
                  census.clsCount[0][6][CLASS_DEATH_KNIGHT], census.clsCount[1][6][CLASS_DEATH_KNIGHT],
                  census.clsCount[0][7][CLASS_DEATH_KNIGHT], census.clsCount[1][7][CLASS_DEATH_KNIGHT],
                  census.clsCount[0][8][CLASS_DEATH_KNIGHT], census.clsCount[1][8][CLASS_DEATH_KNIGHT]);
+
+        // Level-80 per-class census per faction — the direct readout of endgame class repartition.
+        // Order: warrior, paladin, hunter, rogue, priest, deathknight, shaman, mage, warlock, druid.
+        LOG_INFO("playerbots",
+                 "PopDyn L80dist: A=[{},{},{},{},{},{},{},{},{},{}] H=[{},{},{},{},{},{},{},{},{},{}]",
+                 census.clsCount[0][8][1], census.clsCount[0][8][2], census.clsCount[0][8][3],
+                 census.clsCount[0][8][4], census.clsCount[0][8][5], census.clsCount[0][8][6],
+                 census.clsCount[0][8][7], census.clsCount[0][8][8], census.clsCount[0][8][9],
+                 census.clsCount[0][8][11],
+                 census.clsCount[1][8][1], census.clsCount[1][8][2], census.clsCount[1][8][3],
+                 census.clsCount[1][8][4], census.clsCount[1][8][5], census.clsCount[1][8][6],
+                 census.clsCount[1][8][7], census.clsCount[1][8][8], census.clsCount[1][8][9],
+                 census.clsCount[1][8][11]);
 
         if (conveyorTick)
         {

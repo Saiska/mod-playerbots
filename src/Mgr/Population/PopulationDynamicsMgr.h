@@ -104,6 +104,11 @@ private:
     Player* PickFavoredSource(uint32 f, uint32 srcLevel, uint32 band,
                               float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
     Player* PickAnySource(uint32 f, uint32 srcLevel, SafeBotPool& pool);
+    // Pull (remove+return) the highest-level SAFE bot of class `cls` in [floor..79], searching 79
+    // downward; `cls == 0` means any class. Sets outLevel (source level) + outClass (bot's class).
+    // nullptr if no safe bot exists in the window. The sink's "widen the band" primitive.
+    Player* PullHighestOfClass(uint32 f, uint32 cls, uint8 floor, SafeBotPool& pool,
+                               uint8& outLevel, uint32& outClass);
 
     void PersistFrontier();                  // UPDATE playerbots_population_state ... WHERE id=1 (caller holds _mutex)
 
