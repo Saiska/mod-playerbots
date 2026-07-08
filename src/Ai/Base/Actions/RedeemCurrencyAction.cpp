@@ -128,7 +128,17 @@ static bool GrantAndEquip(Player* bot, uint32 gearId)
         return false;
     uint16 dest;
     if (bot->CanEquipItem(NULL_SLOT, dest, item, true, true) == EQUIP_ERR_OK)
-        bot->EquipItem(dest, item, true);   // equip immediately if it slots
+    {
+        // Detach the item from its backpack slot BEFORE equipping. Otherwise the bag slot keeps a
+        // reference to the now-equipped item -> a dangling/half-alive Item* that a later GetItemCount
+        // walk dereferences -> C0000005 (live-confirmed: bag=255 slot=37 after a "bought+equipped" gear buy).
+        // Mirrors PlayerbotFactory.cpp's store-then-equip idiom (RemoveItem before EquipItem).
+        uint8 const itemBag = item->GetBagSlot();
+        uint8 const itemSlot = item->GetSlot();
+        bot->RemoveItem(itemBag, itemSlot, true);   // detach (update=true keeps the Item object, just unslots it)
+        bot->EquipItem(dest, item, true);
+        bot->AutoUnequipOffhandIfNeed();
+    }
     return true;
 }
 
