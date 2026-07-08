@@ -48,12 +48,17 @@ private:
     Player* master;
     ShapeshiftForm masterInShapeshiftForm;
     ShapeshiftForm botInShapeshiftForm;
+    bool needsAerialCleanup = false;
+    bool mountDecisionUseful = false;
     static std::unordered_map<uint32, PreferredMountCache> mountCache;
     static bool preferredMountTableChecked;
     float CalculateDismountDistance() const;
     float CalculateMountDistance() const;
     void Dismount();
     void ClearStaleFlightFlags();
+    bool NeedsAerialCleanup() const;
+    bool IsMountDecisionUseful();
+    void RecoverFromAerialCleanup();
     bool ShouldFollowMasterMountState(Player* master, bool noAttackers, bool shouldMount) const;
     bool ShouldDismountForMaster(Player* master) const;
     int32 CalculateMasterMountSpeed(Player* master) const;
