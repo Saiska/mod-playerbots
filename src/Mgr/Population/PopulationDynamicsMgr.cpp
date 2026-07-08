@@ -470,10 +470,12 @@ uint32 PopulationDynamicsMgr::SinkGate(std::array<uint32, 81> const& targets, Ce
 
         while (toMove > 0)
         {
-            uint32 chosen = 0;                              // 0 = fall back to any-class
+            uint8  srcLevel = 80;
+            Player* bot = nullptr;
 
             if (sPlayerbotAIConfig.populationClassFavor)
             {
+                uint32 chosen = 0;                          // 0 = fall back to any-class
                 float bestD = 0.0f;                         // strictly-positive deficit only
                 for (uint32 c = 1; c < POPDYN_CLASS_SLOTS; ++c)
                 {
@@ -486,17 +488,24 @@ uint32 PopulationDynamicsMgr::SinkGate(std::array<uint32, 81> const& targets, Ce
                     bestD = d[c];
                     chosen = c;
                 }
+
+                uint32 pulledClass = 0;
+                bot = PullHighestOfClass(f, chosen, floor, pool, srcLevel, pulledClass);
+                if (!bot)                                   // nothing reachable at all -> done this faction
+                    break;
+
+                if (pulledClass < POPDYN_CLASS_SLOTS)
+                    d[pulledClass] -= 1.0f;                 // decrement so the batch spreads
+            }
+            else
+            {
+                bot = PickAnySource(f, 79u, pool);          // legacy: uniform any-class from level 79 only
+                if (!bot)
+                    break;
+                srcLevel = 79;
             }
 
-            uint8  srcLevel = 80;
-            uint32 pulledClass = 0;
-            Player* bot = PullHighestOfClass(f, chosen, floor, pool, srcLevel, pulledClass);
-            if (!bot)                                       // nothing reachable at all -> done this faction
-                break;
-
             sRandomPlayerbotMgr.IncreaseLevel(bot, 80);     // direct jump to 80, re-gears at 80
-            if (pulledClass < POPDYN_CLASS_SLOTS)
-                d[pulledClass] -= 1.0f;                     // decrement so the batch spreads
             if (srcLevel < minSrc)
                 minSrc = srcLevel;
             ++issuedPerFaction[f];

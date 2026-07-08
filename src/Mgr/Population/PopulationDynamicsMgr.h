@@ -94,7 +94,10 @@ private:
     // Drain queued promotions self-paced across world ticks (due = _planTotal * elapsed / Period).
     // Re-validates each bot (FindPlayer + IsPromotable + expectLevel) before IncreaseLevel.
     void DripDrain();
-    // The slow sink gate: only path into level 80 (random 79->80, SinkBatch/faction). Returns promotions issued.
+    // The ONLY path into level 80. ClassFavor on: greedy, deficit-targeted, widening — each promotion
+    // fills the single most under-represented L80 class, pulling from the highest available level in
+    // [floor..79] and jumping straight to 80. ClassFavor off: legacy behavior, unchanged byte-for-byte
+    // (uniform any-class pick from level 79 only, via PickAnySource). SinkBatch/faction. Returns promotions issued.
     uint32 SinkGate(std::array<uint32, 81> const& targets, Census const& census,
                     float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
     // Dormant insurance: sheds level-80 surplus if target[80] later drops below count[80] (per-faction budget).
