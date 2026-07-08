@@ -1057,13 +1057,13 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
             Map* tmap = sMapMgr->FindMap(tMap, 0);
             if (!tmap)
             {
-                info.ChangeToIdle();   // destination map not loaded; give up, let the spine re-roll
+                FallToFarmOrRest();   // destination map not loaded; give up, let the spine re-roll
                 return true;
             }
             float const ground = tmap->GetHeight(bot->GetPhaseMask(), tx, ty, MAX_HEIGHT);
             if (ground <= INVALID_HEIGHT)
             {
-                info.ChangeToIdle();
+                FallToFarmOrRest();
                 return true;
             }
             WorldPosition const dest(tMap, tx, ty, ground + 0.05f);
@@ -1079,7 +1079,7 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
                 return true;           // still traveling; target retained for the next tick
             if (tr == TravelResult::GAVE_UP)
             {
-                info.ChangeToIdle();   // beyond travel budget; give up, let the spine re-roll
+                FallToFarmOrRest();   // beyond travel budget; give up, let the spine re-roll
                 return true;           // CRASH RULE: touch no `data` after this
             }
             // ARRIVED — clear the travel target so next tick the in-zone questing loop runs. Update
@@ -1103,7 +1103,7 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
         default:
             break;
     }
-    info.ChangeToIdle();
+    FallToFarmOrRest();
     return true;
 }
 
@@ -1143,7 +1143,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
         if (!GetQuestPOIPosAndObjectiveIdx(questId, poiInfo))
         {
             // can't find a poi pos to go, stop doing quest for now
-            botAI->rpgInfo.ChangeToIdle();
+            FallToFarmOrRest();
             return true;
         }
         uint32 rndIdx = urand(0, poiInfo.size() - 1);
@@ -1209,7 +1209,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
             botAI->lowPriorityQuest[questId] = getMSTime();
             botAI->rpgStatistic.questAbandoned++;
             LOG_DEBUG("playerbots", "[New RPG] {} marked as abandoned quest {}", bot->GetName(), questId);
-            botAI->rpgInfo.ChangeToIdle();
+            FallToFarmOrRest();
             return true;
         }
         // clear and select another poi later
@@ -1240,8 +1240,8 @@ bool NewRpgDoQuestAction::DoCompletedQuest(NewRpgInfo::DoQuest& data)
         if (!GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true))
         {
             // can't find a poi pos to reward, stop doing quest for now
-            botAI->rpgInfo.ChangeToIdle();
-            return false;
+            FallToFarmOrRest();
+            return true;
         }
         assert(poiInfo.size() > 0);
         // now we get the place to get rewarded
@@ -1284,7 +1284,7 @@ bool NewRpgDoQuestAction::DoCompletedQuest(NewRpgInfo::DoQuest& data)
         botAI->lowPriorityQuest[questId] = getMSTime();
         botAI->rpgStatistic.questAbandoned++;
         LOG_DEBUG("playerbots", "[New RPG] {} marked as abandoned quest {}", bot->GetName(), questId);
-        botAI->rpgInfo.ChangeToIdle();
+        FallToFarmOrRest();
         return true;
     }
     return false;
@@ -1310,7 +1310,7 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
     Creature* flightMaster = bot->FindNearestCreature(data.flightMasterEntry, INTERACTION_DISTANCE * 3);
     if (!flightMaster || !flightMaster->IsAlive())
     {
-        info.ChangeToIdle();
+        FallToFarmOrRest();
         return true;
     }
     if (bot->GetDistance(flightMaster) > INTERACTION_DISTANCE)
@@ -1326,7 +1326,7 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
     {
         LOG_DEBUG("playerbots", "[New RPG] {} active taxi path {} (from {} to {}) failed", bot->GetName(),
                   flightMaster->GetEntry(), nodes[0], nodes[nodes.size() - 1]);
-        info.ChangeToIdle();
+        FallToFarmOrRest();
         return true;
     }
     return true;
@@ -1379,8 +1379,8 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
         if (!sTravelMgr.NearestGatherNode(bot, sPlayerbotAIConfig.gatheringCircuitTravelRadius,
                                           data->recentVisited, hit))
         {
-            info.ChangeToIdle();        // no reachable node left -> done
-            return true;                // CRASH RULE — ChangeToIdle is the last statement
+            FallToFarmOrRest();          // no reachable node left -> done
+            return true;                // CRASH RULE — FallToFarmOrRest is the last statement
         }
         data->nodeSpawnId = hit.spawnId;
         data->nodeEntry = hit.entry;
