@@ -318,6 +318,22 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
     }
 
+    // upkeep-on-group-leave: consume the flag the GroupScript stamped (world thread) when this bot left a
+    // group. We are on the bot's OWN worker tick here — the only place ChangeToUpkeep may safely reassign
+    // the RPG variant. Sits AFTER the suppression guard, so a still-busy bot (in instance / grouped-with-
+    // human / RaidSim) keeps the flag and enters upkeep only once it's free. Deferred while in combat.
+    if (info.pendingUpkeepMs && !bot->IsInCombat())
+    {
+        info.pendingUpkeepMs = 0;
+        if (info.GetStatus() != RPG_UPKEEP)
+        {
+            LOG_INFO("playerbots", "[UpkeepOnGroupLeave] {} left a group in zone {} — entering upkeep run",
+                     bot->GetName(), bot->GetZoneId());
+            info.ChangeToUpkeep();   // CRASH RULE: last statement touching info before return
+            return true;
+        }
+    }
+
     NewRpgStatus status = info.GetStatus();
     switch (status)
     {
@@ -595,7 +611,21 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             // ACQUIRE the hub once (step 0), honoring the tier + the LOCAL->CAPITAL fallthrough.
             if (up.hubPos == WorldPosition())
             {
-                if (up.tier == NewRpgInfo::UPKEEP_TIER_LOCAL)
+                // Floating-capital in-place: if the bot is ALREADY standing in a no-ground-egress capital
+                // (Dalaran), do the CAPITAL upkeep right here. Selecting a different/weighted hub would make
+                // it travel out, tripping the MoveFarTo no-ground-egress teleport (NewRpgBaseAction.cpp:321)
+                // that blinks the bot to a hostile Northrend zone where it dies before ever reaching the
+                // sell/redeem step (observed: ungroup-in-Dalaran -> Icecrown -> death). Staying put runs the
+                // errand chain + token redeem in place.
+                // 4395 = Dalaran, the only no-ground-egress capital (canonical:
+                // IsNoGroundEgressCapitalZone in NewRpgBaseAction.cpp — file-static, so inlined here).
+                if (bot->GetZoneId() == 4395)
+                {
+                    up.tier = NewRpgInfo::UPKEEP_TIER_CAPITAL;
+                    up.hubPos = WorldPosition(bot);     // current position — no travel, no egress
+                    up.capitalZone = bot->GetZoneId();  // Dalaran (4395) — pose props resolve here
+                }
+                else if (up.tier == NewRpgInfo::UPKEEP_TIER_LOCAL)
                 {
                     up.hubPos = SelectRandomCampPos(bot);
                     if (up.hubPos == WorldPosition())

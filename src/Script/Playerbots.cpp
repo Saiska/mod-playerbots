@@ -38,6 +38,11 @@
 #include "cmath"
 #include "BattleGroundTactics.h"
 #include "CurrencyGearIndex.h"
+#include "GroupScript.h"
+#include "Group.h"
+#include "GroupReference.h"
+#include "ObjectAccessor.h"
+#include "NewRpgInfo.h"
 
 class PlayerbotsDatabaseScript : public DatabaseScript
 {
@@ -576,6 +581,48 @@ public:
     PlayerbotsBattlefieldScript() : BattlefieldScript("PlayerbotsBattlefieldScript") { }
 };
 
+// upkeep-on-group-leave: when a bot leaves/loses its group (a manual ungroup, or an instance run ending),
+// flag it to do a maintenance run — sell + token redeem with the emblems it just earned — like a real
+// player heading to town after a dungeon. Runs on the world thread and only does a flat uint32 store; the
+// flag is consumed on the bot's own worker tick (NewRpgStatusUpdateAction), where the RPG variant can be
+// reassigned safely. Gated by AiPlayerbot.UpkeepOnGroupLeave.
+class PlayerbotsGroupScript : public GroupScript
+{
+public:
+    PlayerbotsGroupScript() : GroupScript("PlayerbotsGroupScript") { }
+
+    void OnRemoveMember(Group* /*group*/, ObjectGuid guid, RemoveMethod /*method*/, ObjectGuid /*kicker*/,
+                        char const* /*reason*/) override
+    {
+        FlagBotForUpkeep(guid);
+    }
+
+    // OnGroupDisband fires BEFORE Group::Disband clears the member slots, so the roster is still walkable
+    // here — covers an instance/raid group dissolving wholesale (not just a single RemoveMember).
+    void OnDisband(Group* group) override
+    {
+        if (!group)
+            return;
+        for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
+            if (Player* member = itr->GetSource())
+                FlagBotForUpkeep(member->GetGUID());
+    }
+
+private:
+    static void FlagBotForUpkeep(ObjectGuid guid)
+    {
+        if (!sPlayerbotAIConfig.upkeepOnGroupLeave)
+            return;
+        Player* player = ObjectAccessor::FindPlayer(guid);
+        if (!player)
+            return;
+        PlayerbotAI* botAI = GET_PLAYERBOT_AI(player);
+        if (!botAI || !sRandomPlayerbotMgr.IsRandomBot(player))
+            return;
+        botAI->rpgInfo.pendingUpkeepMs = getMSTime();   // consumed on the bot's own tick
+    }
+};
+
 void AddPlayerbotsSecureLoginScripts();
 
 void AddSC_TempestKeepBotScripts();
@@ -592,6 +639,7 @@ void AddPlayerbotsScripts()
     new PlayerbotsWorldScript();
     new PlayerbotsScript();
     new PlayerBotsBGScript();
+    new PlayerbotsGroupScript();   // upkeep-on-group-leave
     AddPlayerbotsSecureLoginScripts();
     AddPlayerbotsCommandscripts();
     PlayerBotsGuildValidationScript();

@@ -109,6 +109,7 @@ void NewRpgInfo::Reset()
     startT = getMSTime();
     std::fill(std::begin(lastFinished), std::end(lastFinished), 0u);
     lastUpkeepMs = 0;
+    pendingUpkeepMs = 0;
     lastEmoteMs = 0;
     nextEmoteGapMs = 0;
     lastEmoteIdx = 0xFF;

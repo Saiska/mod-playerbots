@@ -746,6 +746,12 @@ bool PlayerbotAIConfig::Initialize()
     lootNeedRollLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.LootNeedRollLevel", 1);
     tokenRedeemEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.TokenRedeemEnable", true);
     tokenRedeemMaxBuysPerTick = sConfigMgr->GetOption<uint32>("AiPlayerbot.TokenRedeemMaxBuysPerTick", 40);
+    // Diagnostic (2026-07-08 crash hunt): SEH-probe the bot's inventory for a half-alive Item* around
+    // each redeem mutation, log the producing step, and bail instead of crashing. Turn off once fixed.
+    tokenRedeemDebugScan = sConfigMgr->GetOption<bool>("AiPlayerbot.TokenRedeemDebugScan", true);
+    // upkeep-on-group-leave: when a bot leaves/loses its group (e.g. an instance run ends), it does a
+    // maintenance run — sell + token redeem with the emblems it just earned — like a real player would.
+    upkeepOnGroupLeave = sConfigMgr->GetOption<bool>("AiPlayerbot.UpkeepOnGroupLeave", true);
     guildBankDepositEpics = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildBankDepositEpics", true);
     lootRollRecipe = sConfigMgr->GetOption<bool>("AiPlayerbot.LootRollRecipe", false);
     lootRollDisenchant = sConfigMgr->GetOption<bool>("AiPlayerbot.LootRollDisenchant", false);

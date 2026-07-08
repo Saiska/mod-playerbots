@@ -141,6 +141,9 @@ struct NewRpgInfo
     uint32 lastFinished[RPG_STATUS_END] = {0};  // getMSTime() when each occupation last ended; 0=never
     uint32 lastUpkeepMs{0};                     // getMSTime() of the last completed UPKEEP episode; 0=never
     uint32 upkeepEnterMs{0};                     // upkeep-reentry-instrument: getMSTime() the current UPKEEP episode was entered (stamped only in ChangeToUpkeep); whole-episode age for the stuck histogram
+    uint32 pendingUpkeepMs{0};                   // upkeep-on-group-leave: set (world thread, GroupScript) when the bot
+                                                 // leaves/loses its group; consumed on the bot's OWN worker tick to
+                                                 // ChangeToUpkeep. Plain aligned uint32 = safe cross-thread store/load. 0=none.
 
     // --- stranded-relocate guard ---
     uint32 strandedSinceT{0};   // 0 = not currently stranded; else getMSTime() when bot first became stranded
