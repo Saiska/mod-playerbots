@@ -2075,16 +2075,21 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
 
 void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
 {
+    IncreaseLevel(bot, uint8(bot->GetLevel() + 1));
+}
+
+void RandomPlayerbotMgr::IncreaseLevel(Player* bot, uint8 targetLevel)
+{
     uint32 maxLevel = sPlayerbotAIConfig.randomBotMaxLevel;
     if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
         maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
 
     PerfMonitorOperation* pmo = sPerfMonitor.start(PERF_MON_RNDBOT, "IncreaseLevel");
     uint32 lastLevel = GetValue(bot, "level");
-    uint8 level = bot->GetLevel() + 1;
+    uint8 level = targetLevel;
     if (level > maxLevel)
     {
-        level = maxLevel;
+        level = uint8(maxLevel);
     }
     if (lastLevel != level)
     {

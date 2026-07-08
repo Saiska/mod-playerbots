@@ -114,6 +114,7 @@ public:
     void RandomizeFirst(Player* bot);
     void RandomizeMin(Player* bot);
     void IncreaseLevel(Player* bot);
+    void IncreaseLevel(Player* bot, uint8 targetLevel);
     void ScheduleTeleport(uint32 bot, uint32 time = 0);
     void ScheduleChangeStrategy(uint32 bot, uint32 time = 0);
     void HandleCommand(uint32 type, std::string const text, Player* fromPlayer, std::string channelName = "");
