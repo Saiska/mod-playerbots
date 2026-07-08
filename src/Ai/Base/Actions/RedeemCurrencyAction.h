@@ -3,9 +3,10 @@
 #include "Action.h"
 class PlayerbotAI;
 
-// Runs at the upkeep SELL step (on a MapUpdater worker). Execute() only ENQUEUES a RedeemCurrencyOperation
-// onto the PlayerbotWorldThreadProcessor; the actual redemption (inventory reads + buy/equip/sink/convert)
-// runs on the world thread, where core inventory mutation is safe. See RedeemCurrencyAction.cpp.
+// Runs INLINE on the bot's own upkeep tick (its MapUpdater-worker context), where the bot's inventory
+// reads + buy/equip/sink/convert mutations are serialized with its other inventory ops on that same
+// thread. It is NOT deferred to the world thread (that raced the worker). See RedeemCurrencyAction.cpp.
+// (Stale prior comment claimed an enqueue-to-world-thread design — that was reverted in 42260fd7.)
 class RedeemCurrencyAction : public Action
 {
 public:

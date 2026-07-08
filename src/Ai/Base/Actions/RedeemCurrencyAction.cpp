@@ -1,4 +1,5 @@
 #include "RedeemCurrencyAction.h"
+#include "Bag.h"
 #include "CurrencyGearIndex.h"
 #include "DBCStores.h"
 #include "DBCStructure.h"
@@ -8,7 +9,90 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "StatsWeightCalculator.h"
+#include "StringFormat.h"
 #include <atomic>
+#ifdef _WIN32
+#include <excpt.h>
+#endif
+
+// ---------------------------------------------------------------------------------------------------
+// Crash instrumentation — token-redeem orphaned-slot hunt (2026-07-08).
+//
+// A half-alive Item* (valid vtable, freed/null value array) has been seen sitting in a bot's backpack
+// and crashing Player::GetItemCount from this action (C0000005 in Object::GetUInt32Value). The 2026-07-08
+// dump proves the crash is SINGLE-THREADED (every other thread idle at the map-update barrier), so it is
+// NOT the cross-thread race that five prior "fixes" chased — the orphaned slot is produced on this same
+// worker, by this action's own bag mutations or carried in from a prior op.
+//
+// These probes read each inventory slot's entry under SEH: a corrupt item faults, SEH swallows it, and we
+// log the exact slot plus which redeem step ran last. Gated by AiPlayerbot.TokenRedeemDebugScan. On a hit
+// we bail (return) instead of crashing, so the server survives and the log pins the producer.
+// Windows-only (SEH); a no-op elsewhere.
+// ---------------------------------------------------------------------------------------------------
+#ifdef _WIN32
+// Read one item's entry under SEH. true = sound; false = faulted (half-alive Item*).
+// No C++ objects with destructors may live in a __try frame (C2712) — keep only PODs here.
+static bool RedeemItemReadable(Item* it)
+{
+    __try
+    {
+        volatile uint32 e = it->GetEntry();
+        (void)e;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+static uint32 RedeemSafeBagSize(Bag* bag)
+{
+    __try { return bag->GetBagSize(); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+#else
+static bool RedeemItemReadable(Item*) { return true; }
+static uint32 RedeemSafeBagSize(Bag* bag) { return bag->GetBagSize(); }
+#endif
+
+// Walk the same slots Player::GetItemCount() reads; on the first structurally-bad Item*, log it (with
+// `tag` marking where in the redeem flow we are) and return true. GetItemByPos only indexes the Player's
+// own slot array (never derefs the item), so it is safe outside SEH; only the entry read is guarded.
+static bool RedeemScanCorruptSlot(Player* bot, std::string const& tag)
+{
+    auto report = [&](uint8 bag, uint8 slot, Item* it) -> bool
+    {
+        LOG_ERROR("playerbots",
+                  "[RedeemCorrupt] {} half-alive Item* {} at bag={} slot={} tag=[{}] (entry read faulted)",
+                  bot->GetName(), (void*)it, uint32(bag), uint32(slot), tag);
+        return true;
+    };
+
+    for (uint8 i = EQUIPMENT_SLOT_START; i < INVENTORY_SLOT_ITEM_END; ++i)
+        if (Item* it = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+            if (!RedeemItemReadable(it))
+                return report(INVENTORY_SLOT_BAG_0, i, it);
+
+    for (uint8 i = KEYRING_SLOT_START; i < CURRENCYTOKEN_SLOT_END; ++i)
+        if (Item* it = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+            if (!RedeemItemReadable(it))
+                return report(INVENTORY_SLOT_BAG_0, i, it);
+
+    for (uint8 b = INVENTORY_SLOT_BAG_START; b < INVENTORY_SLOT_BAG_END; ++b)
+    {
+        Bag* bag = bot->GetBagByPos(b);
+        if (!bag)
+            continue;
+        if (!RedeemItemReadable(bag))
+            return report(INVENTORY_SLOT_BAG_0, b, bag);
+        uint32 const size = RedeemSafeBagSize(bag);
+        for (uint32 s = 0; s < size; ++s)
+            if (Item* it = bot->GetItemByPos(b, uint8(s)))
+                if (!RedeemItemReadable(it))
+                    return report(b, uint8(s), it);
+    }
+    return false;
+}
 
 // Mirrors the inline helper in PlayerbotFactory.cpp:2958.
 static Item* StoreNewItemInInventorySlot(Player* player, uint32 newItemId, uint32 count)
@@ -69,6 +153,11 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
     if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() || bot->IsDuringRemoveFromWorld())
         return false;
 
+    // [RedeemCorrupt] baseline: did this bot ARRIVE with a corrupt slot (produced upstream, carried in)
+    // or is it clean before the churn below? A hit here rules the redeem loop OUT as the producer.
+    if (sPlayerbotAIConfig.tokenRedeemDebugScan && RedeemScanCorruptSlot(bot, "entry"))
+        return false;
+
     static uint32 const CURR[] = {49426, 47241, 45624, 40753, 40752, 29434}; // high->low
     bool acted = false;
 
@@ -114,8 +203,17 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                      bot->GetName(), c, bal, T, uint32(sCurrencyGearIndex.SinkFor(c).size()),
                      sCurrencyGearIndex.ConvertTargetFor(c));
 
+        uint32 iter = 0;
         while (buys < maxBuys)
         {
+            // [RedeemCorrupt] guard the EXACT call that crashed (GetItemCount at the loop top). If a
+            // prior iteration's mutation orphaned a slot, catch it here before the deref and bail — the
+            // tag names the currency, iteration, and the branch that ran last (the suspected producer).
+            if (sPlayerbotAIConfig.tokenRedeemDebugScan &&
+                RedeemScanCorruptSlot(bot, Acore::StringFormat("pre-walk c={} iter={} last-branch={}", c, iter, probeBranch)))
+                return acted;
+            ++iter;
+
             bal = bot->GetItemCount(c, false);
 
             // 1) best affordable genuine upgrade
@@ -186,6 +284,12 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
             }
             break;   // this currency done for the pass
         }
+
+        // [RedeemCorrupt] catch corruption produced by a break-ing branch (e.g. convert), which the
+        // loop-top guard cannot re-check, before the NEXT currency's GetItemCount walks the same slots.
+        if (sPlayerbotAIConfig.tokenRedeemDebugScan &&
+            RedeemScanCorruptSlot(bot, Acore::StringFormat("post-currency c={} last-branch={}", c, probeBranch)))
+            return acted;
 
         // [RedeemProbe] per-pass outcome for the two frozen currencies: which branch drained, and how much.
         if (probeWatch)
