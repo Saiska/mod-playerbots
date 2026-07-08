@@ -790,8 +790,10 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
                 }
             }
 
-            // Census of bots already online, binned by [faction][level] (module-tracked currentBots).
+            // Census of bots already online, binned by [faction][level] (module-tracked currentBots),
+            // plus a per-faction per-class tally so the fill can favor under-represented classes.
             uint32 haveCount[2][81] = {};
+            uint32 liveClassCount[2][12] = {};             // [faction][classid]; class ids < 12 (10 unused)
             for (uint32 guid : currentBots)
             {
                 Player* p = GetPlayerBot(guid);
@@ -802,7 +804,12 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
                     continue;
                 uint32 f = IsAlliance(p->getRace()) ? 0u : 1u;
                 haveCount[f][lvl]++;
+                uint8 cls = p->getClass();
+                if (cls < 12)
+                    liveClassCount[f][cls]++;
             }
+
+            bool const classAware = sPlayerbotAIConfig.populationClassFavor;
 
             for (int lvl = 80; lvl >= 1 && maxAllowedBotCount; --lvl)
             {
@@ -816,18 +823,83 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
                         continue;
 
                     uint32 need = want - haveCount[f][lvl];
-                    for (auto const& charInfo : buckets[f][lvl])
-                    {
-                        if (!need || !maxAllowedBotCount)
-                            break;
+                    auto& bucket = buckets[f][lvl];
 
-                        if (tryLoginBot(charInfo))
+                    if (!classAware)
+                    {
+                        // Legacy: lowest-GUID first (bucket is already GUID-sorted).
+                        for (auto const& charInfo : bucket)
+                        {
+                            if (!need || !maxAllowedBotCount)
+                                break;
+                            if (tryLoginBot(charInfo))
+                            {
+                                maxAllowedBotCount--;
+                                need--;
+                            }
+                        }
+                        continue;
+                    }
+
+                    // Class-aware: repeatedly log in the not-yet-tried character whose class is
+                    // currently rarest in the live population (tie-break: lowest GUID, since the
+                    // bucket is GUID-sorted and we scan front-to-back with a strict <).
+                    std::vector<bool> tried(bucket.size(), false);
+                    while (need && maxAllowedBotCount)
+                    {
+                        int best = -1;
+                        uint32 bestCount = 0xFFFFFFFFu;
+                        for (size_t i = 0; i < bucket.size(); ++i)
+                        {
+                            if (tried[i])
+                                continue;
+                            uint8 cls = bucket[i].rClass;
+                            uint32 cc = (cls < 12) ? liveClassCount[f][cls] : 0xFFFFFFFFu;
+                            if (cc < bestCount)
+                            {
+                                bestCount = cc;
+                                best = int(i);
+                            }
+                        }
+                        if (best < 0)
+                            break;                          // every character in the bucket tried
+
+                        tried[best] = true;
+                        if (tryLoginBot(bucket[best]))
                         {
                             maxAllowedBotCount--;
                             need--;
+                            uint8 cls = bucket[best].rClass;
+                            if (cls < 12)
+                                liveClassCount[f][cls]++;   // spread across classes within this fill
                         }
                     }
                 }
+            }
+
+            // One-time diagnostic: per-class coverage of the candidate character pool seen this fill,
+            // so the "pool contains all 10 classes" precondition for L80 balance is verifiable.
+            static bool s_loggedPoolClassCensus = false;
+            if (!s_loggedPoolClassCensus)
+            {
+                s_loggedPoolClassCensus = true;
+                uint32 poolCls[2][12] = {};
+                for (auto const& ci : allCharacters)
+                    if (ci.rClass < 12)
+                        poolCls[IsAlliance(ci.rRace) ? 0u : 1u][ci.rClass]++;
+                LOG_INFO("playerbots",
+                         "PopDyn pool census: A=[{},{},{},{},{},{},{},{},{},{}] H=[{},{},{},{},{},{},{},{},{},{}] "
+                         "(order: warr,pala,hunt,rog,pri,dk,sham,mage,lock,dru)",
+                         poolCls[0][1], poolCls[0][2], poolCls[0][3], poolCls[0][4], poolCls[0][5],
+                         poolCls[0][6], poolCls[0][7], poolCls[0][8], poolCls[0][9], poolCls[0][11],
+                         poolCls[1][1], poolCls[1][2], poolCls[1][3], poolCls[1][4], poolCls[1][5],
+                         poolCls[1][6], poolCls[1][7], poolCls[1][8], poolCls[1][9], poolCls[1][11]);
+                for (uint32 f = 0; f < 2; ++f)
+                    for (uint32 c = 1; c < 12; ++c)
+                        if (c != 10u && c != 6u && poolCls[f][c] == 0)   // DK (6) legitimately absent at low levels
+                            LOG_WARN("playerbots",
+                                     "PopDyn pool census: faction {} has ZERO class-{} characters — L80 balance for that class cannot be reached.",
+                                     f, c);
             }
         }
         else
