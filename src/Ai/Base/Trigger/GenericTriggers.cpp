@@ -390,18 +390,22 @@ bool GenericBoostTrigger::IsActive()
 
 bool HealerShouldAttackTrigger::IsActive()
 {
-    if (botAI->GetNearGroupMemberCount(sPlayerbotAIConfig.sightDistance) <= 1)
-        return true;
-
-    if (AI_VALUE2(uint8, "health", "party member to heal") < sPlayerbotAIConfig.almostFullHealth)
-        return false;
-
+    // Tree of Life (druid) anti-thrash grace: if we recently healed while shifted, don't demand an
+    // attack yet. This MUST run BEFORE the solo early-return below. Otherwise a solo healer skips the
+    // debounce and "cancel tree form" fires every tick, oscillating between tree and caster form
+    // (a self-healing solo resto druid re-shifts to tree, then this cancels it, endlessly).
     if (bot->GetAura(33891)) // Tree of Life
     {
         LastSpellCast& lastSpell = botAI->GetAiObjectContext()->GetValue<LastSpellCast&>("last spell cast")->Get();
         if (lastSpell.timer + 5 > time(nullptr))
             return false;
     }
+
+    if (botAI->GetNearGroupMemberCount(sPlayerbotAIConfig.sightDistance) <= 1)
+        return true;
+
+    if (AI_VALUE2(uint8, "health", "party member to heal") < sPlayerbotAIConfig.almostFullHealth)
+        return false;
 
     int manaThreshold;
     int balance = AI_VALUE(uint8, "balance");
