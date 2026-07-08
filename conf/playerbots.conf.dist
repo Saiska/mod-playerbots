@@ -2963,6 +2963,17 @@ PopulationDynamics.Bracket7 = 41
 #        Default: 1
 PopulationDynamics.ClassFavor = 1
 
+#
+#    PopulationDynamics.SinkReachFloor
+#        Lowest level the level-80 sink will pull an under-represented class up from.
+#        The sink searches level 79 downward to this floor for a safe bot of the class
+#        that level 80 is most short of, preferring the highest available level, then
+#        promotes it straight to 80. 1 = full reach (guarantees the class is always
+#        reachable). Raise it (e.g. 60) to cap how far a bot may jump, at the cost of the
+#        absolute-reachability guarantee. Only active when ClassFavor = 1.
+#        Default: 1
+PopulationDynamics.SinkReachFloor = 1
+
 ###################################
 #    RAIDSIM ORPHAN REAPER
 ###################################

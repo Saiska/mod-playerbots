@@ -492,6 +492,7 @@ bool PlayerbotAIConfig::Initialize()
     populationMaxPromotionsPerCycle = sConfigMgr->GetOption<uint32>("PopulationDynamics.MaxPromotionsPerCycle", 10);
     populationSinkPeriod           = sConfigMgr->GetOption<uint32>("PopulationDynamics.SinkPeriod", 1800);
     populationSinkBatch            = sConfigMgr->GetOption<uint32>("PopulationDynamics.SinkBatch", 1);
+    populationSinkReachFloor       = sConfigMgr->GetOption<uint32>("PopulationDynamics.SinkReachFloor", 1);
 
     // Bots-per-level per 10-level band (absolute counts; flat within a band, sloped across bands).
     // Default: a gently increasing curve so higher bands hold more bots (more "accumulation" up top).
@@ -503,10 +504,10 @@ bool PlayerbotAIConfig::Initialize()
     }
     populationClassFavor = sConfigMgr->GetOption<bool>("PopulationDynamics.ClassFavor", true);
     populationPromoteInInstances = sConfigMgr->GetOption<bool>("PopulationDynamics.PromoteInInstances", true);
-    LOG_INFO("playerbots", "PopDyn: config loaded — enable={} Pmax={} headroom={} minCap={} period={}s maxPromo={} sinkPeriod={}s sinkBatch={} classFavor={} promoteInInstances={} bracket=[{},{},{},{},{},{},{},{}]",
+    LOG_INFO("playerbots", "PopDyn: config loaded — enable={} Pmax={} headroom={} minCap={} period={}s maxPromo={} sinkPeriod={}s sinkBatch={} classFavor={} promoteInInstances={} sinkReachFloor={} bracket=[{},{},{},{},{},{},{},{}]",
              populationDynamicsEnable, populationMaxPopulation, populationHeadroom, populationMinCap,
              populationPeriod, populationMaxPromotionsPerCycle, populationSinkPeriod, populationSinkBatch,
-             populationClassFavor, populationPromoteInInstances,
+             populationClassFavor, populationPromoteInInstances, populationSinkReachFloor,
              populationBracket[0], populationBracket[1], populationBracket[2], populationBracket[3],
              populationBracket[4], populationBracket[5], populationBracket[6], populationBracket[7]);
 

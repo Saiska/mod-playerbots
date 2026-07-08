@@ -745,6 +745,7 @@ public:
     uint32 populationMaxPromotionsPerCycle;
     uint32 populationSinkPeriod;         // seconds between level-80 sink-gate ticks
     uint32 populationSinkBatch;          // bots promoted 79->80 per faction per sink tick
+    uint32 populationSinkReachFloor;     // lowest level the L80 sink pulls a deficient class up from (1 = full reach)
     std::array<uint32, 8> populationBracket;   // bots-per-level for bands 0..7 (levels 1-9 .. 70-79)
     bool   populationClassFavor;               // favor most under-represented class when promoting
     bool   populationPromoteInInstances;       // allow promotion of instance-parked bots (not raiding, not in combat)
