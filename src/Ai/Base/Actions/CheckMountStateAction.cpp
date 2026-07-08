@@ -19,6 +19,14 @@
 static constexpr uint32 SPELL_COLD_WEATHER_FLYING = 54197;
 static constexpr float PARACHUTE_LAND_THRESHOLD = 15.0f;
 
+// Explicit, extensible list of parachute variants to strip. Primary removal mechanism; a newly-observed
+// variant is a one-line add here. SPELL_AURA_FEATHER_FALL removal (RecoverFromAerialCleanup) is the backstop.
+static constexpr uint32 PARACHUTE_SPELL_IDS[] =
+{
+    45472, // SPELL_PARACHUTE
+    44795  // SPELL_PARACHUTE_BUFF
+};
+
 // Define the static map / init bool for caching bot preferred mount data globally
 std::unordered_map<uint32, PreferredMountCache> CheckMountStateAction::mountCache;
 bool CheckMountStateAction::preferredMountTableChecked = false;
@@ -68,14 +76,22 @@ bool CheckMountStateAction::Execute(Event /*event*/)
     // the parachute, or even keep the bot hovering indefinitely and block MMAP routing.
     // Note: Without MSG_MOVE_FALL_LAND, HandleFall doesn't trigger, meaning bots don't get fall damage in forced dismounts anyway,
     // so the parachute usage here is more of an immersion feature.
-    if (bot->HasFeatherFallAura())
+    //
+    // This cleanup is trigger-agnostic and ungated via isUseful()/NeedsAerialCleanup() (see there), so it also
+    // recovers bots parked indoors, unmounted-without-mount-strategy, or in a stuck UNIT_STATE_IN_FLIGHT state
+    // (e.g. a masterless bot floating in Dalaran). If the bot would not otherwise have been useful under the
+    // original mount-decision rules, do the recovery and stop here — do not fall into the mount decision below.
+    if (needsAerialCleanup)
     {
-        float floorZ = bot->GetMapHeight(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
-        if (floorZ != INVALID_HEIGHT && floorZ != VMAP_INVALID_HEIGHT_VALUE &&
-            bot->GetPositionZ() - floorZ <= PARACHUTE_LAND_THRESHOLD)
-            bot->RemoveAurasByType(SPELL_AURA_FEATHER_FALL);
+        RecoverFromAerialCleanup();
+
+        if (!mountDecisionUseful)
+            return true;
     }
-    ClearStaleFlightFlags();
+    else
+    {
+        ClearStaleFlightFlags();
+    }
 
     // Determine if there are no attackers
     bool noAttackers = !AI_VALUE2(bool, "combat", "self target") || !AI_VALUE(uint8, "attacker count");
@@ -147,6 +163,38 @@ bool CheckMountStateAction::Execute(Event /*event*/)
 }
 
 bool CheckMountStateAction::isUseful()
+{
+    // Aerial-cleanup-need is evaluated independently of, and ungates, the mount-decision usefulness chain
+    // below: a stuck bot (stale parachute / feather-fall aura or stale hover flags, not legitimately airborne)
+    // must be reachable for cleanup even when it would otherwise fail e.g. the IsOutdoors()/mount-strategy/
+    // in-flight-state gates. IsMountDecisionUseful() is always evaluated (not short-circuited) so its side
+    // effects (master/shapeshift-form caching, consumed by Execute()) stay populated exactly as before for
+    // every bot that would naturally reach them.
+    needsAerialCleanup = NeedsAerialCleanup();
+    mountDecisionUseful = IsMountDecisionUseful();
+    return mountDecisionUseful || needsAerialCleanup;
+}
+
+bool CheckMountStateAction::NeedsAerialCleanup() const
+{
+    // Legitimately airborne bots (real flight, or following a flying master) are never touched here.
+    if (bot->HasFlyAura() || bot->HasIncreaseMountedFlightSpeedAura() || bot->HasUnitState(UNIT_STATE_IN_FLIGHT))
+        return false;
+
+    // Carries a recoverable aerial state: an explicit parachute variant, ...
+    for (uint32 const spellId : PARACHUTE_SPELL_IDS)
+        if (bot->HasAura(spellId))
+            return true;
+
+    // ...the generic feather-fall aura type (backstop for un-enumerated variants)...
+    if (bot->HasFeatherFallAura())
+        return true;
+
+    // ...or stale flight/no-gravity movement flags left over from a forced dismount with no aura remaining.
+    return bot->HasUnitMovementFlag(MOVEMENTFLAG_FLYING | MOVEMENTFLAG_DISABLE_GRAVITY);
+}
+
+bool CheckMountStateAction::IsMountDecisionUseful()
 {
     // Not useful when:
     if (botAI->IsInVehicle() || bot->isDead() || bot->HasUnitState(UNIT_STATE_IN_FLIGHT) ||
@@ -264,6 +312,32 @@ void CheckMountStateAction::ClearStaleFlightFlags()
         if (!bot->IsRooted())
             bot->SendMovementFlagUpdate();
     }
+}
+
+void CheckMountStateAction::RecoverFromAerialCleanup()
+{
+    // Primary removal: explicit, extensible spell-id list.
+    for (uint32 const spellId : PARACHUTE_SPELL_IDS)
+        bot->RemoveAurasDueToSpell(spellId);
+
+    // Backstop: catches any same-type feather-fall variant not yet enumerated above.
+    bot->RemoveAurasByType(SPELL_AURA_FEATHER_FALL);
+
+    ClearStaleFlightFlags();
+
+    // Settle to the real ground if still meaningfully above it. Uses GetMapWaterOrGroundLevel (not raw
+    // GetMapHeight) to resolve a valid surface, matching the floor-clip check already used in
+    // IsMountDecisionUseful() below. CompleteDismount() is reused for the actual settle (it internally does
+    // UpdateAllowedPositionZ + MoveFall + HandleFall + clears falling flags).
+    float const x = bot->GetPositionX();
+    float const y = bot->GetPositionY();
+    float const z = bot->GetPositionZ();
+    float const surfaceZ = bot->GetMapWaterOrGroundLevel(x, y, z);
+
+    if (surfaceZ != INVALID_HEIGHT && surfaceZ != VMAP_INVALID_HEIGHT_VALUE && z - surfaceZ > PARACHUTE_LAND_THRESHOLD)
+        CompleteDismount(bot);
+
+    LOG_DEBUG("playerbots", "Bot {} recovered from stuck parachute/flight state at {},{},{}", bot->GetName(), x, y, z);
 }
 
 void CheckMountStateAction::CompleteDismount(Player* bot)
