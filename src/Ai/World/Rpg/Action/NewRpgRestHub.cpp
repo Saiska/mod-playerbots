@@ -123,6 +123,8 @@ ObjectGuid NewRpgBaseAction::SelectNearestNpcWithFlag(uint32 npcFlag) const
                         // trainer) carry NEUTRAL-reaction faction templates, not >= REP_FRIENDLY, so the
                         // old IsFriendlyTo gate filtered every one out (100% NO-prop at confirm); !IsHostileTo
                         // resolves neutral props while still never dragging the bot toward a hostile guard.
+        if (IsInForbiddenFactionQuarter(bot, c))
+            continue;   // dalaran-quarter-npc-exclusion: neutral but in the opposing embassy
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {
@@ -153,6 +155,8 @@ ObjectGuid NewRpgBaseAction::SelectNearestGoOfType(uint32 goType) const
             continue;
         if (go->GetGoType() != goType)
             continue;
+        if (IsInForbiddenFactionQuarter(bot, go))
+            continue;   // dalaran-quarter-npc-exclusion: prop in the opposing embassy
         float d = bot->GetExactDist(go);
         if (d <= bestDist)
         {
@@ -221,6 +225,28 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
                      "[RpgMachine] {} #{} map={} — UPKEEP capital pose subtype={} NO prop; skipping",
                      bot->GetName(), bot->GetGUID().GetCounter(), bot->GetMapId(), uint32(restSubtype));
             return false;   // caller advances step
+        }
+
+        // dalaran-quarter-npc-exclusion (audit finding): capitalPropLocations is keyed by ZONE
+        // (TravelMgr.cpp resolves area->zone at build time), so Sunreaver's Sanctuary and Silver
+        // Enclave props are pooled into the SAME Dalaran(4395) bucket with no faction split.
+        // SelectCapitalPropPos above can therefore hand back a raw coordinate inside the bot's
+        // OPPOSING quarter — and TRAVEL below would walk/teleport the bot there BEFORE the
+        // CONFIRM-time SelectNearestNpcWithFlag/SelectNearestGoOfType guards ever run, tripping
+        // the trespasser eviction. Reject here so it never leaves ACQUIRE.
+        if (up.capitalZone == 4395)
+        {
+            uint32 const destArea = dest.getAreaId();
+            bool const destForbidden = bot->GetTeamId() == TEAM_ALLIANCE
+                ? (destArea == AREA_SUNREAVERS_SANCTUARY)
+                : (destArea == AREA_SILVER_ENCLAVE);
+            if (destForbidden)
+            {
+                LOG_DEBUG("playerbots",
+                          "[QuarterGuard] {} rejected capital-pose destination in forbidden quarter (area {})",
+                          bot->GetName(), destArea);
+                return false;   // caller advances step; a later cycle may roll a valid prop
+            }
         }
 
         // Per-bot horizontal scatter: SelectCapitalPropPos hands every bot the SAME cached point, so
