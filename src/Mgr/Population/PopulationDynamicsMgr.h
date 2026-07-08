@@ -94,7 +94,10 @@ private:
     // Drain queued promotions self-paced across world ticks (due = _planTotal * elapsed / Period).
     // Re-validates each bot (FindPlayer + IsPromotable + expectLevel) before IncreaseLevel.
     void DripDrain();
-    // The slow sink gate: only path into level 80 (random 79->80, SinkBatch/faction). Returns promotions issued.
+    // The ONLY path into level 80. ClassFavor on: greedy, deficit-targeted, widening — each promotion
+    // fills the single most under-represented L80 class, pulling from the highest available level in
+    // [floor..79] and jumping straight to 80. ClassFavor off: legacy behavior, unchanged byte-for-byte
+    // (uniform any-class pick from level 79 only, via PickAnySource). SinkBatch/faction. Returns promotions issued.
     uint32 SinkGate(std::array<uint32, 81> const& targets, Census const& census,
                     float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
     // Dormant insurance: sheds level-80 surplus if target[80] later drops below count[80] (per-faction budget).
@@ -104,6 +107,11 @@ private:
     Player* PickFavoredSource(uint32 f, uint32 srcLevel, uint32 band,
                               float const deficit[2][POPDYN_BANDS][POPDYN_CLASS_SLOTS], SafeBotPool& pool);
     Player* PickAnySource(uint32 f, uint32 srcLevel, SafeBotPool& pool);
+    // Pull (remove+return) the highest-level SAFE bot of class `cls` in [floor..79], searching 79
+    // downward; `cls == 0` means any class. Sets outLevel (source level) + outClass (bot's class).
+    // nullptr if no safe bot exists in the window. The sink's "widen the band" primitive.
+    Player* PullHighestOfClass(uint32 f, uint32 cls, uint8 floor, SafeBotPool& pool,
+                               uint8& outLevel, uint32& outClass);
 
     void PersistFrontier();                  // UPDATE playerbots_population_state ... WHERE id=1 (caller holds _mutex)
 
