@@ -1711,9 +1711,12 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
             // }
             // if (randomiser)
             // {
-            Randomize(bot);
-            LOG_DEBUG("playerbots", "Bot #{} {}:{} <{}>: randomized", botId,
-                      bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
+            if (sPlayerbotAIConfig.periodicRefresh)
+            {
+                Randomize(bot);
+                LOG_DEBUG("playerbots", "Bot #{} {}:{} <{}>: randomized", botId,
+                          bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
+            }
             uint32 randomTime =
                 urand(sPlayerbotAIConfig.minRandomBotRandomizeTime, sPlayerbotAIConfig.maxRandomBotRandomizeTime);
             ScheduleRandomize(botId, randomTime);
@@ -1731,8 +1734,11 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
         uint32 teleport = GetEventValue(botId, "teleport");
         if (!teleport)
         {
-            LOG_DEBUG("playerbots", "Bot #{} <{}>: teleport for level and refresh", botId, bot->GetName());
-            Refresh(bot);
+            if (sPlayerbotAIConfig.periodicRefresh)
+            {
+                LOG_DEBUG("playerbots", "Bot #{} <{}>: teleport for level and refresh", botId, bot->GetName());
+                Refresh(bot);
+            }
             // occupation-state-machine Task 6: the periodic 1-5h scatter relocation is RETIRED by
             // default. Gate the actual relocation here (reversible — not hard-deleted) so a stale
             // scheduled "teleport" event becomes a no-op while the reschedule loop keeps running.
