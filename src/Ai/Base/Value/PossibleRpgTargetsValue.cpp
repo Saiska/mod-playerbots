@@ -8,6 +8,7 @@
 #include "CellImpl.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
+#include "NewRpgBaseAction.h"
 #include "ObjectGuid.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
@@ -164,6 +165,11 @@ bool PossibleNewRpgTargetsValue::AcceptUnit(Unit* unit)
     if (unit->IsHostileTo(bot) || unit->IsPlayer())
         return false;
 
+    // dalaran-quarter-npc-exclusion: a Dalaran embassy NPC is neutral to the opposing faction
+    // (not hostile), so the check above alone accepts it; reject it by area instead.
+    if (IsInForbiddenFactionQuarter(bot, unit))
+        return false;
+
     if (unit->HasNpcFlag(UNIT_NPC_FLAG_SPIRITHEALER))
         return false;
 
@@ -201,6 +207,10 @@ GuidVector PossibleNewRpgGameObjectsValue::Calculate()
             continue;
 
         if (!ignoreLos && !bot->IsWithinLOSInMap(go))
+            continue;
+
+        // dalaran-quarter-npc-exclusion: reject a prop sitting in the opposing faction's quarter.
+        if (IsInForbiddenFactionQuarter(bot, go))
             continue;
 
         guidDistancePairs.push_back({go->GetGUID(), bot->GetExactDist(go)});

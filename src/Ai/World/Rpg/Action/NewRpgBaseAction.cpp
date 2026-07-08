@@ -57,6 +57,20 @@ static bool IsNoGroundEgressCapitalZone(uint32 zoneId)
     return zoneId == 4395;   // Dalaran
 }
 
+// dalaran-quarter-npc-exclusion: see NewRpgBaseAction.h for the constants + rationale.
+bool IsInForbiddenFactionQuarter(Player* bot, WorldObject const* obj)
+{
+    if (!obj || bot->GetZoneId() != 4395)   // Dalaran; the two quarters exist only here
+        return false;
+    uint32 const area = obj->GetAreaId();
+    bool const forbidden = bot->GetTeamId() == TEAM_ALLIANCE ? (area == AREA_SUNREAVERS_SANCTUARY)
+                                                              : (area == AREA_SILVER_ENCLAVE);
+    if (forbidden)
+        LOG_DEBUG("playerbots", "[QuarterGuard] {} rejected target in forbidden quarter (area {})",
+                  bot->GetName(), area);
+    return forbidden;
+}
+
 namespace
 {
     // -----------------------------------------------------------------------
@@ -1233,6 +1247,8 @@ ObjectGuid NewRpgBaseAction::SelectVendorNpc()
             continue;
         if (!c->HasNpcFlag(UNIT_NPC_FLAG_VENDOR) && !c->HasNpcFlag(UNIT_NPC_FLAG_REPAIR))
             continue;
+        if (IsInForbiddenFactionQuarter(bot, c))
+            continue;   // dalaran-quarter-npc-exclusion: neutral vendor in the opposing embassy
         float d = bot->GetExactDist(c);
         if (d <= bestDist)
         {

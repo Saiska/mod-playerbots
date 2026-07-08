@@ -4647,7 +4647,37 @@ std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot,
     if (!selectedCapital)
         return fallbackLocations;
     auto const& bankers = selectedCapital->bankers;
-    uint32 selectedBankerEntry = bankers[urand(0, bankers.size() - 1)];
+
+    // dalaran-quarter-npc-exclusion (audit finding): Dalaran's banker roster ({30604, 30605,
+    // 30607, 28675, 28676, 28677, 29530}) spans BOTH faction embassies (Sunreaver's Sanctuary /
+    // Silver Enclave) — this weighted pick has no team filter, so a bot routed to the Dalaran
+    // CAPITAL hub from OUTSIDE Dalaran (the in-place guard at NewRpgAction.cpp:622 only protects
+    // bots already standing in Dalaran) can get a hubPos in the OPPOSING quarter, then
+    // walk/teleport in and trip the trespasser eviction before any NewRpgBaseAction selection
+    // guard runs. Filter by runtime area (not a hardcoded per-NPC split) so it tracks AreaTable.
+    std::vector<uint16> candidateBankers = bankers;
+    if (selectedCity == AREA_DALARAN)
+    {
+        uint32 const forbiddenArea = botTeamId == TEAM_ALLIANCE ? 4616u   // Sunreaver's Sanctuary
+                                                                 : 4740u; // The Silver Enclave
+        candidateBankers.clear();
+        for (uint16 bankerEntry : bankers)
+        {
+            auto it = bankerEntryToLocation.find(bankerEntry);
+            if (it != bankerEntryToLocation.end())
+            {
+                uint32 area = sMapMgr->GetAreaId(PHASEMASK_NORMAL, it->second.GetMapId(),
+                    it->second.GetPositionX(), it->second.GetPositionY(), it->second.GetPositionZ());
+                if (area == forbiddenArea)
+                    continue;
+            }
+            candidateBankers.push_back(bankerEntry);
+        }
+        if (candidateBankers.empty())
+            return fallbackLocations;
+    }
+
+    uint32 selectedBankerEntry = candidateBankers[urand(0, candidateBankers.size() - 1)];
     auto locIt = bankerEntryToLocation.find(selectedBankerEntry);
     if (locIt != bankerEntryToLocation.end())
     {

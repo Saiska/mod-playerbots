@@ -43,6 +43,21 @@ enum RpgIdleBlock : uint8
 // (IsFreeToIdle) and the census. Player* + config + sRaidSimulationMgr only.
 RpgIdleBlock GetRpgIdleBlock(Player* bot);
 
+// dalaran-quarter-npc-exclusion: Dalaran's two faction embassies are first-class AreaTable
+// sub-areas of zone 4395. Their resident NPCs are NEUTRAL (not hostile) to the opposing
+// faction, so the ordinary "!IsHostileTo ⇒ valid target" tests wrongly accept them — the bot
+// then walks/teleports into the wrong quarter and trips the trespasser eviction (stun + forced
+// teleport out), wrecking whatever NewRpg episode it was running.
+constexpr uint32 AREA_SUNREAVERS_SANCTUARY = 4616;  // Horde quarter — forbidden to Alliance bots
+constexpr uint32 AREA_SILVER_ENCLAVE       = 4740;  // Alliance quarter — forbidden to Horde bots
+
+// True if `obj` sits in the Dalaran quarter opposite `bot`'s faction. Cheap zone gate first, so
+// it is a no-op everywhere but Dalaran. A bot standing in its OWN quarter, or at a neutral
+// Dalaran NPC (Eventide, Magus Commerce Exchange, ...), is unaffected — only the OPPOSITE
+// quarter is excluded. Free function (not a NewRpgBaseAction member) so non-member callers
+// (PossibleRpgTargetsValue.cpp) can use it too.
+bool IsInForbiddenFactionQuarter(Player* bot, WorldObject const* obj);
+
 /// A base (composition) class for all new rpg actions
 /// All functions that may be shared by multiple actions should be declared here
 /// And we should make all actions composable instead of inheritable
