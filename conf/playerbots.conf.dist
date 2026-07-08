@@ -1378,6 +1378,14 @@ AiPlayerbot.DoQuestSuppressScatter = 1
 #
 AiPlayerbot.RandomTeleportEnable = 0
 
+#    AiPlayerbot.PeriodicRefresh
+# Retire (0) or keep (1) the periodic per-bot teleport->Refresh / randomize->Randomize resets.
+# Default 0: those resets are RETIRED — UPKEEP is the sole maintenance path and no background
+# reset wipes an in-progress upkeep/redeem episode. Set 1 to restore the old periodic behavior.
+# Default: 0 (disabled).
+#
+AiPlayerbot.PeriodicRefresh = 0
+
 #    AiPlayerbot.DoQuestMaxConcurrentTravel
 # Maximum number of bots that may perform a cross-zone quest teleport in the same world tick.
 # Acts as a burst limiter to avoid a sudden spike of mass teleports when many bots all pick

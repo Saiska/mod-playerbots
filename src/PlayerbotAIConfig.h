@@ -533,6 +533,7 @@ public:
     bool   doQuestSuppressScatter{true};      // suppress random scatter-teleport while a bot is in RPG_DO_QUEST
     // --- occupation-state-machine Task 6: retire the periodic 1-5h scatter teleport ---
     bool   randomTeleportEnable{false};       // false (default): the periodic random relocation is OFF (occupations replace it)
+    bool   periodicRefresh{false};   // false (default): periodic Refresh/Randomize resets RETIRED; UPKEEP is the sole maintenance path
     uint32 doQuestMaxConcurrentTravel{50};    // max bots performing a cross-zone quest teleport in the same tick
     bool healSayOncePerEpisode{true};      // announce "need heal" once per low-health descent, not in a row
     uint32 healSayMinIntervalSec{240};     // min seconds between heal-says (low health / critical health only)

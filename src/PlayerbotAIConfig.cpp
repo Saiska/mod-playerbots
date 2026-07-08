@@ -923,6 +923,8 @@ bool PlayerbotAIConfig::Initialize()
     lowPriorityQuestDecayMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.LowPriorityQuestDecayMs", 1800000);
     doQuestSuppressScatter = sConfigMgr->GetOption<bool>("AiPlayerbot.DoQuestSuppressScatter", true);
     randomTeleportEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomTeleportEnable", false);
+    periodicRefresh = sConfigMgr->GetOption<bool>("AiPlayerbot.PeriodicRefresh", false);
+    LOG_INFO("server.loading", "[PeriodicRefresh] enabled={}", periodicRefresh);
     doQuestMaxConcurrentTravel = sConfigMgr->GetOption<uint32>("AiPlayerbot.DoQuestMaxConcurrentTravel", 50);
     LOG_INFO("playerbots", "[RpgSuppress] whenBusy={} instance={} group={} vehicle={} raidsim={} combat={} gatherHarvestHoldMs={} lowHpSelfPres={} healSayOnce={} healSayMinSec={}",
              rpgSuppressWhenBusy, rpgSuppressInstance, rpgSuppressGroupedWithPlayer,
