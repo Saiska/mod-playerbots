@@ -314,6 +314,13 @@ void EquipAction::EquipItem(Item* item)
             }
         }
 
+        // A two-hander in the main hand blocks the off-hand slot. Refuse rather
+        // than fire an equip the core rejects every time (EQUIP_ERR_CANT_EQUIP_
+        // WITH_TWOHANDED). The main-hand replacement paths above already returned,
+        // so this only guards the fall-back off-hand equip (shield/holdable).
+        if (dstSlot == EQUIPMENT_SLOT_OFFHAND && bot->IsTwoHandUsed())
+            return;
+
         // Equip the item in the chosen slot
         {
             WorldPacket packet(CMSG_AUTOEQUIP_ITEM_SLOT, 2);

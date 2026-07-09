@@ -283,6 +283,15 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         dest = (INVENTORY_SLOT_BAG_0 << 8) | dstSlot;
     }
 
+    // A two-hander in the main hand blocks the off-hand slot entirely. The slot
+    // reads "empty" (a 2H only fills the main hand), so without this any shield/
+    // holdable/off-hand weapon scores as filling an empty slot and the resulting
+    // equip is rejected by the core (EQUIP_ERR_CANT_EQUIP_WITH_TWOHANDED) on every
+    // scan -> a permanent equip-upgrade churn loop. IsTwoHandUsed() already
+    // excludes Titan Grip, so dual-wield-2H specs are unaffected.
+    if (dstSlot == EQUIPMENT_SLOT_OFFHAND && bot->IsTwoHandUsed())
+        return ITEM_USAGE_NONE;
+
     if (dstSlot == EQUIPMENT_SLOT_FINGER1 || dstSlot == EQUIPMENT_SLOT_TRINKET1)
         possibleSlots = 2;
 
