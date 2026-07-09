@@ -354,7 +354,11 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
                 engine->addStrategiesNoInit("resto", "cure", "dps assist", "blanketing", "tranquility", nullptr);
             else
             {
-                if (player->HasSpell(SPELL_CAT_FORM) && !player->HasAura(SPELL_DRUID_THICK_HIDE))
+                FeralIntent intent = sRandomPlayerbotMgr.GetFeralSpecIntent(player->GetGUID().GetCounter(), player->getClass());
+                bool isCat = (intent == FeralIntent::Cat)  ? true
+                           : (intent == FeralIntent::Bear) ? false
+                           : (player->HasSpell(SPELL_CAT_FORM) && !player->HasAura(SPELL_DRUID_THICK_HIDE));
+                if (isCat)
                     engine->addStrategiesNoInit("cat", "aoe", "cc", "dps assist", "feral charge", nullptr);
                 else
                     engine->addStrategiesNoInit("bear", "tank assist", "pull", "pull back", "feral charge", nullptr);

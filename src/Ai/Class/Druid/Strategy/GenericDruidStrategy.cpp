@@ -8,6 +8,7 @@
 #include "AiFactory.h"
 #include "FeralDruidStrategy.h"
 #include "Playerbots.h"
+#include "RandomPlayerbotMgr.h"
 
 class GenericDruidStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
 {
@@ -125,7 +126,11 @@ void DruidCcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     }
     if (tab == DRUID_TAB_FERAL)
     {
-        if (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(AURA_THICK_HIDE))
+        FeralIntent intent = sRandomPlayerbotMgr.GetFeralSpecIntent(bot->GetGUID().GetCounter(), bot->getClass());
+        bool isCat = (intent == FeralIntent::Cat)  ? true
+                   : (intent == FeralIntent::Bear) ? false
+                   : (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(AURA_THICK_HIDE));
+        if (isCat)
         {
             triggers.push_back(new TriggerNode(
                 "predator's swiftness and cyclone", { NextAction("cyclone on cc", 42.0f) }));
@@ -181,7 +186,11 @@ void DruidAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         triggers.push_back(new TriggerNode("moonfire on attacker", { NextAction("moonfire on attacker", 5.1f) }));
     }
 
-    if (tab == DRUID_TAB_FERAL && bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(AURA_THICK_HIDE))
+    FeralIntent aoeIntent = sRandomPlayerbotMgr.GetFeralSpecIntent(bot->GetGUID().GetCounter(), bot->getClass());
+    bool aoeIsCat = (aoeIntent == FeralIntent::Cat)  ? true
+                  : (aoeIntent == FeralIntent::Bear) ? false
+                  : (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(AURA_THICK_HIDE));
+    if (tab == DRUID_TAB_FERAL && aoeIsCat)
     {
         triggers.push_back(new TriggerNode("clearcasting and medium aoe", { NextAction("swipe (cat)", 25.5f) }));
         triggers.push_back(new TriggerNode("medium aoe", { NextAction("swipe (cat)", 25.0f) }));
