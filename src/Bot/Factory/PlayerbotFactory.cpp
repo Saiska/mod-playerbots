@@ -1563,7 +1563,10 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
         /// @todo: fix cat druid hardcode
         if (bot->getClass() == CLASS_DRUID && specTab == DRUID_TAB_FERAL && bot->GetLevel() >= 20)
         {
-            bool isCat = !bot->HasAura(SPELL_DRUID_THICK_HIDE);
+            FeralIntent intent = sRandomPlayerbotMgr.GetFeralSpecIntent(bot->GetGUID().GetCounter(), bot->getClass());
+            bool isCat = (intent == FeralIntent::Cat)  ? true
+                       : (intent == FeralIntent::Bear) ? false
+                       : !bot->HasAura(SPELL_DRUID_THICK_HIDE);
             if (!isCat && bot->GetLevel() == 20)
             {
                 uint32 bearP = sPlayerbotAIConfig.randomClassSpecProb[cls][1];
@@ -4822,8 +4825,12 @@ void PlayerbotFactory::InitGlyphs(bool increment)
     // Druid PvE/PvP exceptions
     if (bot->getClass() == CLASS_DRUID)
     {
-        // Cat PvE (spec index 3): If the bot is Feral spec, level 20 or higher, and does NOT have the Thick Hide talent
-        if (tab == DRUID_TAB_FERAL && bot->GetLevel() >= 20 && !bot->HasAura(SPELL_DRUID_THICK_HIDE))
+        // Cat PvE (spec index 3): prefer the persisted specNo; fall back to the Thick Hide talent read.
+        FeralIntent glyphIntent = sRandomPlayerbotMgr.GetFeralSpecIntent(bot->GetGUID().GetCounter(), bot->getClass());
+        bool glyphIsCat = (glyphIntent == FeralIntent::Cat)  ? true
+                        : (glyphIntent == FeralIntent::Bear) ? false
+                        : !bot->HasAura(SPELL_DRUID_THICK_HIDE);
+        if (tab == DRUID_TAB_FERAL && bot->GetLevel() >= 20 && glyphIsCat)
             tab = 3;
         // Balance PvP (spec index 4): If the bot has the Owlkin Frenzy talent
         else if (bot->HasAura(SPELL_OWLKIN_FRENZY))
