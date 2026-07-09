@@ -48,6 +48,13 @@ class ChatHandler;
 class PerfMonitorOperation;
 class WorldLocation;
 
+enum class FeralIntent : uint8
+{
+    Unknown = 0,
+    Cat     = 1,
+    Bear    = 2,
+};
+
 struct CachedEvent
 {
     uint32 value = 0;
@@ -146,6 +153,7 @@ public:
     void SetValue(uint32 bot, std::string const& type, uint32 value, std::string const& data = "");
     void SetValue(Player* bot, std::string const& type, uint32 value, std::string const& data = "");
     bool IsSpecPvp(uint32 bot, uint8 cls);
+    FeralIntent GetFeralSpecIntent(uint32 bot, uint8 cls);
     void Remove(Player* bot);
     // Population-dynamics controller seam: pin the live random-bot target to a controller-computed value.
     // Wraps the internal "bot_count" event so the native UpdateAIInternal drives the pool toward it,

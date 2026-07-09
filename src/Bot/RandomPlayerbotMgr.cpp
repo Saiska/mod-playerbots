@@ -2591,6 +2591,24 @@ bool RandomPlayerbotMgr::IsSpecPvp(uint32 bot, uint8 cls)
     return !name.empty() && name.find("pvp") != std::string::npos;
 }
 
+FeralIntent RandomPlayerbotMgr::GetFeralSpecIntent(uint32 bot, uint8 cls)
+{
+    if (cls != CLASS_DRUID)
+        return FeralIntent::Unknown;
+
+    uint32 stored = GetValue(bot, "specNo");
+    if (!stored)
+        return FeralIntent::Unknown;
+
+    std::string const& name = sPlayerbotAIConfig.premadeSpecName[cls][stored - 1];
+    if (name.find("bear") != std::string::npos)
+        return FeralIntent::Bear;
+    if (name.find("cat") != std::string::npos)
+        return FeralIntent::Cat;
+
+    return FeralIntent::Unknown;
+}
+
 uint32 RandomPlayerbotMgr::GetEventValue(uint32 bot, std::string const& event)
 {
     if (CachedEvent* e = FindEvent(bot, event))
