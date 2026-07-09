@@ -6162,6 +6162,20 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
         return false;
     }
 
+    // Never deposit quest items (Head of Nefarian, Darkmoon cards, Relic of Ulduar, mojos, …) —
+    // these are quest turn-ins / collection tokens a bot loots but has no use for; mass-depositing
+    // them floods the guild bank with unbankable clutter. Same reasoning as ammo above, so guard it
+    // at this shared seam to cover surplus/sell/destroy at once. The ItemUsage==QUEST keep-guard only
+    // spares items for a quest the bot *currently* has; class-gating stops all the rest. A quest item
+    // the bot doesn't need falls through to the normal vendor/destroy disposal instead of the bank.
+    if (proto->Class == ITEM_CLASS_QUEST)
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> SKIP quest-item",
+                     bot->GetName(), entry);
+        return false;
+    }
+
     // --- Vault-first: unlimited guild reagent vault for stackable mats/gems ----------
     // Reagents (stackable trade goods / gems) go to the guild's uncapped DB-backed vault
     // (custom_reagent_bank) instead of the 588-slot guild bank. realGuild is already
@@ -6374,6 +6388,11 @@ void PlayerbotAI::DepositEpicsToGuildBank()
         // Never bank ammo/projectiles, even epic ones — a ranged bot actively consumes these,
         // so mass-depositing a stack of epic arrows strands it. (Ammo can misclassify as AH.)
         if (p->Class == ITEM_CLASS_PROJECTILE)
+            continue;
+        // Never bank quest items, even epic ones (Head of Nefarian is epic quality) — BoP quest
+        // turn-ins the bot has no use for that flood the bank. The ItemUsage==QUEST guard below only
+        // catches items for a quest the bot currently has; class-gating catches the rest.
+        if (p->Class == ITEM_CLASS_QUEST)
             continue;
         ItemUsage u = GetAiObjectContext()->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
         if (u == ITEM_USAGE_EQUIP || u == ITEM_USAGE_REPLACE || u == ITEM_USAGE_QUEST)
