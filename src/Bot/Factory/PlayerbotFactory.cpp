@@ -1567,7 +1567,7 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
             bool isCat = (intent == FeralIntent::Cat)  ? true
                        : (intent == FeralIntent::Bear) ? false
                        : !bot->HasAura(SPELL_DRUID_THICK_HIDE);
-            if (!isCat && bot->GetLevel() == 20)
+            if (intent == FeralIntent::Unknown && !isCat && bot->GetLevel() == 20)
             {
                 uint32 bearP = sPlayerbotAIConfig.randomClassSpecProb[cls][1];
                 uint32 catP = sPlayerbotAIConfig.randomClassSpecProb[cls][3];
