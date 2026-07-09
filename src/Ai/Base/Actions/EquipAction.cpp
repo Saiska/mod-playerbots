@@ -321,6 +321,25 @@ void EquipAction::EquipItem(Item* item)
         if (dstSlot == EQUIPMENT_SLOT_OFFHAND && bot->IsTwoHandUsed())
             return;
 
+        // Single-slot guard: only equip if this item beats whatever currently occupies the target
+        // slot, re-scored HERE. The ring/trinket/main-hand paths above already picked the slot after
+        // their own compare; every other (single) slot fell straight through and would equip
+        // UNCONDITIONALLY. Within one equip-upgrade pass the slot may have just been filled by a
+        // better item from the same candidate set, so without this two same-slot items (feet/chest/
+        // head/...) ping-pong forever. Uses the same threshold as the gate (ItemUsageValue). Empty
+        // slot => no occupant => equip.
+        if (Item* occupant = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, dstSlot))
+        {
+            StatsWeightCalculator cmp(bot);
+            cmp.SetItemSetBonus(false);
+            cmp.SetOverflowPenalty(false);
+            float const newScore = cmp.CalculateItem(itemId, item->GetItemRandomPropertyId());
+            float const curScore = cmp.CalculateItem(occupant->GetTemplate()->ItemId,
+                occupant->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+            if (newScore <= curScore * sPlayerbotAIConfig.equipUpgradeThreshold)
+                return;
+        }
+
         // Equip the item in the chosen slot
         {
             WorldPacket packet(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
@@ -367,7 +386,11 @@ ItemIds EquipAction::SelectInventoryItemsToEquip()
             itemUsageParam = std::to_string(itemId);
 
         ItemUsage usage = AI_VALUE2(ItemUsage, "item upgrade", itemUsageParam);
-        if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
+        // Only feed genuine upgrades to the equipper. ITEM_USAGE_BAD_EQUIP means the gate scored
+        // this item as NOT better than what's already equipped (an empty slot yields EQUIP, not
+        // BAD_EQUIP), so auto-equipping it only displaces a better piece — and with the single-slot
+        // equip below being unconditional, two same-slot items would ping-pong forever.
+        if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)
             items.insert(itemId);
     }
     return items;
