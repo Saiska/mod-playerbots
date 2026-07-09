@@ -6152,6 +6152,16 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
     if (!proto)
         return false;
 
+    // Never deposit ammo/projectiles — bots actively consume them; banking a stack strands a
+    // ranged bot. Guarded here so every deposit seam (surplus/sell/destroy) is covered at once.
+    if (proto->Class == ITEM_CLASS_PROJECTILE)
+    {
+        if (trace)
+            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> SKIP projectile/ammo",
+                     bot->GetName(), entry);
+        return false;
+    }
+
     // --- Vault-first: unlimited guild reagent vault for stackable mats/gems ----------
     // Reagents (stackable trade goods / gems) go to the guild's uncapped DB-backed vault
     // (custom_reagent_bank) instead of the 588-slot guild bank. realGuild is already
@@ -6360,6 +6370,10 @@ void PlayerbotAI::DepositEpicsToGuildBank()
             continue;
         ItemTemplate const* p = item->GetTemplate();
         if (!p || p->Quality < ITEM_QUALITY_EPIC || !item->CanBeTraded())
+            continue;
+        // Never bank ammo/projectiles, even epic ones — a ranged bot actively consumes these,
+        // so mass-depositing a stack of epic arrows strands it. (Ammo can misclassify as AH.)
+        if (p->Class == ITEM_CLASS_PROJECTILE)
             continue;
         ItemUsage u = GetAiObjectContext()->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
         if (u == ITEM_USAGE_EQUIP || u == ITEM_USAGE_REPLACE || u == ITEM_USAGE_QUEST)
