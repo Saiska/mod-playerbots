@@ -257,6 +257,65 @@ void EquipAction::EquipItem(Item* item, bool disposeDisplaced)
             }
         }
 
+        // Caster combo path: a 1H main-hand candidate while a 2H is worn and the bot
+        // cannot dual-wield. The dual-wield/TG weapon block above is skipped for this
+        // case, and the single-slot guard below would compare the 1H alone vs the 2H
+        // (which the 2H wins), so a caster never assembles a better 1H + off-hand.
+        // Re-check the loadout (same helper + threshold as the gate), then equip the
+        // 1H (the core auto-moves the 2H to bags, freeing the off-hand slot) and the
+        // best owned off-hand. Non-destructive, so it runs on the player .equip path
+        // too (fixing today's silent no-op where a 1H won't replace a 2H for a caster).
+        if (sPlayerbotAIConfig.casterWeaponComboEval && isWeapon && !canDualWield &&
+            have2HWeaponEquipped && currentMHItem &&
+            (invType == INVTYPE_WEAPON || invType == INVTYPE_WEAPONMAINHAND))
+        {
+            StatsWeightCalculator calc(bot);
+            calc.SetItemSetBonus(false);
+            calc.SetOverflowPenalty(false);
+
+            bool isPvp = sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass());
+            if (isPvp)
+                calc.SetPvpSpec(true);
+
+            Item* bestOff = ItemUsageValue::FindBestUsableOffHand(bot, calc);
+
+            float newLoadout = calc.CalculateItem(itemId, item->GetItemRandomPropertyId());
+            if (bestOff)
+                newLoadout += calc.CalculateItem(bestOff->GetTemplate()->ItemId,
+                    bestOff->GetItemRandomPropertyId());
+            float const curLoadout = calc.CalculateItem(currentMHItem->GetTemplate()->ItemId,
+                currentMHItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+
+            if (newLoadout <= curLoadout * sPlayerbotAIConfig.equipUpgradeThreshold)
+                return;  // pair does not beat the 2H by the margin — keep the 2H
+
+            // Equip the 1H in main hand (core moves the displaced 2H to bags).
+            {
+                WorldPacket eqPacket(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
+                ObjectGuid newItemGuid = item->GetGUID();
+                eqPacket << newItemGuid << uint8(EQUIPMENT_SLOT_MAINHAND);
+                WorldPackets::Item::AutoEquipItemSlot nicePacket(std::move(eqPacket));
+                nicePacket.Read();
+                bot->GetSession()->HandleAutoEquipItemSlotOpcode(nicePacket);
+            }
+
+            // Equip the best owned off-hand into the now-free off-hand slot.
+            if (bestOff && !bot->IsTwoHandUsed())
+            {
+                WorldPacket offPacket(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
+                ObjectGuid offGuid = bestOff->GetGUID();
+                offPacket << offGuid << uint8(EQUIPMENT_SLOT_OFFHAND);
+                WorldPackets::Item::AutoEquipItemSlot niceOff(std::move(offPacket));
+                niceOff.Read();
+                bot->GetSession()->HandleAutoEquipItemSlotOpcode(niceOff);
+            }
+
+            std::ostringstream out;
+            out << "Equipping " << chat->FormatItem(itemProto) << " in main hand with off-hand";
+            botAI->TellMaster(out);
+            return;
+        }
+
         // If not a special dual-wield/TG scenario or no improvement found, fall back to original logic
         if (dstSlot == EQUIPMENT_SLOT_FINGER1 ||
             dstSlot == EQUIPMENT_SLOT_TRINKET1 ||

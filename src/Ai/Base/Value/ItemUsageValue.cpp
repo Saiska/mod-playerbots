@@ -123,6 +123,22 @@ ItemUsage ItemUsageValue::Calculate()
     if (equip != ITEM_USAGE_NONE)
         return equip;
 
+    // Reserve one off-hand. While a 2H is worn, a caster's off-hand is otherwise
+    // routed to AH/VENDOR below (QueryItemUsageForEquip returned NONE for it because
+    // the 2H blocks the slot), leaving nothing to pair a future 1H with. Keep the
+    // single best usable off-hand whole (before disenchant/sell); all others still
+    // dispose as today.
+    if (sPlayerbotAIConfig.casterWeaponComboEval && !bot->CanDualWield() &&
+        bot->IsTwoHandUsed() && IsCasterOffHand(bot, proto))
+    {
+        StatsWeightCalculator ohCalc(bot);
+        ohCalc.SetItemSetBonus(false);
+        ohCalc.SetOverflowPenalty(false);
+        Item* bestOff = FindBestUsableOffHand(bot, ohCalc);
+        if (bestOff && bestOff->GetTemplate()->ItemId == proto->ItemId)
+            return ITEM_USAGE_KEEP;
+    }
+
     // Get item instance to check if it's soulbound
     Item* item = bot->GetItemByEntry(proto->ItemId);
     bool isSoulbound = item && item->IsSoulBound();
@@ -313,6 +329,46 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         // If this weapon is 2H but not one of the valid TG weapon types, do not equip it at all.
         if (bot->CanTitanGrip() && itemProto->InventoryType == INVTYPE_2HWEAPON && !isValidTGWeapon)
             return ITEM_USAGE_NONE;
+
+        // Caster loadout evaluation. A caster (no dual-wield) picks the better of
+        // {2H} vs {1H + off-hand}; comparing single items instead makes a 1H lose to
+        // a 2H alone (never assembled) and lets a 2H silently drop a paired off-hand.
+        // Only the two transitions that actually differ from single-item scoring are
+        // handled here; every other case falls through to the loop below unchanged.
+        if (sPlayerbotAIConfig.casterWeaponComboEval && !bot->CanDualWield())
+        {
+            bool const cand1H = (itemProto->InventoryType == INVTYPE_WEAPON ||
+                                 itemProto->InventoryType == INVTYPE_WEAPONMAINHAND);
+            bool const cand2H = (itemProto->InventoryType == INVTYPE_2HWEAPON);
+            Item* curOff = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND);
+
+            bool const forwardCase = cand1H && have2HWeapon;   // 2H -> 1H + off-hand
+            bool const reverseCase = cand2H && curOff;         // 1H + off-hand -> 2H
+
+            if (forwardCase || reverseCase)
+            {
+                float curLoadout = 0.0f;
+                if (currentWeapon)
+                    curLoadout += calculator.CalculateItem(currentWeapon->GetTemplate()->ItemId,
+                        currentWeapon->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+                if (curOff)
+                    curLoadout += calculator.CalculateItem(curOff->GetTemplate()->ItemId,
+                        curOff->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+
+                float newLoadout = itemScore;
+                if (forwardCase)
+                {
+                    Item* bestOff = FindBestUsableOffHand(bot, calculator);
+                    if (bestOff)
+                        newLoadout += calculator.CalculateItem(bestOff->GetTemplate()->ItemId,
+                            bestOff->GetItemRandomPropertyId());
+                }
+
+                if (newLoadout > curLoadout * sPlayerbotAIConfig.equipUpgradeThreshold)
+                    return ITEM_USAGE_REPLACE;
+                return ITEM_USAGE_NONE;
+            }
+        }
 
         // Now handle the logic for equipping and possible offhand slots
         // If the bot can Dual Wield and:
@@ -928,6 +984,74 @@ std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, b
     }
 
     return "";
+}
+
+bool ItemUsageValue::IsCasterOffHand(Player* bot, ItemTemplate const* proto)
+{
+    if (!bot || !proto)
+        return false;
+
+    if (bot->BotCanUseItem(proto) != EQUIP_ERR_OK)
+        return false;
+
+    switch (proto->InventoryType)
+    {
+        case INVTYPE_HOLDABLE:
+        case INVTYPE_SHIELD:
+            return true;
+        case INVTYPE_WEAPONOFFHAND:
+            // An off-hand *weapon* only pairs if the bot can dual-wield (excludes
+            // true casters, whose off-hand is a holdable/shield).
+            return bot->CanDualWield();
+        default:
+            return false;
+    }
+}
+
+Item* ItemUsageValue::FindBestUsableOffHand(Player* bot, StatsWeightCalculator& calc)
+{
+    if (!bot)
+        return nullptr;
+
+    Item* best = nullptr;
+    float bestScore = 0.0f;
+
+    auto consider = [&](Item* it)
+    {
+        if (!it)
+            return;
+
+        ItemTemplate const* p = it->GetTemplate();
+        if (!IsCasterOffHand(bot, p))
+            return;
+
+        float s = calc.CalculateItem(p->ItemId, it->GetItemRandomPropertyId());
+        if (s > bestScore)
+        {
+            best = it;
+            bestScore = s;
+        }
+    };
+
+    // Equipped off-hand (empty while a 2H is worn, but robust if not).
+    consider(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND));
+
+    // Backpack slots.
+    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+        consider(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
+
+    // Equipped bags.
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+    {
+        Bag* pBag = (Bag*)bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
+        if (!pBag)
+            continue;
+
+        for (uint32 j = 0; j < pBag->GetBagSize(); ++j)
+            consider(bot->GetItemByPos(bag, j));
+    }
+
+    return best;
 }
 
 ItemUsage ItemUpgradeValue::Calculate()
