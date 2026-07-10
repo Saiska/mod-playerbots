@@ -471,6 +471,7 @@ public:
     std::string autoPickReward;
     bool autoEquipUpgradeLoot;
     float equipUpgradeThreshold;
+    bool casterWeaponComboEval;
     bool disposeDisplacedUpgradeGear;
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
