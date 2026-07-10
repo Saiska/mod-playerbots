@@ -273,6 +273,10 @@ void EquipAction::EquipItem(Item* item, bool disposeDisplaced)
             calc.SetItemSetBonus(false);
             calc.SetOverflowPenalty(false);
 
+            bool isPvp = sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass());
+            if (isPvp)
+                calc.SetPvpSpec(true);
+
             Item* bestOff = ItemUsageValue::FindBestUsableOffHand(bot, calc);
 
             float newLoadout = calc.CalculateItem(itemId, item->GetItemRandomPropertyId());
