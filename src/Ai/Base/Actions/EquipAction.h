@@ -20,13 +20,13 @@ public:
     EquipAction(PlayerbotAI* botAI, std::string const name = "equip") : InventoryAction(botAI, name) {}
 
     bool Execute(Event event) override;
-    void EquipItems(ItemIds ids);
+    void EquipItems(ItemIds ids, bool disposeDisplaced = false);
     ItemIds SelectInventoryItemsToEquip();
 
 private:
-    void EquipItem(FindItemVisitor* visitor);
+    void EquipItem(FindItemVisitor* visitor, bool disposeDisplaced);
     uint8 GetSmallestBagSlot();
-    void EquipItem(Item* item);
+    void EquipItem(Item* item, bool disposeDisplaced);
 };
 
 class EquipUpgradesPacketAction : public EquipAction

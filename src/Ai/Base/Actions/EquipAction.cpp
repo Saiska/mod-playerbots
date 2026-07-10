@@ -22,12 +22,12 @@ bool EquipAction::Execute(Event event)
     return true;
 }
 
-void EquipAction::EquipItems(ItemIds ids)
+void EquipAction::EquipItems(ItemIds ids, bool disposeDisplaced)
 {
     for (ItemIds::iterator i = ids.begin(); i != ids.end(); i++)
     {
         FindItemByIdVisitor visitor(*i);
-        EquipItem(&visitor);
+        EquipItem(&visitor, disposeDisplaced);
     }
 }
 
@@ -54,15 +54,15 @@ uint8 EquipAction::GetSmallestBagSlot()
     return curBag;
 }
 
-void EquipAction::EquipItem(FindItemVisitor* visitor)
+void EquipAction::EquipItem(FindItemVisitor* visitor, bool disposeDisplaced)
 {
     IterateItems(visitor);
     std::vector<Item*> items = visitor->GetResult();
     if (!items.empty())
-        EquipItem(*items.begin());
+        EquipItem(*items.begin(), disposeDisplaced);
 }
 
-void EquipAction::EquipItem(Item* item)
+void EquipAction::EquipItem(Item* item, bool disposeDisplaced)
 {
     uint8 bagIndex = item->GetBagSlot();
     uint8 slot = item->GetSlot();
@@ -340,6 +340,13 @@ void EquipAction::EquipItem(Item* item)
                 return;
         }
 
+        // Capture the current occupant BEFORE the equip. HandleAutoEquipItemSlotOpcode
+        // swaps: the worn item lands back in bags, where the next upgrade pass could
+        // re-grab it (same-slot churn). We resolve it by GUID after the swap.
+        ObjectGuid displacedGuid;
+        if (Item* occupant = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, dstSlot))
+            displacedGuid = occupant->GetGUID();
+
         // Equip the item in the chosen slot
         {
             WorldPacket packet(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
@@ -348,6 +355,24 @@ void EquipAction::EquipItem(Item* item)
             WorldPackets::Item::AutoEquipItemSlot nicePacket(std::move(packet));
             nicePacket.Read();
             bot->GetSession()->HandleAutoEquipItemSlotOpcode(nicePacket);
+        }
+
+        // Dispose the displaced item so it cannot bounce back and drive same-slot
+        // re-equip churn. Autonomous upgrade path only (disposeDisplaced); never a
+        // weapon (a caster's displaced 1H must survive — see caster-2h-1h-oh-combo-eval);
+        // never an item still equipped (guards a failed equip). Guild-bank-first (kept
+        // whole, recoverable) else destroy — mirrors DestroyItemAction::DestroyItem.
+        if (disposeDisplaced && displacedGuid)
+        {
+            if (Item* displaced = bot->GetItemByGuid(displacedGuid))
+            {
+                if (!displaced->IsEquipped() &&
+                    displaced->GetTemplate()->Class != ITEM_CLASS_WEAPON)
+                {
+                    if (!botAI->TryDepositLootToGuildBank(displaced))
+                        bot->DestroyItem(displaced->GetBagSlot(), displaced->GetSlot(), true);
+                }
+            }
         }
     }
 
@@ -434,13 +459,13 @@ bool EquipUpgradesPacketAction::Execute(Event event)
     }
 
     ItemIds items = SelectInventoryItemsToEquip();
-    EquipItems(items);
+    EquipItems(items, sPlayerbotAIConfig.disposeDisplacedUpgradeGear);
     return true;
 }
 
 bool EquipUpgradeAction::Execute(Event /*event*/)
 {
     ItemIds items = SelectInventoryItemsToEquip();
-    EquipItems(items);
+    EquipItems(items, sPlayerbotAIConfig.disposeDisplacedUpgradeGear);
     return true;
 }
