@@ -12,6 +12,7 @@
 class Item;
 class Player;
 class PlayerbotAI;
+class StatsWeightCalculator;
 
 struct ItemTemplate;
 struct ParsedItemUsage
@@ -67,6 +68,10 @@ public:
     static bool SpellGivesSkillUp(uint32 spellId, Player* bot);
 
     static std::string const GetConsumableType(ItemTemplate const* proto, bool hasMana);
+
+    // Caster 1H+off-hand loadout support (shared by the equip gate and EquipAction).
+    static bool IsCasterOffHand(Player* bot, ItemTemplate const* proto);
+    static Item* FindBestUsableOffHand(Player* bot, StatsWeightCalculator& calc);
 };
 
 class ItemUpgradeValue : public ItemUsageValue

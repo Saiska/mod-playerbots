@@ -930,6 +930,74 @@ std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, b
     return "";
 }
 
+bool ItemUsageValue::IsCasterOffHand(Player* bot, ItemTemplate const* proto)
+{
+    if (!bot || !proto)
+        return false;
+
+    if (bot->BotCanUseItem(proto) != EQUIP_ERR_OK)
+        return false;
+
+    switch (proto->InventoryType)
+    {
+        case INVTYPE_HOLDABLE:
+        case INVTYPE_SHIELD:
+            return true;
+        case INVTYPE_WEAPONOFFHAND:
+            // An off-hand *weapon* only pairs if the bot can dual-wield (excludes
+            // true casters, whose off-hand is a holdable/shield).
+            return bot->CanDualWield();
+        default:
+            return false;
+    }
+}
+
+Item* ItemUsageValue::FindBestUsableOffHand(Player* bot, StatsWeightCalculator& calc)
+{
+    if (!bot)
+        return nullptr;
+
+    Item* best = nullptr;
+    float bestScore = 0.0f;
+
+    auto consider = [&](Item* it)
+    {
+        if (!it)
+            return;
+
+        ItemTemplate const* p = it->GetTemplate();
+        if (!IsCasterOffHand(bot, p))
+            return;
+
+        float s = calc.CalculateItem(p->ItemId, it->GetItemRandomPropertyId());
+        if (s > bestScore)
+        {
+            best = it;
+            bestScore = s;
+        }
+    };
+
+    // Equipped off-hand (empty while a 2H is worn, but robust if not).
+    consider(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND));
+
+    // Backpack slots.
+    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+        consider(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
+
+    // Equipped bags.
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+    {
+        Bag* pBag = (Bag*)bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
+        if (!pBag)
+            continue;
+
+        for (uint32 j = 0; j < pBag->GetBagSize(); ++j)
+            consider(bot->GetItemByPos(bag, j));
+    }
+
+    return best;
+}
+
 ItemUsage ItemUpgradeValue::Calculate()
 {
     ParsedItemUsage parsed = GetItemIdFromQualifier();
