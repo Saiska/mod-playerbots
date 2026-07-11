@@ -50,13 +50,18 @@ bool HasAnySpell(Player* player, uint32 const (&spellIds)[Size])
 
 StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
 {
-    if (PlayerbotAI::IsHeal(player))
+    // Score gear by TALENT SPEC, not the bot's momentary active strategy (bySpec = true).
+    // The strategy-based role flips to caster/melee whenever a bot is soloing/questing in the
+    // world (a solo healer can't just heal), so a Resto/Holy bot would re-gear and re-relic as a
+    // caster while roaming and never maintain the raid set its spec is built for -- breaking the
+    // gear-up-for-raids cycle. Keying on the spec tab keeps a bot geared for what it IS.
+    if (PlayerbotAI::IsHeal(player, /*bySpec*/ true))
         type_ = CollectorType::SPELL_HEAL;
-    else if (PlayerbotAI::IsCaster(player))
+    else if (PlayerbotAI::IsCaster(player, /*bySpec*/ true))
         type_ = CollectorType::SPELL_DMG;
-    else if (PlayerbotAI::IsTank(player))
+    else if (PlayerbotAI::IsTank(player, /*bySpec*/ true))
         type_ = CollectorType::MELEE_TANK;
-    else if (PlayerbotAI::IsMelee(player))
+    else if (PlayerbotAI::IsMelee(player, /*bySpec*/ true))
         type_ = CollectorType::MELEE_DMG;
     else
         type_ = CollectorType::RANGED;
