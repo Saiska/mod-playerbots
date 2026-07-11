@@ -474,6 +474,15 @@ ItemIds EquipAction::SelectInventoryItemsToEquip()
         // this item as NOT better than what's already equipped (an empty slot yields EQUIP, not
         // BAD_EQUIP), so auto-equipping it only displaces a better piece — and with the single-slot
         // equip below being unconditional, two same-slot items would ping-pong forever.
+        // Skip a candidate the bot cannot uniquely-equip right now (e.g. a spare copy of an
+        // already-worn ITEM_FLAG_UNIQUE_EQUIPPABLE ring/trinket). The gate scores it as an
+        // upgrade over the OTHER slot, but the core rejects the 2nd unique every cycle, so
+        // feeding it produces an endless "Equipping [X]" retry loop. Use the same core check
+        // the equip packet later fails on so gate and outcome agree; a different better unique
+        // (other entry / limit-category) still passes.
+        if (bot->CanEquipUniqueItem(item) != EQUIP_ERR_OK)
+            continue;
+
         if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)
             items.insert(itemId);
     }
