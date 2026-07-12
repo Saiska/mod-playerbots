@@ -178,6 +178,8 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
     // acting buys per tick — a large pile still fully drains, just over several upkeep passes (the
     // maintenance / 90%-full pipeline empties bags to the reagent vault between passes).
     uint32 const maxBuys = sPlayerbotAIConfig.tokenRedeemMaxBuysPerTick;
+    uint32 const sinkPct = sPlayerbotAIConfig.tokenRedeemSinkPercent;   // % of each tier's balance spent on
+                                                                        // craft mats before the rest converts down
     uint32 buys = 0;
     std::unordered_set<uint32> boughtGearIds;   // dedup: an item bought this Execute is no longer an
                                                 // upgrade, but the cached "item upgrade" value would still
@@ -210,6 +212,15 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
 
         uint32 const probeEnterBal = bal;   // [RedeemProbe] to measure how much this pass drained
         char const* probeBranch = "none";   // [RedeemProbe] last branch that acted this pass
+
+        // Proportional sink/convert split. Spend up to `sinkBudget` currency on craft-mat sinks this pass,
+        // then convert the remainder down. A currency with a convert target is capped at sinkPct% of its
+        // entering balance; one WITHOUT a convert target uses the whole entering balance as its budget
+        // (== sink 100%) so the un-convertible remainder never re-freezes. Gear buys are orthogonal and do
+        // NOT count against this budget.
+        bool const hasConvert = sCurrencyGearIndex.ConvertTargetFor(c) != 0;
+        uint32 const sinkBudget = hasConvert ? probeEnterBal * sinkPct / 100 : probeEnterBal;
+        uint32 spentOnSink = 0;
 
         if (probeWatch)
             LOG_INFO("playerbots",
@@ -265,23 +276,28 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 // no room, or PayCost failed (missing a non-currency reqitem) -> fall through to the sink
             }
 
-            // 2) no upgrade -> random affordable sink (gems/mats -> reagent vault)
-            std::vector<CurrencyGearIndex::SinkOption> aff;
-            for (auto const& s : sCurrencyGearIndex.SinkFor(c))
-                if (s.cost <= bal) aff.push_back(s);
-            if (!aff.empty())
+            // 2) no upgrade -> random affordable sink (gems/mats -> reagent vault), but only until this
+            //    tier's sink budget is spent; past that the remainder converts down (step 3).
+            if (spentOnSink < sinkBudget)
             {
-                CurrencyGearIndex::SinkOption s = aff[urand(0, aff.size() - 1)];
-                ItemPosCountVec sdest;
-                if (bot->GetItemCount(c, false) >= s.cost &&
-                    bot->CanStoreNewItem(INVENTORY_SLOT_BAG_0, NULL_SLOT, sdest, s.itemId, 1) == EQUIP_ERR_OK)
+                std::vector<CurrencyGearIndex::SinkOption> aff;
+                for (auto const& s : sCurrencyGearIndex.SinkFor(c))
+                    if (s.cost <= bal) aff.push_back(s);
+                if (!aff.empty())
                 {
-                    bot->DestroyItemCount(c, s.cost, true);            // room verified above; no currency lost
-                    StoreNewItemInInventorySlot(bot, s.itemId, 1);
-                    acted = true;
-                    ++buys;
-                    probeBranch = "sink";
-                    continue;
+                    CurrencyGearIndex::SinkOption s = aff[urand(0, aff.size() - 1)];
+                    ItemPosCountVec sdest;
+                    if (bot->GetItemCount(c, false) >= s.cost &&
+                        bot->CanStoreNewItem(INVENTORY_SLOT_BAG_0, NULL_SLOT, sdest, s.itemId, 1) == EQUIP_ERR_OK)
+                    {
+                        bot->DestroyItemCount(c, s.cost, true);            // room verified above; no currency lost
+                        StoreNewItemInInventorySlot(bot, s.itemId, 1);
+                        acted = true;
+                        ++buys;
+                        spentOnSink += s.cost;
+                        probeBranch = "sink";
+                        continue;
+                    }
                 }
             }
 

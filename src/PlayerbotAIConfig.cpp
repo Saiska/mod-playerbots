@@ -747,6 +747,10 @@ bool PlayerbotAIConfig::Initialize()
     lootNeedRollLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.LootNeedRollLevel", 1);
     tokenRedeemEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.TokenRedeemEnable", true);
     tokenRedeemMaxBuysPerTick = sConfigMgr->GetOption<uint32>("AiPlayerbot.TokenRedeemMaxBuysPerTick", 40);
+    // Proportional sink/convert split: at each currency tier, spend this percent of the tier's balance on
+    // craft-mat sinks (-> reagent vault), then convert the remainder down to the next tier. A currency with
+    // no convert target sinks 100% regardless (never re-freeze the un-convertible remainder). Clamp 0-100.
+    tokenRedeemSinkPercent = std::min<uint32>(100, sConfigMgr->GetOption<uint32>("AiPlayerbot.TokenRedeemSinkPercent", 25));
     // Diagnostic (2026-07-08 crash hunt): SEH-probe the bot's inventory for a half-alive Item* around
     // each redeem mutation, log the producing step, and bail instead of crashing. Turn off once fixed.
     tokenRedeemDebugScan = sConfigMgr->GetOption<bool>("AiPlayerbot.TokenRedeemDebugScan", true);

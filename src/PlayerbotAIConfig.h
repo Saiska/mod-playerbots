@@ -462,6 +462,7 @@ public:
     int32 lootNeedRollLevel;
     bool tokenRedeemEnable;
     uint32 tokenRedeemMaxBuysPerTick;
+    uint32 tokenRedeemSinkPercent;
     bool tokenRedeemDebugScan;
     bool upkeepOnGroupLeave;
     bool guildBankDepositEpics;
