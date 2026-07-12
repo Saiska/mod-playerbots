@@ -2345,10 +2345,24 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
             }
             break;
         case CLASS_DRUID:
-            if (tab == DRUID_TAB_FERAL && (player->GetShapeshiftForm() == FORM_BEAR ||
-                                           player->GetShapeshiftForm() == FORM_DIREBEAR || player->HasAura(16931)))
+            if (tab == DRUID_TAB_FERAL)
             {
-                return true;
+                // Cat (DPS) vs bear (tank) follows the bot's persistent FeralIntent,
+                // mirroring AiFactory's cat/bear strategy pick. Keying off the current
+                // shapeshift form or the Thick Hide talent (aura 16931) mislabels a
+                // Thick-Hide cat as a tank, which then gets "tank face" positioning
+                // instead of "behind".
+                FeralIntent intent = sRandomPlayerbotMgr.GetFeralSpecIntent(
+                    player->GetGUID().GetCounter(), player->getClass());
+                if (intent == FeralIntent::Cat)
+                    return false;
+                if (intent == FeralIntent::Bear)
+                    return true;
+                // Unknown intent (e.g. real players): fall back to form / Thick Hide.
+                if (player->GetShapeshiftForm() == FORM_BEAR ||
+                    player->GetShapeshiftForm() == FORM_DIREBEAR ||
+                    player->HasAura(16931))
+                    return true;
             }
             break;
     }
