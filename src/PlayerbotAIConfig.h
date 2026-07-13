@@ -436,6 +436,7 @@ public:
     bool randomBotShowHelmet;
     bool randomBotShowCloak;
     bool randomBotFixedLevel;
+    bool guildmateAscensor;
     bool disableRandomLevels;
     float randomBotXPRate;
     uint32 randomBotAllianceRatio;
