@@ -2189,8 +2189,8 @@ void RandomPlayerbotMgr::IncreaseLevelTo(Player* bot, uint8 targetLevel)
 
     PlayerbotFactory factory(bot, level);
     factory.LevelUp();   // slim: spells/skills/stats/heal/SaveToDB — one jump, no per-level loop
-
-    LOG_INFO("playerbots", "[GuildAscensor] {} L{} -> L{}", bot->GetName(), oldLevel, level);
+    // Promotion logging is the caller's job: SyncGuildmatesToGroupHumans (Playerbots.cpp) emits
+    // the single spec-format [GuildAscensor] line with guild + human context (spec AC#2).
 }
 
 void RandomPlayerbotMgr::SetPopulationTarget(uint32 target)

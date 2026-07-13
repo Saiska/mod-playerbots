@@ -644,15 +644,19 @@ static void SyncGuildmatesToGroupHumans(Group* group)
         auto it = humanLevelByGuild.find(m->GetGuildId());
         if (it == humanLevelByGuild.end() || m->GetLevel() >= it->second)
             continue;
+
+        uint8 oldLevel = m->GetLevel();
         sRandomPlayerbotMgr.IncreaseLevelTo(m, it->second);
+        if (m->GetLevel() == oldLevel)   // no-op (e.g. target clamped below current) — nothing to log
+            continue;
         FlagBotForUpkeep(m->GetGUID());   // existing gear-floor/maintenance flag
 
-        // Optional context line beyond Task 1's short "L<old> -> L<new>" log — spec's full form
-        // is "(guild <name>, with <human>)"; this helper is what knows both, so it logs them here
-        // rather than plumbing guild/human name through IncreaseLevelTo's signature.
+        // The single spec-format promotion line (spec AC#2) — this helper knows guild + human,
+        // so it owns the log rather than plumbing names through IncreaseLevelTo's signature.
         Guild* guild = sGuildMgr->GetGuildById(m->GetGuildId());
-        LOG_INFO("playerbots", "[GuildAscensor] {} promoted (guild {}, with {})", m->GetName(),
-                 guild ? guild->GetName() : "?", humanNameByGuild[m->GetGuildId()]);
+        LOG_INFO("playerbots", "[GuildAscensor] {} L{} -> L{} (guild {}, with {})", m->GetName(),
+                 oldLevel, m->GetLevel(), guild ? guild->GetName() : "?",
+                 humanNameByGuild[m->GetGuildId()]);
     }
 }
 
@@ -700,7 +704,7 @@ void AddPlayerbotsScripts()
     new PlayerbotsWorldScript();
     new PlayerbotsScript();
     new PlayerBotsBGScript();
-    new PlayerbotsGroupScript();   // upkeep-on-group-leave
+    new PlayerbotsGroupScript();   // upkeep-on-group-leave + guildmate-ascensor group-join seam
     AddPlayerbotsSecureLoginScripts();
     AddPlayerbotsCommandscripts();
     PlayerBotsGuildValidationScript();
