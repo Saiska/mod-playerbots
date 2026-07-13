@@ -104,6 +104,27 @@ static Item* StoreNewItemInInventorySlot(Player* player, uint32 newItemId, uint3
     return player->StoreNewItem(vDest, newItemId, true, Item::GenerateItemRandomPropertyId(newItemId));
 }
 
+// Non-destructive affordability check: is every RequiredItem of an ExtendedCost row covered by the
+// bot's bags? The primary currency `c` is already known (bal), so we skip re-walking the bags for it;
+// only a secondary reqitem (e.g. a Trophy of the Crusade on the ilvl284 tier) costs a GetItemCount.
+static bool CanAffordCost(Player* bot, uint32 extendedCostId, uint32 c, uint32 bal)
+{
+    ItemExtendedCostEntry const* e = sItemExtendedCostStore.LookupEntry(extendedCostId);
+    if (!e)
+        return false;
+    for (uint8 s = 0; s < MAX_ITEM_EXTENDED_COST_REQUIREMENTS; ++s)
+    {
+        uint32 req = e->reqitem[s];
+        uint32 cnt = e->reqitemcount[s];
+        if (!req || !cnt)
+            continue;
+        uint32 have = (req == c) ? bal : bot->GetItemCount(req, false);
+        if (have < cnt)
+            return false;
+    }
+    return true;
+}
+
 // Verify affordability then consume every RequiredItem of an ExtendedCost row from the bot's bags.
 // Returns false (consuming nothing) if unaffordable.
 static bool PayCost(Player* bot, uint32 extendedCostId)
@@ -247,6 +268,11 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
             {
                 if (o.cost > bal) continue;
                 if (boughtGearIds.count(o.gearId)) continue;   // already bought this Execute — don't re-buy the same item
+                // Skip options whose ExtendedCost needs a second item the bot lacks (e.g. Trophy of the
+                // Crusade on the ilvl284 tier). o.cost only checks the emblem count; without this a
+                // trophy-gated piece can win the best-score contest, fail PayCost, and starve the bot of
+                // the payable (ilvl271 / pure-emblem) upgrades for this currency (emblems drain to convert).
+                if (!CanAffordCost(bot, o.extendedCostId, c, bal)) continue;
                 ItemTemplate const* p = sObjectMgr->GetItemTemplate(o.gearId);
                 if (!p || bot->BotCanUseItem(p) != EQUIP_ERR_OK) continue;
                 ItemUsage u = botAI->GetAiObjectContext()->GetValue<ItemUsage>("item upgrade", std::to_string(o.gearId))->Get();
