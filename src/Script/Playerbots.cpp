@@ -41,8 +41,10 @@
 #include "GroupScript.h"
 #include "Group.h"
 #include "GroupReference.h"
+#include "GuildMgr.h"
 #include "ObjectAccessor.h"
 #include "NewRpgInfo.h"
+#include <unordered_map>
 
 class PlayerbotsDatabaseScript : public DatabaseScript
 {
@@ -85,6 +87,10 @@ public:
             revision = "Unknown Playerbots Database Revision";
     }
 };
+
+// Forward-declared: defined below (near PlayerbotsGroupScript), reused by both the group-join
+// seam and the human-level-up seam in PlayerbotsPlayerScript::OnPlayerLevelChanged.
+static void SyncGuildmatesToGroupHumans(Group* group);
 
 class PlayerbotsPlayerScript : public PlayerScript
 {
@@ -142,7 +148,12 @@ public:
     void OnPlayerLevelChanged(Player* player, uint8 /*oldLevel*/) override
     {
         if (!player->GetSession()->IsBot())
+        {
             sPopulationDynamicsMgr.ConsiderPlayerLevel(player);
+
+            if (Group* group = player->GetGroup())
+                SyncGuildmatesToGroupHumans(group);
+        }
     }
 
     bool OnPlayerBeforeTeleport(Player* /*player*/, uint32 /*mapid*/, float /*x*/, float /*y*/, float /*z*/,
@@ -586,10 +597,74 @@ public:
 // player heading to town after a dungeon. Runs on the world thread and only does a flat uint32 store; the
 // flag is consumed on the bot's own worker tick (NewRpgStatusUpdateAction), where the RPG variant can be
 // reassigned safely. Gated by AiPlayerbot.UpkeepOnGroupLeave.
+// File-static (hoisted out of PlayerbotsGroupScript, body unchanged) so SyncGuildmatesToGroupHumans
+// below can reuse it too.
+static void FlagBotForUpkeep(ObjectGuid guid)
+{
+    if (!sPlayerbotAIConfig.upkeepOnGroupLeave)
+        return;
+    Player* player = ObjectAccessor::FindPlayer(guid);
+    if (!player)
+        return;
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(player);
+    if (!botAI || !sRandomPlayerbotMgr.IsRandomBot(player))
+        return;
+    botAI->rpgInfo.pendingUpkeepMs = getMSTime();   // consumed on the bot's own tick
+}
+
+// [GuildAscensor] Promote same-guild random bots to their guild's highest real-player level
+// in this group. Idempotent: promoted bots stop qualifying. Spec: guildmate-level-ascensor.
+static void SyncGuildmatesToGroupHumans(Group* group)
+{
+    if (!group || !sPlayerbotAIConfig.guildmateAscensor)
+        return;
+
+    std::unordered_map<uint32 /*guildId*/, uint8 /*level*/> humanLevelByGuild;
+    std::unordered_map<uint32 /*guildId*/, std::string /*name*/> humanNameByGuild;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* m = ref->GetSource();
+        if (!m || !m->IsInWorld() || m->GetSession()->IsBot() || !m->GetGuildId())
+            continue;
+        uint8& lvl = humanLevelByGuild[m->GetGuildId()];
+        if (m->GetLevel() >= lvl)
+        {
+            lvl = m->GetLevel();
+            humanNameByGuild[m->GetGuildId()] = m->GetName();
+        }
+    }
+    if (humanLevelByGuild.empty())
+        return;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* m = ref->GetSource();
+        if (!m || !m->IsInWorld() || !sRandomPlayerbotMgr.IsRandomBot(m))
+            continue;
+        auto it = humanLevelByGuild.find(m->GetGuildId());
+        if (it == humanLevelByGuild.end() || m->GetLevel() >= it->second)
+            continue;
+        sRandomPlayerbotMgr.IncreaseLevelTo(m, it->second);
+        FlagBotForUpkeep(m->GetGUID());   // existing gear-floor/maintenance flag
+
+        // Optional context line beyond Task 1's short "L<old> -> L<new>" log — spec's full form
+        // is "(guild <name>, with <human>)"; this helper is what knows both, so it logs them here
+        // rather than plumbing guild/human name through IncreaseLevelTo's signature.
+        Guild* guild = sGuildMgr->GetGuildById(m->GetGuildId());
+        LOG_INFO("playerbots", "[GuildAscensor] {} promoted (guild {}, with {})", m->GetName(),
+                 guild ? guild->GetName() : "?", humanNameByGuild[m->GetGuildId()]);
+    }
+}
+
 class PlayerbotsGroupScript : public GroupScript
 {
 public:
     PlayerbotsGroupScript() : GroupScript("PlayerbotsGroupScript") { }
+
+    void OnAddMember(Group* group, ObjectGuid /*guid*/) override
+    {
+        SyncGuildmatesToGroupHumans(group);
+    }
 
     void OnRemoveMember(Group* /*group*/, ObjectGuid guid, RemoveMethod /*method*/, ObjectGuid /*kicker*/,
                         char const* /*reason*/) override
@@ -606,20 +681,6 @@ public:
         for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
             if (Player* member = itr->GetSource())
                 FlagBotForUpkeep(member->GetGUID());
-    }
-
-private:
-    static void FlagBotForUpkeep(ObjectGuid guid)
-    {
-        if (!sPlayerbotAIConfig.upkeepOnGroupLeave)
-            return;
-        Player* player = ObjectAccessor::FindPlayer(guid);
-        if (!player)
-            return;
-        PlayerbotAI* botAI = GET_PLAYERBOT_AI(player);
-        if (!botAI || !sRandomPlayerbotMgr.IsRandomBot(player))
-            return;
-        botAI->rpgInfo.pendingUpkeepMs = getMSTime();   // consumed on the bot's own tick
     }
 };
 
