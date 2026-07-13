@@ -74,6 +74,7 @@ namespace
             " JOIN item_template it ON it.entry = pool.item"
             " WHERE it.class IN (2, 4)"
             "   AND it.Quality >= " + std::to_string(uint32(minQuality)) +
+            "   AND it.Quality < 5"
             "   AND it.ItemLevel <= " + std::to_string(uint32(ilvlCap)) + ";";
     }
 
@@ -165,6 +166,7 @@ namespace
             " JOIN item_template it ON it.entry = pool.item"
             " WHERE it.class IN (2, 4)"
             "   AND it.Quality >= " + std::to_string(uint32(minQuality)) +
+            "   AND it.Quality < 5"
             "   AND it.ItemLevel <= " + std::to_string(uint32(ilvlCap)) + ";";
     }
 
@@ -1195,7 +1197,8 @@ std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
     {
         ItemTemplate const* p = sObjectMgr->GetItemTemplate(itemId);
         return p && (p->Class == ITEM_CLASS_WEAPON || p->Class == ITEM_CLASS_ARMOR)
-            && p->Quality >= inst.minQuality && p->ItemLevel <= inst.ilvlCap;
+            && p->Quality >= inst.minQuality && p->Quality < ITEM_QUALITY_LEGENDARY
+            && p->ItemLevel <= inst.ilvlCap;
     };
     auto expandCurrency = [&](uint32 rawEntry)
     {
