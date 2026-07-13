@@ -381,6 +381,9 @@ public:
     uint32 guildLifecycleFoundQuorum;
     uint32 guildLifecycleDisbandFloor;
     uint32 guildLifecycleMaxActionsPerCycle;
+    // Bot-guild density: one bot guild per this many bots of the faction's population target.
+    // 0 disables the density pass (founding gate, cap/starvation disbands).
+    uint32 guildLifecycleBotsPerGuild;
     float themedGuildTemperature;
     bool deleteRandomBotGuilds;
     std::vector<uint32> pvpProhibitedZoneIds;

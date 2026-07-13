@@ -603,6 +603,12 @@ bool RaidSimulationMgr::IsRaiding(ObjectGuid guid)
     return _raiding.find(guid) != _raiding.end();
 }
 
+bool RaidSimulationMgr::HasActiveRun(uint32 guildId) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _runs.find(guildId) != _runs.end();
+}
+
 void RaidSimulationMgr::ClearRaidingFlags(std::vector<ObjectGuid> const& members)
 {
     std::lock_guard<std::mutex> lock(_mutex);

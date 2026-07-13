@@ -617,6 +617,7 @@ bool PlayerbotAIConfig::Initialize()
     guildLifecycleFoundQuorum = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildLifecycle.FoundQuorum", 10);
     guildLifecycleDisbandFloor = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildLifecycle.DisbandFloor", 5);
     guildLifecycleMaxActionsPerCycle = sConfigMgr->GetOption<int32>("AiPlayerbot.GuildLifecycle.MaxActionsPerCycle", 10);
+    guildLifecycleBotsPerGuild = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildLifecycle.BotsPerGuild", 50);
 
     botSendMailEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.BotSendMailEnabled", true);
 

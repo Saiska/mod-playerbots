@@ -55,6 +55,7 @@ public:
     void LoadFromDB();                  // world startup: base_ilvl, banded ladder, per-instance pools
     void Update(uint32 diff);           // ticked from PlayerbotsWorldScript::OnUpdate (world thread)
     bool IsRaiding(ObjectGuid guid);    // RandomPlayerbotMgr guard set
+    bool HasActiveRun(uint32 guildId) const;  // guild-density: disband-eligibility guard
     void ConsiderPlayerIlvl(Player* player);  // monotonic base_ilvl from real players
 
     bool Start(ChatHandler* handler, std::string const& guildName);  // GM cmd (world thread)
@@ -100,7 +101,7 @@ private:
     void  PersistBaseIlvl();
     void  ReconcileOrphans(uint32 diff);  // leader-independent orphan-group reaper (drip)
 
-    std::mutex _mutex;
+    mutable std::mutex _mutex;  // mutable: HasActiveRun() is a const read-only accessor
     uint16 _baseIlvl = 0;
     std::map<uint8, std::vector<RaidSimInstance>> _bands;   // band -> instances (ordered by band)
     std::vector<RaidSimInstance> _leveling;                 // sub-80 dungeons, sorted by levelHi desc

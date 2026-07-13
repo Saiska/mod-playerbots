@@ -7,6 +7,7 @@
 #include "ScriptMgr.h"
 #include "World.h"
 #include "RandomPlayerbotMgr.h"
+#include "Timer.h"
 #include <algorithm>
 #include <cmath>
 
@@ -60,7 +61,15 @@ bool PlayerbotGuildMgr::CreateGuild(Player* player, std::string guildName)
     entry.maxMembers  = th.valid ? th.targetSize : sPlayerbotAIConfig.randomBotGuildSizeMax;
     entry.faction     = player->GetTeamId();
     _guildCache[guild->GetId()] = entry;
+    _foundedAt[guild->GetId()] = getMSTime();
     return true;
+}
+
+bool PlayerbotGuildMgr::IsFreshlyFounded(uint32 guildId) const
+{
+    auto it = _foundedAt.find(guildId);
+    return it != _foundedAt.end()
+        && GetMSTimeDiffToNow(it->second) < sPlayerbotAIConfig.guildLifecyclePeriod * IN_MILLISECONDS;
 }
 
 bool PlayerbotGuildMgr::SetGuildEmblem(uint32 guildId)
