@@ -122,11 +122,14 @@ void CurrencyGearIndex::Build()
         sinks.swap(keep);
     }
 
-    // Threshold T[currency] = max gear cost (incl. token path).
+    // Threshold T[currency] = CHEAPEST gear cost (incl. token path): redeem may act as soon as
+    // anything is buyable. Max was correct when each era-currency had a narrow cost band; the
+    // unified ladder (~30..1400) would leave bots dormant until they hoard the top item's price.
     for (auto const& [currency, opts] : _gear)
     {
         uint32 t = 0;
-        for (GearOption const& o : opts) t = std::max(t, o.cost);
+        for (GearOption const& o : opts)
+            t = t ? std::min(t, o.cost) : o.cost;
         _threshold[currency] = t;
     }
 

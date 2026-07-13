@@ -234,20 +234,40 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
         uint32 const probeEnterBal = bal;   // [RedeemProbe] to measure how much this pass drained
         char const* probeBranch = "none";   // [RedeemProbe] last branch that acted this pass
 
+        // Save-first pre-scan: is there an upgrade this bot wants but can't yet afford at the entering
+        // balance? Needed by the sink budget below BEFORE the buy loop runs (sinkBudget is computed once,
+        // up front). Mirrors the main loop's eligibility checks (not already bought this Execute, usable,
+        // scores as EQUIP/REPLACE) but skips the best-score comparison — any one unaffordable candidate is
+        // enough — and never purchases anything. saveTarget = cheapest cost among such candidates (0 = none).
+        uint32 saveTarget = 0;
+        for (auto const& o : sCurrencyGearIndex.GearFor(c))
+        {
+            if (boughtGearIds.count(o.gearId)) continue;         // already bought this Execute
+            if (CanAffordCost(bot, o.extendedCostId, c, bal)) continue;   // affordable now -> not a save target
+            ItemTemplate const* p = sObjectMgr->GetItemTemplate(o.gearId);
+            if (!p || bot->BotCanUseItem(p) != EQUIP_ERR_OK) continue;
+            ItemUsage u = botAI->GetAiObjectContext()->GetValue<ItemUsage>("item upgrade", std::to_string(o.gearId))->Get();
+            if (u != ITEM_USAGE_EQUIP && u != ITEM_USAGE_REPLACE) continue;
+            saveTarget = saveTarget ? std::min(saveTarget, o.cost) : o.cost;
+        }
+
         // Proportional sink/convert split. Spend up to `sinkBudget` currency on craft-mat sinks this pass,
         // then convert the remainder down. A currency with a convert target is capped at sinkPct% of its
-        // entering balance; one WITHOUT a convert target uses the whole entering balance as its budget
-        // (== sink 100%) so the un-convertible remainder never re-freezes. Gear buys are orthogonal and do
-        // NOT count against this budget.
+        // entering balance; one WITHOUT a convert target save-first hoards toward the next unaffordable
+        // upgrade (saveTarget) and sinks only once nothing is left to save for (== sink 100%, as today) —
+        // otherwise the un-convertible top currency could never accumulate past a single tier. Gear buys
+        // are orthogonal and do NOT count against this budget.
         bool const hasConvert = sCurrencyGearIndex.ConvertTargetFor(c) != 0;
-        uint32 const sinkBudget = hasConvert ? probeEnterBal * sinkPct / 100 : probeEnterBal;
+        uint32 const sinkBudget = hasConvert
+            ? probeEnterBal * sinkPct / 100
+            : (saveTarget ? 0 : probeEnterBal);
         uint32 spentOnSink = 0;
 
         if (probeWatch)
             LOG_INFO("playerbots",
-                     "[RedeemProbe] {} c={} ENTER bal={} T={} sink={} convert={} -> loop",
+                     "[RedeemProbe] {} c={} ENTER bal={} T={} sink={} convert={} saveTarget={} sinkBudget={} -> loop",
                      bot->GetName(), c, bal, T, uint32(sCurrencyGearIndex.SinkFor(c).size()),
-                     sCurrencyGearIndex.ConvertTargetFor(c));
+                     sCurrencyGearIndex.ConvertTargetFor(c), saveTarget, sinkBudget);
 
         uint32 iter = 0;
         while (buys < maxBuys)
