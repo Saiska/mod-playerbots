@@ -2173,6 +2173,26 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot, uint8 targetLevel)
         pmo->finish();
 }
 
+void RandomPlayerbotMgr::IncreaseLevelTo(Player* bot, uint8 targetLevel)
+{
+    uint32 maxLevel = sPlayerbotAIConfig.randomBotMaxLevel;
+    if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
+        maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
+
+    uint8 level = targetLevel;
+    if (level > maxLevel)
+        level = uint8(maxLevel);
+
+    uint8 oldLevel = bot->GetLevel();
+    if (level <= oldLevel)
+        return;
+
+    PlayerbotFactory factory(bot, level);
+    factory.LevelUp();   // slim: spells/skills/stats/heal/SaveToDB — one jump, no per-level loop
+    // Promotion logging is the caller's job: SyncGuildmatesToGroupHumans (Playerbots.cpp) emits
+    // the single spec-format [GuildAscensor] line with guild + human context (spec AC#2).
+}
+
 void RandomPlayerbotMgr::SetPopulationTarget(uint32 target)
 {
     uint32 lo = sPlayerbotAIConfig.minRandomBots;
