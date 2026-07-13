@@ -7,7 +7,11 @@
 #include "ScriptMgr.h"
 #include "World.h"
 #include "RandomPlayerbotMgr.h"
+#include "RaidSimulationMgr.h"
+#include "SharedDefines.h"
+#include "Timer.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 void PlayerbotGuildMgr::Init()
@@ -60,7 +64,15 @@ bool PlayerbotGuildMgr::CreateGuild(Player* player, std::string guildName)
     entry.maxMembers  = th.valid ? th.targetSize : sPlayerbotAIConfig.randomBotGuildSizeMax;
     entry.faction     = player->GetTeamId();
     _guildCache[guild->GetId()] = entry;
+    _foundedAt[guild->GetId()] = getMSTime();
     return true;
+}
+
+bool PlayerbotGuildMgr::IsFreshlyFounded(uint32 guildId) const
+{
+    auto it = _foundedAt.find(guildId);
+    return it != _foundedAt.end()
+        && GetMSTimeDiffToNow(it->second) < sPlayerbotAIConfig.guildLifecyclePeriod * IN_MILLISECONDS;
 }
 
 bool PlayerbotGuildMgr::SetGuildEmblem(uint32 guildId)
@@ -340,6 +352,8 @@ void PlayerbotGuildMgr::ValidateGuildCache()
         cache.memberCount = guild->GetMemberCount();
         ObjectGuid leaderGuid = guild->GetLeaderGUID();
         CharacterCacheEntry const* leaderEntry = sCharacterCache->GetCharacterCacheByGuid(leaderGuid);
+        if (!leaderEntry)
+            continue;  // orphaned guild (leader char deleted) — don't cache a garbage faction
         uint32 leaderAccount = leaderEntry->AccountId;
         cache.hasRealPlayer = !(sPlayerbotAIConfig.IsInRandomAccountList(leaderAccount));
         cache.faction = Player::TeamIdForRace(leaderEntry->Race);
@@ -485,6 +499,46 @@ void PlayerbotGuildMgr::ReconcileGuilds()
     uint32 const maxActions = sPlayerbotAIConfig.guildLifecycleMaxActionsPerCycle;
     auto budget = [&]() { return actions < maxActions; };
 
+    // --- Guild density (GuildLifecycle.BotsPerGuild): per-faction cap, founding gate, and
+    // smallest-first disband. BotsPerGuild==0 is fully inert -- every statement in this block
+    // and every densityOn-gated statement below is skipped, leaving existing behavior untouched. ---
+    uint32 const botsPer  = sPlayerbotAIConfig.guildLifecycleBotsPerGuild;
+    bool const densityOn  = botsPer > 0;
+    uint32 capA = 0, capH = 0;
+    std::array<uint32, 2> guildCount{0, 0};  // index by TeamId: [TEAM_ALLIANCE], [TEAM_HORDE]
+    if (densityOn)
+    {
+        // Standing target, ramp-safe (never the instantaneous online count, which collapses
+        // during the post-restart ramp and would mass-disband at every boot). No per-faction
+        // budget accessor is exposed by PopulationDynamicsMgr (GetTargets() is a combined
+        // both-factions per-level total; its per-faction Census is computed internally but not
+        // exposed) -- split the global "bot_count" target evenly; the pool is faction-fair by
+        // construction (AssignToGuild/CollectEligibleUnguilded both hard-gate on faction).
+        uint32 const target = sRandomPlayerbotMgr.GetMaxAllowedBotCount();
+        capA = std::max<uint32>(1, (target / 2) / botsPer);
+        capH = std::max<uint32>(1, (target / 2) / botsPer);
+
+        // Census: live bot-managed guilds per faction, from the cache ValidateGuildCache()
+        // just refreshed. Real-player guilds are never IsBotManagedGuild (any real member
+        // fails the scan), so they're never counted here.
+        for (auto const& [guildId, cache] : _guildCache)
+        {
+            if (cache.faction >= 2)
+                continue;
+            if (!IsBotManagedGuild(guildId))
+                continue;
+            ++guildCount[cache.faction];
+        }
+    }
+    auto capFor = [&](uint8 faction) -> uint32 { return faction == TEAM_ALLIANCE ? capA : capH; };
+
+    // Starvation flag: first bot guild found this cycle with count < target_size and an empty
+    // eligible-unguilded pool. Recorded during the per-theme backfill branch below, consumed by
+    // the density disband picker after the loop.
+    uint32 starvingGuildId = 0;
+    uint8  starvingFaction = 2;
+    bool   haveStarving    = false;
+
     for (auto const& kv : _guildThemes)
     {
         if (!budget())
@@ -505,9 +559,15 @@ void PlayerbotGuildMgr::ReconcileGuilds()
                 continue;  // self-gates raid guilds until the frontier yields enough max-level bots
 
             Player* leader = pool.front();
+            uint8 const leaderFaction = uint8(leader->GetTeamId());
+            if (densityOn && guildCount[leaderFaction] >= capFor(leaderFaction))
+                continue;  // [GuildDensity] at cap - no new guilds
+
             if (!CreateGuild(leader, name))
                 continue;
             ++actions;
+            if (densityOn)
+                ++guildCount[leaderFaction];
             Guild* born = sGuildMgr->GetGuildByName(name);
             if (!born)
                 continue;
@@ -534,9 +594,28 @@ void PlayerbotGuildMgr::ReconcileGuilds()
         {
             LOG_INFO("playerbots", "GuildLifecycle: disbanded '{}' (<{} members, no refill)",
                      name, sPlayerbotAIConfig.guildLifecycleDisbandFloor);
+            uint32 const disbandedId = guild->GetId();
             guild->Disband();
             ++actions;
+            if (densityOn)
+            {
+                auto cit = _guildCache.find(disbandedId);
+                if (cit != _guildCache.end() && cit->second.faction < 2 && guildCount[cit->second.faction] > 0)
+                    --guildCount[cit->second.faction];  // keep the census live for later themes this cycle
+            }
             continue;
+        }
+
+        // Starvation flag: first under-target guild this cycle with a dry recruiting pool.
+        if (densityOn && !haveStarving && count < th.targetSize && candidates.empty())
+        {
+            auto cit = _guildCache.find(guild->GetId());
+            if (cit != _guildCache.end() && cit->second.faction < 2)
+            {
+                starvingGuildId = guild->GetId();
+                starvingFaction = cit->second.faction;
+                haveStarving    = true;
+            }
         }
 
         // Backfill toward target_size.
@@ -572,6 +651,88 @@ void PlayerbotGuildMgr::ReconcileGuilds()
         // core (Guild::DeleteMember) promotes a successor or disbands.
         if (leaderGuid && !guild->GetMember(leaderGuid))
             guild->DeleteMember(leaderGuid, false, false, true);
+    }
+
+    // --- Density disband: at most one, realm-wide, per cycle. "cap" (over the per-faction
+    // cap) takes priority over "starve" (an under-target guild with a dry recruiting pool). ---
+    bool densityActed = false;
+    if (densityOn && budget())
+    {
+        uint8 pickedFaction = 2;
+        std::string reason;
+
+        if (guildCount[TEAM_ALLIANCE] > capA)
+        {
+            pickedFaction = TEAM_ALLIANCE;
+            reason = "cap";
+        }
+        else if (guildCount[TEAM_HORDE] > capH)
+        {
+            pickedFaction = TEAM_HORDE;
+            reason = "cap";
+        }
+        else if (haveStarving && guildCount[starvingFaction] > 1)
+        {
+            pickedFaction = starvingFaction;
+            reason = "starve";
+        }
+
+        if (pickedFaction < 2)
+        {
+            // Eligibility: bot-managed, no active RaidSim run, not freshly founded, and (for
+            // "starve") not the starving guild itself. "not the faction's last bot guild" is
+            // implied: cap-overflow means guildCount>cap>=1 (so >=2 exist), and starve is
+            // explicitly gated on guildCount>1 above.
+            Guild* victim = nullptr;
+            uint32 victimMembers = 0;
+            bool   haveVictim = false;
+            for (auto const& [guildId, cache] : _guildCache)
+            {
+                if (cache.faction != pickedFaction)
+                    continue;
+                if (reason == "starve" && guildId == starvingGuildId)
+                    continue;
+                if (!IsBotManagedGuild(guildId))
+                    continue;
+                if (RaidSimulationMgr::instance().HasActiveRun(guildId))
+                    continue;
+                if (IsFreshlyFounded(guildId))
+                    continue;
+
+                Guild* g = sGuildMgr->GetGuildById(guildId);
+                if (!g)
+                    continue;
+
+                uint32 mc = g->GetMemberCount();
+                if (!haveVictim || mc < victimMembers)
+                {
+                    victim        = g;
+                    victimMembers = mc;
+                    haveVictim    = true;
+                }
+            }
+
+            if (victim)
+            {
+                uint32 const victimId = victim->GetId();
+                LOG_INFO("playerbots",
+                    "[GuildDensity] faction={} guilds={} cap={} -> disband '{}' ({} members, reason={})",
+                    pickedFaction == TEAM_ALLIANCE ? "A" : "H",
+                    guildCount[pickedFaction], capFor(pickedFaction),
+                    victim->GetName(), victim->GetMemberCount(), reason);
+                victim->Disband();
+                CharacterDatabase.Execute("DELETE FROM custom_reagent_bank WHERE owner_guid = {}", victimId);
+                ++actions;
+                densityActed = true;
+            }
+        }
+    }
+
+    if (densityOn && !densityActed)
+    {
+        LOG_INFO("playerbots",
+            "[GuildDensity] A: guilds={}/cap={} H: guilds={}/cap={} (no action)",
+            guildCount[TEAM_ALLIANCE], capA, guildCount[TEAM_HORDE], capH);
     }
 }
 

@@ -57,6 +57,11 @@ public:
     // hasRealPlayer flag to an any-member scan.
     bool IsBotManagedGuild(uint32 guildId) const;
 
+    // True if `guildId` was founded (by CreateGuild) less than one GuildLifecycle.Period ago.
+    // In-memory only (_foundedAt is not persisted) — after a restart nothing is "fresh", which
+    // is fine: it only widens the grace window's blind spot at boot, never narrows it.
+    bool IsFreshlyFounded(uint32 guildId) const;
+
 private:
     PlayerbotGuildMgr() = default;
     ~PlayerbotGuildMgr() = default;
@@ -87,6 +92,7 @@ private:
         bool hasRealPlayer = false;
     };
     std::unordered_map<uint32 , GuildCache> _guildCache;
+    std::unordered_map<uint32, uint32> _foundedAt;  // guildId -> getMSTime() at CreateGuild; founding-grace
     std::vector<std::string> _shuffled_guild_keys;
     std::unordered_map<std::string, GuildTheme> _guildThemes;                                                  // keyed by guild name
     std::unordered_map<std::string, std::vector<std::pair<uint8, std::string>>> _guildRankNames;               // keyed by theme_slug
