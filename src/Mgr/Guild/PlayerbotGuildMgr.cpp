@@ -352,6 +352,8 @@ void PlayerbotGuildMgr::ValidateGuildCache()
         cache.memberCount = guild->GetMemberCount();
         ObjectGuid leaderGuid = guild->GetLeaderGUID();
         CharacterCacheEntry const* leaderEntry = sCharacterCache->GetCharacterCacheByGuid(leaderGuid);
+        if (!leaderEntry)
+            continue;  // orphaned guild (leader char deleted) — don't cache a garbage faction
         uint32 leaderAccount = leaderEntry->AccountId;
         cache.hasRealPlayer = !(sPlayerbotAIConfig.IsInRandomAccountList(leaderAccount));
         cache.faction = Player::TeamIdForRace(leaderEntry->Race);
