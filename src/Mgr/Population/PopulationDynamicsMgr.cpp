@@ -15,6 +15,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
+#include "PlayerbotGuildMgr.h"
 
 uint32 PopulationDynamicsMgr::BandOf(uint8 level)
 {
@@ -543,6 +544,11 @@ uint32 PopulationDynamicsMgr::PruneTop(std::array<uint32, 81> const& targets, Ce
             {
                 if (removedThisFaction >= budget || surplus == 0)
                     break;
+
+                // [GuildAscensor] real-guild bots are pool-sticky: never bench/recycle the user's guildmates.
+                if (bot->GetGuildId() && PlayerbotGuildMgr::instance().IsRealGuild(bot->GetGuildId()))
+                    continue;
+
                 sRandomPlayerbotMgr.Remove(bot);         // immediate delete + logout (recycles the slot)
                 --surplus;
                 ++removedThisFaction;
