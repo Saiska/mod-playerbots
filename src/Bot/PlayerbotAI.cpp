@@ -6337,7 +6337,8 @@ void PlayerbotAI::DepositSurplusToGuildBank()
 
         ItemTemplate const* proto = sObjectMgr->GetItemTemplate(entry);
         bool const isEnchantMat = proto && proto->Class == ITEM_CLASS_TRADE_GOODS &&
-                                  proto->SubClass == ITEM_SUBCLASS_ENCHANTING;
+                                  proto->SubClass == ITEM_SUBCLASS_ENCHANTING &&
+                                  proto->GetMaxStackSize() > 1;
 
         // gap 4: enchant mats (dust/essence/shards) classify SKILL for a low-stack enchanter, so the
         // usage filter below can skip them -> they never reach the vault (the user's bug). With the
