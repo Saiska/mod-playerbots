@@ -157,6 +157,15 @@ ItemUsage ItemUsageValue::Calculate()
         // BoE (Bind on Equip) items should NOT be disenchanted unless they are already bound
         if (proto->Bonding == BIND_WHEN_PICKED_UP || (proto->Bonding == BIND_WHEN_EQUIPPED && isSoulbound))
             return ITEM_USAGE_DISENCHANT;
+
+        // bot-disenchant-before-sell-vault (gap 1): an UNBOUND BoE green/blue for a real-guild
+        // enchanter -> disenchant instead of auctioning. Capped at Disenchant.MaxQuality (default
+        // rare) so epic+ falls through to the epic-bank path. DisenchantID>0 guards non-disenchantable
+        // armour/weapons. Real-guild only (solo bots still auction their unbound greens for economy).
+        if (sPlayerbotAIConfig.disenchantBeforeSellEnable && botAI->IsInRealGuild() &&
+            proto->DisenchantID > 0 &&
+            proto->Quality <= sPlayerbotAIConfig.disenchantMaxQuality)
+            return ITEM_USAGE_DISENCHANT;
     }
 
     Player* master = botAI->GetMaster();
