@@ -763,6 +763,12 @@ public:
 
     // When a masterless bot would destroy a DE-eligible item, disenchant it first instead.
     bool disenchantBeforeDestroy{true};
+    // bot-disenchant-before-sell-vault: gate the DE-on-sell pass + unbound green/blue DE tag + mats-vault.
+    bool disenchantBeforeSellEnable{true};
+    // DE ceiling (quality) for both the gap-1 tag and the DE action. 3 = rare; 2 = green-only.
+    uint32 disenchantMaxQuality{3};
+    // Enchant-mat stacks kept per entry before vaulting the rest. 0 = deposit all.
+    uint32 disenchantMatsKeepStacks{0};
 
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)

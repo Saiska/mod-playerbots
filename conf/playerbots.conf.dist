@@ -643,6 +643,17 @@ AiPlayerbot.BotProvisionConsumables = 1
 # disenchant it into shards instead (reuses the enchanting bot's own green-only real-player/guild
 # guard). 1 = enabled (default); 0 = old destroy-only behaviour.
 AiPlayerbot.DisenchantBeforeDestroy = 1
+# bot-disenchant-before-sell-vault: real-guild enchanter bots disenchant disposable green/blue gear
+# (including unbound BoE) into shards BEFORE vendoring/destroying, and deposit the resulting mats into
+# the guild reagent vault. 1 = enabled (default); 0 = old sell/destroy behaviour (no DE-on-sell, no
+# unbound-green/blue DE tag, no mats-vault).
+AiPlayerbot.DisenchantBeforeSell.Enable = 1
+# Highest item quality a bot will disenchant (2 = uncommon/green only, 3 = up to rare/blue). Applies to
+# both the classification tag and the disenchant action. Epic+ is never disenchanted. Default 3.
+AiPlayerbot.Disenchant.MaxQuality = 3
+# How many stacks of an enchanting material an enchanter keeps before depositing the rest to the reagent
+# vault. 0 = deposit all mats. Default 0.
+AiPlayerbot.DisenchantMatsKeepStacks = 0
 
 AiPlayerbot.AltMaintenanceBags = 1
 AiPlayerbot.AltMaintenanceMounts = 1
