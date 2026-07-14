@@ -6339,23 +6339,22 @@ void PlayerbotAI::DepositSurplusToGuildBank()
         bool const isEnchantMat = proto && proto->Class == ITEM_CLASS_TRADE_GOODS &&
                                   proto->SubClass == ITEM_SUBCLASS_ENCHANTING;
 
-        // gap 4: enchant mats (dust/essence/shards) classify SKILL for an enchanter, so the usage
-        // filter below skips them -> they never reach the vault (the user's bug). Route them to the
-        // reagent vault via TryDepositLootToGuildBank's vault-first path, keeping DisenchantMatsKeepStacks.
-        // Requires the reagent vault enabled: with it off, TryDepositLootToGuildBank would fall through to
-        // the 588-slot guild-BANK top-up path (needs the entry already stocked), not the vault the user
-        // wants -> so skip mats entirely when the vault is off (leave to normal hoarding).
-        uint32 const keep = isEnchantMat ? sPlayerbotAIConfig.disenchantMatsKeepStacks : keepStacks;
+        // gap 4: enchant mats (dust/essence/shards) classify SKILL for a low-stack enchanter, so the
+        // usage filter below can skip them -> they never reach the vault (the user's bug). With the
+        // feature + vault BOTH on, divert mats to the reagent vault unconditionally (bypass the usage
+        // filter), keeping DisenchantMatsKeepStacks. With either off, mats fall through to the ORIGINAL
+        // usage filter below (byte-identical prior behaviour: AH/VENDOR-usage mat surplus still deposits
+        // and vault-routes as it always did; SKILL-usage mats are skipped as before).
+        bool const matsVaultActive = isEnchantMat &&
+            sPlayerbotAIConfig.disenchantBeforeSellEnable &&
+            sPlayerbotAIConfig.guildReagentVaultEnable;
+
+        uint32 const keep = matsVaultActive ? sPlayerbotAIConfig.disenchantMatsKeepStacks : keepStacks;
 
         if (guids.size() <= keep)
             continue;   // nothing beyond the keep amount
 
-        if (isEnchantMat)
-        {
-            if (!sPlayerbotAIConfig.disenchantBeforeSellEnable || !sPlayerbotAIConfig.guildReagentVaultEnable)
-                continue;   // mats-vault gated off -> leave to normal disposal (no item-bank dump)
-        }
-        else
+        if (!matsVaultActive)
         {
             ItemUsage const usage = GetAiObjectContext()->GetValue<ItemUsage>("item usage", entry)->Get();
             if (usage != ITEM_USAGE_AH && usage != ITEM_USAGE_VENDOR)
