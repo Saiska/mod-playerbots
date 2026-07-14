@@ -71,6 +71,13 @@ bool SellAction::Execute(Event event)
     {
         botAI->DepositSurplusToGuildBank();   // bank stocked surplus (incl. SKILL cloth) before vendoring the rest
         botAI->DepositEpicsToGuildBank();   // tradeable epics -> any tab (bypass top-up), keep-guarded (runs on bot's own tick)
+        // bot-disenchant-before-sell-vault (gap 3): proactively disenchant DE-tagged green/blue for a
+        // real-guild enchanter BEFORE vendoring, so they become shards (-> reagent vault) not gold. One
+        // async cast per pass (the DE action returns after its first cast); the rest drains on later
+        // vendor runs + the SmartDestroy >=90%-bags backstop. Mirrors SmartDestroy's call shape.
+        if (sPlayerbotAIConfig.disenchantBeforeSellEnable && botAI->IsInRealGuild() &&
+            botAI->HasSkill(SKILL_ENCHANTING) && !bot->IsInCombat())
+            botAI->DoSpecificAction("disenchant random item");
         SellVendorItemsVisitor visitor(this, context);
         IterateItems(&visitor);
         return true;
