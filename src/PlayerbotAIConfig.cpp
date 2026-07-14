@@ -686,6 +686,12 @@ bool PlayerbotAIConfig::Initialize()
     altMaintenancePotions = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePotions", true);
     botProvisionConsumables = sConfigMgr->GetOption<bool>("AiPlayerbot.BotProvisionConsumables", true);
     disenchantBeforeDestroy = sConfigMgr->GetOption<bool>("AiPlayerbot.DisenchantBeforeDestroy", true);
+    disenchantBeforeSellEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.DisenchantBeforeSell.Enable", true);
+    disenchantMaxQuality = sConfigMgr->GetOption<uint32>("AiPlayerbot.Disenchant.MaxQuality", 3);
+    // Never disenchant epic+ regardless of config (charter: epic/legendary bank whole).
+    if (disenchantMaxQuality > ITEM_QUALITY_RARE)
+        disenchantMaxQuality = ITEM_QUALITY_RARE;
+    disenchantMatsKeepStacks = sConfigMgr->GetOption<uint32>("AiPlayerbot.DisenchantMatsKeepStacks", 0);
     altMaintenanceTalentTree = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceTalentTree", true);
     altMaintenancePet = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePet", true);
     altMaintenancePetTalents = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenancePetTalents", true);

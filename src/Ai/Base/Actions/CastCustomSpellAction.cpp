@@ -345,10 +345,13 @@ bool DisEnchantRandomItemAction::Execute(Event /*event*/)
 
     for (auto& item : items)
     {
-        // don't touch rare+ items if with real player/guild
+        // Skip (don't bail) items above the DE ceiling for real-player/guild bots. `continue`, not
+        // `return false`: with the unbound green/blue tag + the unchanged bound-epic DISENCHANT tag,
+        // a single bound epic ahead in the reversed list would otherwise starve every green/blue
+        // behind it. Ceiling is Disenchant.MaxQuality (default rare); set 2 for prior green-only.
         if ((botAI->HasRealPlayerMaster() || botAI->IsInRealGuild()) &&
-            item->GetTemplate()->Quality > ITEM_QUALITY_UNCOMMON)
-            return false;
+            item->GetTemplate()->Quality > sPlayerbotAIConfig.disenchantMaxQuality)
+            continue;
 
         if (CastCustomSpellAction::Execute(
                 Event("disenchant random item", "13262 " + chat->FormatQItem(item->GetEntry()))))

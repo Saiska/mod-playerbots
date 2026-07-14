@@ -6335,15 +6335,35 @@ void PlayerbotAI::DepositSurplusToGuildBank()
         uint32 const entry = pair.first;
         std::vector<ObjectGuid> const& guids = pair.second;
 
-        if (guids.size() <= keepStacks)
+        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(entry);
+        bool const isEnchantMat = proto && proto->Class == ITEM_CLASS_TRADE_GOODS &&
+                                  proto->SubClass == ITEM_SUBCLASS_ENCHANTING &&
+                                  proto->GetMaxStackSize() > 1;
+
+        // gap 4: enchant mats (dust/essence/shards) classify SKILL for a low-stack enchanter, so the
+        // usage filter below can skip them -> they never reach the vault (the user's bug). With the
+        // feature + vault BOTH on, divert mats to the reagent vault unconditionally (bypass the usage
+        // filter), keeping DisenchantMatsKeepStacks. With either off, mats fall through to the ORIGINAL
+        // usage filter below (byte-identical prior behaviour: AH/VENDOR-usage mat surplus still deposits
+        // and vault-routes as it always did; SKILL-usage mats are skipped as before).
+        bool const matsVaultActive = isEnchantMat &&
+            sPlayerbotAIConfig.disenchantBeforeSellEnable &&
+            sPlayerbotAIConfig.guildReagentVaultEnable;
+
+        uint32 const keep = matsVaultActive ? sPlayerbotAIConfig.disenchantMatsKeepStacks : keepStacks;
+
+        if (guids.size() <= keep)
             continue;   // nothing beyond the keep amount
 
-        ItemUsage const usage = GetAiObjectContext()->GetValue<ItemUsage>("item usage", entry)->Get();
-        if (usage != ITEM_USAGE_AH && usage != ITEM_USAGE_VENDOR)
-            continue;   // needed / hoarded -> keep all
+        if (!matsVaultActive)
+        {
+            ItemUsage const usage = GetAiObjectContext()->GetValue<ItemUsage>("item usage", entry)->Get();
+            if (usage != ITEM_USAGE_AH && usage != ITEM_USAGE_VENDOR)
+                continue;   // needed / hoarded -> keep all
+        }
 
-        // Keep the first keepStacks stacks; offer the rest to the bank (top-up gate filters unstocked).
-        for (uint32 i = keepStacks; i < guids.size(); ++i)
+        // Keep the first `keep` stacks; offer the rest to the bank/vault (gates filter as before).
+        for (uint32 i = keep; i < guids.size(); ++i)
         {
             if (Item* item = bot->GetItemByGuid(guids[i]))
                 TryDepositLootToGuildBank(item);
