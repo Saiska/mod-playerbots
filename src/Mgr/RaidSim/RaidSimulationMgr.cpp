@@ -1211,8 +1211,16 @@ std::vector<uint32> RaidSimulationMgr::BuildPool(RaidSimInstance const& inst)
         auto it = _currencyExpansion.find(rawEntry);
         if (it == _currencyExpansion.end())
             return;
+        // Unified currency maps to the WHOLE vendor catalog; without a floor every instance's
+        // emblem drop would flood its pool with low-rung gear and starve award throughput.
+        // Native base/boss/chest loot keeps its floor-less behavior.
+        uint32 const off = sPlayerbotAIConfig.raidSimCurrencyExpandFloorOffset;
+        uint32 const floorIlvl = inst.ilvlCap > off ? inst.ilvlCap - off : 0;
         for (uint32 v : it->second)
-            if (passesGate(v)) { pool.push_back(v); ++currencyCount; }
+        {
+            ItemTemplate const* p = sObjectMgr->GetItemTemplate(v);
+            if (p && p->ItemLevel >= floorIlvl && passesGate(v)) { pool.push_back(v); ++currencyCount; }
+        }
     };
 
     // 1. Creature base — existing proven query (already class 2/4 + quality + ilvl filtered).

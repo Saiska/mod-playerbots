@@ -482,6 +482,7 @@ bool PlayerbotAIConfig::Initialize()
     raidSimReaperInterval   = sConfigMgr->GetOption<int32>("RaidSim.ReaperInterval", 120);
     raidSimReaperBatch      = sConfigMgr->GetOption<int32>("RaidSim.ReaperBatch", 3);
     raidSimReaperRescueSolo = sConfigMgr->GetOption<bool>("RaidSim.ReaperRescueSolo", true);
+    raidSimCurrencyExpandFloorOffset = sConfigMgr->GetOption<uint32>("RaidSim.CurrencyExpandFloorOffset", 26);
 
     //////////////////////////// Population Dynamics
     populationDynamicsEnable       = sConfigMgr->GetOption<bool>("PopulationDynamics.Enable", true);
