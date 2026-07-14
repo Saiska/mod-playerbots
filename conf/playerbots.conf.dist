@@ -626,6 +626,25 @@ AiPlayerbot.GuildBankDeposit.KeepStacks = 1
 #        (custom_reagent_bank) instead of the 588-slot guild bank. 1 = on (default), 0 = off.
 AiPlayerbot.GuildReagentVault.Enable = 1
 
+#    AiPlayerbot.GuildBankGoldDeposit.Enable
+#        Bots in a guild with a real player deposit their SURPLUS gold into the guild bank money on
+#        vendor/maintenance passes, keeping a repair reserve sized to their equipped gear.
+#        Default: 1 (enabled). 0 = no gold deposits (byte-identical prior behaviour).
+#    AiPlayerbot.GuildBankGoldDeposit.RepairReserveMultiplier
+#        Reserve = max(ReserveFloor, this x estimated full-repair cost of all equipped gear). The
+#        multiple of a full repair a bot keeps in pocket before depositing the rest. Default: 10.
+#    AiPlayerbot.GuildBankGoldDeposit.ReserveFloor
+#        Minimum gold reserve in COPPER, regardless of gear (also the deposit early-out threshold).
+#        Default: 500000 (50 gold).
+#    AiPlayerbot.GuildBankGoldDeposit.MinDeposit
+#        Do not deposit unless the surplus is at least this many COPPER (avoids deposit spam).
+#        Default: 100000 (10 gold).
+#
+AiPlayerbot.GuildBankGoldDeposit.Enable = 1
+AiPlayerbot.GuildBankGoldDeposit.RepairReserveMultiplier = 10
+AiPlayerbot.GuildBankGoldDeposit.ReserveFloor = 500000
+AiPlayerbot.GuildBankGoldDeposit.MinDeposit = 100000
+
 # Enable/Disable specific maintenance command functionality for altbots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their altbots
 # Default: 1 (enabled)

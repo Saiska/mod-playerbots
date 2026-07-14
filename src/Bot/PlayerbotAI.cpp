@@ -25,6 +25,7 @@
 #include "GameObjectData.h"
 #include "GameTime.h"
 #include "Bag.h"
+#include "DBCStores.h"
 #include "GuildMgr.h"
 #include "ItemUsageValue.h"
 #include "LFGMgr.h"
@@ -6434,6 +6435,92 @@ void PlayerbotAI::DepositEpicsToGuildBank()
         if (FindAnyDepositTab(bot, guild, item->GetBagSlot(), item->GetSlot()))
             LOG_INFO("playerbots", "Bots epic-deposit: {} -> {} (guild {})", bot->GetName(), p->Name1, bot->GetGuildId());
     }
+}
+
+// Estimate-only mirror of Player::DurabilityRepair math: full (broken->full) repair cost of all
+// EQUIPPED gear. Never charges. Stable per-bot figure (uses maxDurability, discountMod = 1.0).
+uint64 PlayerbotAI::EstimateFullRepairCost()
+{
+    uint64 total = 0;
+    float const rate = sWorld->getRate(RATE_REPAIRCOST);
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+    {
+        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!item)
+            continue;
+        uint32 const maxDurability = item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY);
+        if (!maxDurability)
+            continue;   // rings/trinkets/neck/tabard/shirt have no durability
+        ItemTemplate const* proto = item->GetTemplate();
+        if (!proto)
+            continue;
+        DurabilityCostsEntry const* dcost = sDurabilityCostsStore.LookupEntry(proto->ItemLevel);
+        if (!dcost)
+            continue;
+        uint32 const qualityEntryId = (proto->Quality + 1) * 2;
+        DurabilityQualityEntry const* dQual = sDurabilityQualityStore.LookupEntry(qualityEntryId);
+        if (!dQual)
+            continue;
+        uint32 const dmultiplier =
+            dcost->multiplier[ItemSubClassToDurabilityMultiplierId(proto->Class, proto->SubClass)];
+        uint32 costs = uint32(maxDurability * dmultiplier * double(dQual->quality_mod));
+        costs = uint32(costs * rate);   // discountMod = 1.0 (no talent/rep discount modeled)
+        if (costs == 0)
+            costs = 1;
+        total += costs;
+    }
+    return total;
+}
+
+// A real-guild bot deposits surplus gold into the guild bank money, keeping a repair reserve sized to
+// its gear. Runs on the bot's own AI tick (world thread) from the vendor/maintenance seam.
+void PlayerbotAI::DepositSurplusGoldToGuildBank()
+{
+    if (!sPlayerbotAIConfig.guildBankGoldDepositEnable)
+        return;
+    if (!IsInRealGuild())
+        return;
+    // Same stability guards as DepositEpicsToGuildBank: HandleMemberDepositMoney derefs
+    // GetSession()->GetPlayer(), and the estimator reads equipped slots — neither is safe on a
+    // torn-down inventory during the login ramp / teleport / logout.
+    if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() || bot->IsDuringRemoveFromWorld())
+        return;
+    if (sRandomPlayerbotMgr.IsBotInitializing())
+        return;
+
+    uint64 const money = bot->GetMoney();
+    if (money < sPlayerbotAIConfig.guildBankGoldReserveFloor)   // below the floor -> no surplus possible
+        return;
+
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
+    if (!guild)
+        return;
+
+    uint64 const estRepair = EstimateFullRepairCost();
+    uint64 const reserve = std::max<uint64>(
+        sPlayerbotAIConfig.guildBankGoldReserveFloor,
+        uint64(sPlayerbotAIConfig.guildBankGoldRepairReserveMultiplier) * estRepair);
+    if (money <= reserve)   // keep >= reserve; no underflow
+        return;
+
+    uint64 surplus = money - reserve;
+    if (surplus < sPlayerbotAIConfig.guildBankGoldMinDeposit)
+        return;
+
+    // Guild-bank money cap: clamp to headroom (deposit remainder up to cap; skip if bank at cap).
+    uint64 const bankMoney = guild->GetTotalBankMoney();
+    if (bankMoney >= GUILD_BANK_MONEY_LIMIT)
+        return;
+    uint64 const headroom = GUILD_BANK_MONEY_LIMIT - bankMoney;
+    if (surplus > headroom)
+        surplus = headroom;
+    if (surplus < sPlayerbotAIConfig.guildBankGoldMinDeposit)
+        return;
+
+    uint32 const amount = uint32(surplus);   // surplus <= money <= MAX_MONEY_AMOUNT < UINT32_MAX
+    guild->HandleMemberDepositMoney(bot->GetSession(), amount);
+    LOG_INFO("playerbots", "Bots guild gold deposit: {} -> {} copper (guild {})",
+             bot->GetName(), amount, bot->GetGuildId());
 }
 
 void PlayerbotAI::QueueChatResponse(const ChatQueuedReply chatReply) { chatReplies.push_back(std::move(chatReply)); }

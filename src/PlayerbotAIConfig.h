@@ -662,6 +662,10 @@ public:
     bool guildBankDepositProactiveEnable;
     uint32 guildBankDepositKeepStacks;
     bool guildReagentVaultEnable;
+    bool guildBankGoldDepositEnable;
+    uint32 guildBankGoldRepairReserveMultiplier;
+    uint32 guildBankGoldReserveFloor;
+    uint32 guildBankGoldMinDeposit;
     int32 groupInvitationPermission;
     bool keepAltsInGroup = false;
     bool KeepAltsInGroup() const { return keepAltsInGroup; }

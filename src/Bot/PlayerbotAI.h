@@ -592,6 +592,8 @@ public:
     bool TryDepositLootToGuildBank(Item* item);
     void DepositSurplusToGuildBank();
     void DepositEpicsToGuildBank();
+    void DepositSurplusGoldToGuildBank();
+    uint64 EstimateFullRepairCost();
     static std::vector<std::string> dispel_whitelist;
     bool EqualLowercaseName(std::string s1, std::string s2);
     InventoryResult CanEquipItem(uint8 slot, uint16& dest, Item* pItem, bool swap, bool not_loading = true) const;
