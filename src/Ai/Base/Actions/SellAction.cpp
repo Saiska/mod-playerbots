@@ -80,6 +80,9 @@ bool SellAction::Execute(Event event)
             botAI->DoSpecificAction("disenchant random item");
         SellVendorItemsVisitor visitor(this, context);
         IterateItems(&visitor);
+        // bot-guild-gold-deposit: after selling vendor trash, a real-guild bot pools surplus gold into
+        // the guild bank money, keeping a gear-sized repair reserve. Self-gates on Enable + IsInRealGuild.
+        botAI->DepositSurplusGoldToGuildBank();
         return true;
     }
 

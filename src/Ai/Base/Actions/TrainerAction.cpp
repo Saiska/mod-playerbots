@@ -287,6 +287,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
         factory.WithdrawUpgradesFromGuildBank();
 
     botAI->DepositSurplusToGuildBank();
+    botAI->DepositSurplusGoldToGuildBank();   // bot-guild-gold-deposit: pool surplus gold (self-gated)
 
     return true;
 }
