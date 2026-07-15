@@ -28,6 +28,7 @@
 #include "GameTime.h"
 #include "Bag.h"
 #include "DBCStores.h"
+#include "Guild.h"
 #include "GuildMgr.h"
 #include "ItemUsageValue.h"
 #include "LFGMgr.h"
@@ -121,6 +122,119 @@ void PacketHandlingHelper::AddPacket(WorldPacket const& packet)
     {
         std::lock_guard<std::mutex> guard(queueMutex);
         queue.push(WorldPacket(packet));
+    }
+}
+
+namespace
+{
+    struct GuildActivityText
+    {
+        std::string publicNote;    // roster public note — readable, short (~<=31 chars display)
+        std::string officerNote;   // roster officer note (GM-only) — raw debug: behavior[/DETAIL] · zone
+        std::string chatLine;      // templated debug guild-chat line
+    };
+
+    struct KeyPhrase { const char* key; const char* phrase; };
+
+    // Rest subtype key (lowercased kRestTable name) -> public phrase.
+    const KeyPhrase kRestPhrase[] = {
+        { "tavern",           "Resting at the tavern" },
+        { "class_trainer",    "Training (class)" },
+        { "profession_craft", "Crafting at the forge" },
+        { "vendor",           "Selling & repairing" },
+        { "quest_giver",      "Visiting a quest giver" },
+        { "bank",             "At the bank" },
+        { "ah",               "At the auction house" },
+        { "mail",             "Checking mail" },
+        { "flight",           "At the flight master" },
+        { "social",           "Socialising" },
+        { "stroll",           "Strolling" },
+        { "spectate",         "Watching a duel" },
+        { "dummy",            "Training on a dummy" },
+        { "duel",             "Duelling" },
+        { "fish",             "Fishing" },
+        { "field_rest",       "Resting" },
+    };
+
+    // Top-level behavior key (BehaviorKey()) -> public phrase. Covers the standalone pastime keys too
+    // (fish/craft/social/…) in case a build still reports them via the RPG_PASTIME path.
+    const KeyPhrase kBehPhrase[] = {
+        { "do_quest",       "Questing" },
+        { "go_grind",       "Grinding" },
+        { "wander_random",  "Wandering" },
+        { "wander_npc",     "Wandering town" },
+        { "travel_flight",  "In flight" },
+        { "travel_mount",   "Travelling" },
+        { "outdoor_pvp",    "World PvP" },
+        { "rest",           "Resting" },
+        { "fish",           "Fishing" },
+        { "craft",          "Crafting at the forge" },
+        { "social",         "Socialising" },
+        { "loiter",         "Loitering" },
+        { "repair_sell",    "Selling & repairing" },
+        { "duel",           "Duelling" },
+        { "dummy",          "Training on a dummy" },
+    };
+
+    const char* LookupPhrase(const KeyPhrase* table, size_t n, std::string_view key)
+    {
+        for (size_t i = 0; i < n; ++i)
+            if (key == table[i].key)
+                return table[i].phrase;
+        return nullptr;
+    }
+
+    std::string Upper(std::string_view s)
+    {
+        std::string out(s);
+        std::transform(out.begin(), out.end(), out.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        return out;
+    }
+
+    GuildActivityText DescribeActivity(std::string_view behaviorKey,
+                                       std::string_view subKey,
+                                       std::string_view zoneName)
+    {
+        GuildActivityText t;
+
+        // --- public phrase ---
+        if (behaviorKey == "gathering_circuit")
+        {
+            if (subKey == "mining")     t.publicNote = "Gathering (mining)";
+            else if (subKey == "herb")  t.publicNote = "Gathering (herbs)";
+            else                        t.publicNote = "Gathering";
+        }
+        else if (behaviorKey == "rest" && !subKey.empty())
+        {
+            if (const char* p = LookupPhrase(kRestPhrase, std::size(kRestPhrase), subKey))
+                t.publicNote = p;
+            else
+                t.publicNote = "Resting";
+        }
+        else if (const char* p = LookupPhrase(kBehPhrase, std::size(kBehPhrase), behaviorKey))
+        {
+            t.publicNote = p;
+        }
+        else
+        {
+            t.publicNote = "Idle";
+        }
+
+        // --- officer (debug) note: behavior[/DETAIL] · zone ---
+        std::string detail;
+        if (!subKey.empty())
+            detail = (behaviorKey == "rest") ? "RS_" + Upper(subKey) : Upper(subKey);
+        t.officerNote = std::string(behaviorKey);
+        if (!detail.empty())
+            t.officerNote += "/" + detail;
+        if (!zoneName.empty())
+            t.officerNote += " · " + std::string(zoneName);
+
+        // --- templated debug guild-chat line (ASCII separator only — avoid glyphs the 3.3.5 client
+        //     font may not have; the middle-dot in officerNote is Latin-1 and renders fine) ---
+        t.chatLine = t.publicNote + " | " + t.officerNote;
+        return t;
     }
 }
 
@@ -7351,6 +7465,61 @@ std::string PlayerbotAI::GetCurrentSubStateKey()
         }
         default:
             return "";
+    }
+}
+
+void PlayerbotAI::UpdateGuildActivityStatus()
+{
+    bool const noteOn = sPlayerbotAIConfig.guildActivityNoteEnable;
+    bool const chatOn = sPlayerbotAIConfig.guildActivityChatEnable;
+    if (!noteOn && !chatOn)
+        return;
+
+    // Scope: real-player guilds only (cached). Also short-circuits non-guilded bots.
+    if (!IsInRealGuild())
+        return;
+
+    // Stability guards (mirror DepositSurplusGoldToGuildBank): don't touch a torn-down bot / stale grid.
+    if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported()
+        || bot->IsDuringRemoveFromWorld() || sRandomPlayerbotMgr.IsBotInitializing())
+        return;
+
+    // Cheap composite change-detect BEFORE any string work.
+    BotBehaviorId const beh = GetCurrentBehaviorId();
+    std::string     const sub = GetCurrentSubStateKey();
+    uint32          const zone = bot->GetZoneId();
+    if (beh == m_lastReportBeh && sub == m_lastReportSub && zone == m_lastReportZone)
+        return;
+    m_lastReportBeh = beh;
+    m_lastReportSub = sub;
+    m_lastReportZone = zone;
+
+    AreaTableEntry const* area = sAreaTableStore.LookupEntry(zone);
+    std::string const zoneName = area ? area->area_name[sWorld->GetDefaultDbcLocale()] : "";
+    GuildActivityText const t = DescribeActivity(BehaviorKey(beh), sub, zoneName);
+
+    Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
+    if (!guild)
+        return;
+
+    if (noteOn)
+    {
+        if (Guild::Member* m = guild->GetMember(bot->GetGUID()))
+        {
+            m->SetPublicNote(t.publicNote);     // no-ops if unchanged
+            m->SetOfficerNote(t.officerNote);   // no-ops if unchanged
+        }
+    }
+
+    if (chatOn)
+    {
+        uint32 const nowMs = getMSTime();
+        uint32 const minMs = sPlayerbotAIConfig.guildActivityChatMinIntervalSec * 1000u;
+        if (minMs == 0 || m_lastGuildChatMs == 0 || getMSTimeDiff(m_lastGuildChatMs, nowMs) >= minMs)
+        {
+            guild->BroadcastToGuild(bot->GetSession(), /*officerOnly*/ false, t.chatLine, LANG_UNIVERSAL);
+            m_lastGuildChatMs = nowMs;
+        }
     }
 }
 

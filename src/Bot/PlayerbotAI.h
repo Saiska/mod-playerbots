@@ -621,6 +621,13 @@ public:
     // Fine-grained sub-state key for the current occupation (lowercase, stable). "" when none/unresolved.
     // REST -> the resolved rest subtype (tavern/fish/craft/…); GATHERING_CIRCUIT -> mining/herb; else "".
     std::string GetCurrentSubStateKey();
+    // Guild-note + optional debug guild-chat reporter. Self-gates (config + real-player guild + stability).
+    // Called once per NewRpg tick from the lifecycle block; writes only on composite-state change.
+    void UpdateGuildActivityStatus();
+    BotBehaviorId m_lastReportBeh{BEH_NONE};   // last reported composite: behavior
+    std::string   m_lastReportSub;             //                          sub-state key
+    uint32        m_lastReportZone{0};         //                          zone id
+    uint32        m_lastGuildChatMs{0};        // last debug guild-chat emit (throttle)
     NewRpgInfo rpgInfo;
     NewRpgStatistic rpgStatistic;
     std::unordered_map<uint32, uint32> lowPriorityQuest;   // questId -> getMSTime() when blacklisted
