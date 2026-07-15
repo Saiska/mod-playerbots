@@ -530,6 +530,13 @@ void PlayerbotAI::UpdateAIGroupMaster()
             }
         }
     }
+
+    // A bot under a real player's control does not run the NewRpg occupation machine, so it can never
+    // legitimately hold a looping rest/social pose (UNIT_NPC_EMOTESTATE). One leaks in when the player
+    // groups a bot mid-dwell: grouping halts NewRpg before it scrubs the pose, so the bot emotes
+    // non-stop while following. Clear any stale held pose each tick. See EmoteStrategy / AllowsSocialEmote.
+    if (HasActivePlayerMaster() && bot->GetUInt32Value(UNIT_NPC_EMOTESTATE))
+        bot->ClearEmoteState();
 }
 
 void PlayerbotAI::UpdateAIInternal([[maybe_unused]] uint32 elapsed, bool minimal)
