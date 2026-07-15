@@ -666,6 +666,9 @@ public:
     uint32 guildBankGoldRepairReserveMultiplier;
     uint32 guildBankGoldReserveFloor;
     uint32 guildBankGoldMinDeposit;
+    bool guildActivityNoteEnable;
+    bool guildActivityChatEnable;
+    uint32 guildActivityChatMinIntervalSec;
     int32 groupInvitationPermission;
     bool keepAltsInGroup = false;
     bool KeepAltsInGroup() const { return keepAltsInGroup; }

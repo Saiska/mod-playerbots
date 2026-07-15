@@ -665,6 +665,13 @@ bool PlayerbotAIConfig::Initialize()
     guildBankGoldRepairReserveMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBankGoldDeposit.RepairReserveMultiplier", 10);
     guildBankGoldReserveFloor = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBankGoldDeposit.ReserveFloor", 500000);
     guildBankGoldMinDeposit = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBankGoldDeposit.MinDeposit", 100000);
+    guildActivityNoteEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildActivityStatus.Note.Enable", false);
+    guildActivityChatEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildActivityStatus.Chat.Enable", false);
+    guildActivityChatMinIntervalSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildActivityStatus.Chat.MinIntervalSec", 0);
+    LOG_INFO("playerbots", "[GuildActivityStatus] note={} chat={} throttle={}s",
+             guildActivityNoteEnable ? "on" : "off",
+             guildActivityChatEnable ? "on" : "off",
+             guildActivityChatMinIntervalSec);
     groupInvitationPermission = sConfigMgr->GetOption<int32>("AiPlayerbot.GroupInvitationPermission", 1);
     keepAltsInGroup = sConfigMgr->GetOption<bool>("AiPlayerbot.KeepAltsInGroup", false);
     allowSummonInCombat = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowSummonInCombat", true);
