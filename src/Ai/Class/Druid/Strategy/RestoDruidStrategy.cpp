@@ -93,11 +93,16 @@ void DruidTranquilityStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
 void DruidBlanketStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    // Proactive HoT maintenance must NOT force Tree of Life. Rejuvenation/Wild Growth cast fine in
+    // caster form, so demanding tree here fought the "healer dps" strategy's "cancel tree form" every
+    // time a blanket HoT expired (BuffOnPartyTrigger fires on the missing buff regardless of health),
+    // shifting a nothing-to-heal druid tree<->caster endlessly. The big heals (party critical/low/medium
+    // health) still demand tree form, so the bot shapeshifts only for real healing, not upkeep.
     triggers.push_back(new TriggerNode(
         "wild growth blanket",
-        { NextAction("tree form", 8.1f), NextAction("wild growth blanket", 8.0f) }));
+        { NextAction("wild growth blanket", 8.0f) }));
 
     triggers.push_back(new TriggerNode(
         "rejuvenation blanket",
-        { NextAction("tree form", 6.1f), NextAction("rejuvenation blanket", 6.0f) }));
+        { NextAction("rejuvenation blanket", 6.0f) }));
 }
