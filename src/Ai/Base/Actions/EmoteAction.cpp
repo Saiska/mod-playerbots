@@ -777,14 +777,37 @@ bool EmoteAction::Execute(Event event)
     return Emote(GetTarget(), emote);
 }
 
+bool EmoteActionBase::AllowsSocialEmote()
+{
+    // Grouped with a real player: the NewRpg occupation machine isn't running for this bot, so its
+    // status is stale and meaningless. A bot under a human's control must never fire ambient emotes.
+    if (botAI->HasActivePlayerMaster())
+        return false;
+
+    switch (botAI->rpgInfo.GetStatus())
+    {
+        case RPG_UPKEEP:
+        case RPG_REST:
+        case RPG_PASTIME:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool EmoteAction::isUseful()
 {
     if (!botAI->AllowActivity())
         return false;
 
+    if (!AllowsSocialEmote())
+        return false;
+
     time_t lastEmote = AI_VALUE2(time_t, "last emote", "shared");
     return time(nullptr) >= lastEmote;
 }
+
+bool TalkAction::isUseful() { return AllowsSocialEmote(); }
 
 bool TalkAction::Execute(Event /*event*/)
 {

@@ -29,6 +29,11 @@ protected:
     bool ReceiveEmote(Player* source, uint32 emote, bool verbal = false);
     Unit* GetTarget();
     void InitEmotes();
+    // Ambient talk/emote is only allowed while the bot is in a stationary/social RPG state
+    // (upkeep, rest, pastime). During active play (questing, gathering, grinding, travel, or
+    // grouped with a real player) it stays silent — this keeps the "talk" facing-spline from
+    // interrupting gather casts and stops the constant emote spam. See EmoteStrategy.
+    bool AllowsSocialEmote();
     static std::map<std::string, uint32> emotes;
     static std::map<std::string, uint32> textEmotes;
 };
@@ -48,6 +53,7 @@ public:
     TalkAction(PlayerbotAI* botAI) : EmoteActionBase(botAI, "talk") {}
 
     bool Execute(Event event) override;
+    bool isUseful() override;
     static uint32 GetRandomEmote(Unit* unit, bool textEmote = false);
 };
 
