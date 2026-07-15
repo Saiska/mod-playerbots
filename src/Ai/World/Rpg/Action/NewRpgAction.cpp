@@ -299,6 +299,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             info.lastEmittedBehaviorId = curBeh;
         }
     }
+    // bot-guild-activity-status: surface occupation (+sub-state, +zone) in the guild note / debug chat.
+    // OUTSIDE the behavior-edge guard so sub-state resolution and zone changes also update. Self-gated.
+    botAI->UpdateGuildActivityStatus();
 
     // bot-rpg-bleed-suppression: on-task guard. Suppress autonomous NewRpg when the bot is not free
     // to idle (dungeon/raid/BG, transport/vehicle, grouped-with-human, RaidSim, combat, dead, mid-port).
