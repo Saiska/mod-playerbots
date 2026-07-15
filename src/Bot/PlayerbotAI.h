@@ -618,6 +618,9 @@ public:
     BotBehaviorId GetCurrentBehaviorId();
     uint8 GetCurrentVariant();
     static const char* BehaviorKey(BotBehaviorId id);
+    // Fine-grained sub-state key for the current occupation (lowercase, stable). "" when none/unresolved.
+    // REST -> the resolved rest subtype (tavern/fish/craft/…); GATHERING_CIRCUIT -> mining/herb; else "".
+    std::string GetCurrentSubStateKey();
     NewRpgInfo rpgInfo;
     NewRpgStatistic rpgStatistic;
     std::unordered_map<uint32, uint32> lowPriorityQuest;   // questId -> getMSTime() when blacklisted

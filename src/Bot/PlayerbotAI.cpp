@@ -5,6 +5,8 @@
 
 #include "PlayerbotAI.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <mutex>
 #include <sstream>
@@ -7315,6 +7317,41 @@ uint8 PlayerbotAI::GetCurrentVariant()
 {
     // RPG_PASTIME/NewRpgInfo::Pastime removed (rest-hub-unification Task 9).
     return 0;
+}
+
+std::string PlayerbotAI::GetCurrentSubStateKey()
+{
+    switch (rpgInfo.GetStatus())
+    {
+        case RPG_REST:
+        {
+            // The REST umbrella hides tavern/fish/craft/social/vendor/… as rest.subtype; that IS the
+            // sub-state we want. RS_NONE (0xFF) = not yet resolved (in-flight to the hub) -> "".
+            if (NewRpgInfo::Rest const* r = std::get_if<NewRpgInfo::Rest>(&rpgInfo.data))
+            {
+                if (r->subtype < RS_COUNT)
+                {
+                    std::string key = kRestTable[r->subtype].name;   // "TAVERN","FISH","PROFESSION_CRAFT",…
+                    std::transform(key.begin(), key.end(), key.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    return key;
+                }
+            }
+            return "";
+        }
+        case RPG_GATHERING_CIRCUIT:
+        {
+            bool const mining = bot->HasSkill(SKILL_MINING);
+            bool const herb = bot->HasSkill(SKILL_HERBALISM);
+            if (mining && !herb)
+                return "mining";
+            if (herb && !mining)
+                return "herb";
+            return "";   // both or neither -> generic "Gathering"
+        }
+        default:
+            return "";
+    }
 }
 
 const char* PlayerbotAI::BehaviorKey(BotBehaviorId id)
