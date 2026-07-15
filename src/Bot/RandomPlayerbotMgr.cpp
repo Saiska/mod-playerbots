@@ -35,6 +35,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
+#include "PlayerbotGuildMgr.h"
 #include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
 #include "Position.h"
@@ -700,13 +701,17 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
             uint8 rRace;
             uint8 rLevel;
             uint32 accountId;
+            uint32 guildId;   // 0 if unguilded; used for the real-guild sticky-login pass
         };
         std::vector<CharacterInfo> allCharacters;
 
         for (uint32 accountId : accountsToUse)
         {
+            // LEFT JOIN guild_member so the deterministic fill can classify each (offline) bot's
+            // guild without a Player* — the real-guild sticky-login pass below needs it.
             QueryResult result = CharacterDatabase.Query(
-                "SELECT guid, race, class, level FROM characters WHERE account = {}", accountId);
+                "SELECT c.guid, c.race, c.class, c.level, IFNULL(gm.guildid, 0) FROM characters c "
+                "LEFT JOIN guild_member gm ON gm.guid = c.guid WHERE c.account = {}", accountId);
             if (!result)
                 continue;
 
@@ -719,6 +724,7 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
                 info.rClass = fields[2].Get<uint8>();
                 info.rLevel = fields[3].Get<uint8>();
                 info.accountId = accountId;
+                info.guildId = fields[4].Get<uint32>();
                 allCharacters.push_back(info);
             } while (result->NextRow());
         }
@@ -748,6 +754,25 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
 
             return true;
         };
+
+        // [GuildAscensor] Real-guild bots are pool-sticky on the LOGIN side too — mirroring
+        // PruneTop's sink-side protection (never bench a real player's guildmates). A member of a
+        // guild that contains a real player MUST always be online, regardless of the per-level
+        // population target. Without this, a guildmate that levels up (via the ascensor / natural XP
+        // grouped with the player) into a level whose per-(level,faction) target quota is already met
+        // is never brought back after a restart — orphaning it offline. This pass logs such bots in
+        // unconditionally, bypassing the per-level `want` gate below. (IsRealGuild reads a cache that
+        // is populated at world-init; on the rare tick before it is ready the pass no-ops and a later
+        // tick picks the bots up — they then stay online, sink-sticky.)
+        for (auto const& charInfo : allCharacters)
+        {
+            if (!maxAllowedBotCount)
+                break;
+            if (!charInfo.guildId || !PlayerbotGuildMgr::instance().IsRealGuild(charInfo.guildId))
+                continue;
+            if (tryLoginBot(charInfo))
+                maxAllowedBotCount--;
+        }
 
         // Per-level, both-faction targets computed by PopulationDynamicsMgr (index 0 unused,
         // target[80] = sink). If PopDyn hasn't computed them yet (very first boot tick), all are 0
@@ -813,13 +838,21 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
 
             for (int lvl = 80; lvl >= 1 && maxAllowedBotCount; --lvl)
             {
-                uint32 want = targets[lvl] / 2u;
-                if (!want)
+                uint32 const total = targets[lvl];       // both-faction target for this level
+                if (!total)
                     continue;
 
                 for (uint32 f = 0; f < 2 && maxAllowedBotCount; ++f)
                 {
-                    if (haveCount[f][lvl] >= want)
+                    // Split the both-faction target across factions WITHOUT dropping the odd unit.
+                    // Plain target/2 truncates: an odd populationBracket (e.g. 3) collapses to 1 per
+                    // faction => 2/level instead of 3, and a target of 1 collapses to 0/level. Give
+                    // floor(total/2) to each faction, and the remainder (odd total) to one faction,
+                    // alternating by level parity so the extra bot is shared fairly across factions.
+                    uint32 want = total / 2u;
+                    if ((total & 1u) && f == uint32(lvl) % 2u)
+                        want += 1u;
+                    if (!want || haveCount[f][lvl] >= want)
                         continue;
 
                     uint32 need = want - haveCount[f][lvl];

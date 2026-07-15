@@ -324,8 +324,17 @@ void PopulationDynamicsMgr::BuildPlan(std::array<uint32, 81> const& targets, Cen
             if (uint32(L) > cap)
                 continue;
 
+            // Split the both-faction target across factions WITHOUT dropping the odd unit — the
+            // SAME rule the login fill (RandomPlayerbotMgr::AddRandomBots) uses, so the conveyor and
+            // the fill agree on which faction gets the extra bot at each level. Plain target/2
+            // truncates (bracket 3 -> 1/faction), which pinned the belt at 1/faction/level: census 1
+            // >= want 1, no deficit, nothing queued, and the L1 reservoir never drawn up. Distribute
+            // the remainder by level parity so each level reaches floor(3/2)+1 = 2 on one faction and
+            // 1 on the other => 3/level.
             uint32 want = targets[uint32(L)] / 2;
-            if (census.count[f][uint32(L)] >= want)
+            if ((targets[uint32(L)] & 1u) && f == uint32(L) % 2u)
+                want += 1u;
+            if (!want || census.count[f][uint32(L)] >= want)
                 continue;
 
             uint32 need = std::min(want - census.count[f][uint32(L)], budget - issued);
