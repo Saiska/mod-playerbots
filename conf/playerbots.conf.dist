@@ -645,6 +645,22 @@ AiPlayerbot.GuildBankGoldDeposit.RepairReserveMultiplier = 10
 AiPlayerbot.GuildBankGoldDeposit.ReserveFloor = 500000
 AiPlayerbot.GuildBankGoldDeposit.MinDeposit = 100000
 
+#
+#    AiPlayerbot.GuildActivityStatus.Note.Enable
+#        Bots in a guild that contains a real player write their current activity into their guild
+#        member note: public note = a readable phrase (e.g. "Resting at the tavern"), officer note =
+#        raw debug (e.g. "rest/RS_TAVERN · Elwynn Forest", visible only to ranks with View Officer Note).
+#        Default: 0 (off). Only real-player guilds are ever touched.
+#    AiPlayerbot.GuildActivityStatus.Chat.Enable
+#        Also announce each activity change as a templated (non-LLM) line in that guild's chat — a live
+#        occupation trace for debugging. Default: 0 (off).
+#    AiPlayerbot.GuildActivityStatus.Chat.MinIntervalSec
+#        Minimum seconds between debug guild-chat lines per bot (0 = announce every change). Default: 0.
+#
+AiPlayerbot.GuildActivityStatus.Note.Enable = 0
+AiPlayerbot.GuildActivityStatus.Chat.Enable = 0
+AiPlayerbot.GuildActivityStatus.Chat.MinIntervalSec = 0
+
 # Enable/Disable specific maintenance command functionality for altbots
 # Disable to prevent players from giving free bags, spells, skill levels, etc. to their altbots
 # Default: 1 (enabled)
