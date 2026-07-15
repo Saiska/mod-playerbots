@@ -402,7 +402,10 @@ bool StoreLootAction::Execute(Event event)
         if (!proto)
             continue;
 
-        if (!botAI->HasActivePlayerMaster() && AI_VALUE(uint8, "bag space") > 80)
+        // Pre-loot guard applies to grouped bots too (was masterless-only): a bot grouped with a
+        // real player otherwise over-loots non-stackable junk past 80% and jams its bags. Masterless
+        // bots are unchanged (they already satisfied the dropped !HasActivePlayerMaster() term).
+        if (AI_VALUE(uint8, "bag space") > 80)
         {
             uint32 maxStack = proto->GetMaxStackSize();
             if (maxStack == 1)

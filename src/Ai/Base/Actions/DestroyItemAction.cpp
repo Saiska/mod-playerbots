@@ -40,7 +40,14 @@ void DestroyItemAction::DestroyItem(FindItemVisitor* visitor)
     }
 }
 
-bool SmartDestroyItemAction::isUseful() { return !botAI->HasActivePlayerMaster(); }
+// Run for masterless bots AND bots grouped with a real player. Grouped bots were previously
+// blocked (!HasActivePlayerMaster()), which disabled the whole 90% safety valve while grouped
+// and orphaned the gentle real-player-master branch below as dead code -> grouped bots filled
+// up and spammed "My inventory is full" with no disposal. The internal branches already do the
+// right thing per case: real-player-master + real guild -> deposit surplus to guild bank /
+// reagent vault then destroy greys only; everyone else -> cheapest-first flush. The bagSpace<90
+// early-return keeps this a no-op until actually near-full.
+bool SmartDestroyItemAction::isUseful() { return true; }
 
 bool SmartDestroyItemAction::Execute(Event /*event*/)
 {
