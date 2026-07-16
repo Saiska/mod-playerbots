@@ -1385,6 +1385,31 @@ AiPlayerbot.RpgStrandedDwellMs = 8000
 #
 AiPlayerbot.RpgStrandedCooldownMs = 60000
 #
+#    AiPlayerbot.RpgStuckWatchdog
+#        newrpg-stranded-relocate-settle: a Decide-level watchdog that rescues a free bot wedged
+#        motionless on a content map — one the stranded guard is structurally blind to (it only fires
+#        when the current map has NO level content). Complements MoveFarTo's in-transit stuck recovery
+#        (which is untouched); this catches the idle case that never engages MoveFarTo.
+#        1 = on (default), 0 = watchdog inert (the safe-Z relocate destination is still used).
+#        Default: 1
+#
+AiPlayerbot.RpgStuckWatchdog = 1
+#
+#    AiPlayerbot.RpgStuckThresholdMs
+#        A should-be-moving bot (grind/quest/wander/gather/travel) must be motionless this many
+#        milliseconds before the watchdog teleports it to a real-ground hub. Stationary-by-design
+#        statuses (Rest/Idle/Pastime/Recover/Upkeep) never accrue toward this.
+#        Default: 90000
+#
+AiPlayerbot.RpgStuckThresholdMs = 90000
+#
+#    AiPlayerbot.RpgStuckMoveEpsilon
+#        Minimum displacement (yards) between Decide passes counted as real progress; movement beyond
+#        this resets the stuck clock. Anti-thrash reuses RpgStrandedCooldownMs.
+#        Default: 2.0
+#
+AiPlayerbot.RpgStuckMoveEpsilon = 2.0
+#
 #    AiPlayerbot.HealSayOncePerEpisode
 #        Announce "need heal" once when health drops into the low band, then stay quiet until health
 #        recovers above AiPlayerbot.AlmostFullHealth and drops again (no back-to-back spam). 1 = on, 0 = legacy.
