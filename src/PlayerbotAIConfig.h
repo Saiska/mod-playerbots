@@ -532,6 +532,10 @@ public:
     bool rpgStrandedRelocate{true};         // master toggle: relocate bots stranded outside hubs
     uint32 rpgStrandedDwellMs{8000};        // ms a bot must dwell outside a hub before it is considered stranded
     uint32 rpgStrandedCooldownMs{60000};    // ms between successive relocations for the same bot
+    // --- newrpg-stranded-relocate-settle: Decide-level idle-stuck watchdog ---
+    bool  rpgStuckWatchdog;
+    uint32 rpgStuckThresholdMs;
+    float rpgStuckMoveEpsilon;
     // Global bias applied on top of FarmLean()'s per-bot gather multiplier (default 1.0 = no nudge).
     float gatherLeanBias{1.0f};
     // --- occupation-rebalance: lowPriorityQuest decay (Task 8) ---

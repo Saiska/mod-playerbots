@@ -947,6 +947,9 @@ bool PlayerbotAIConfig::Initialize()
     rpgStrandedRelocate   = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgStrandedRelocate", true);
     rpgStrandedDwellMs    = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgStrandedDwellMs", 8000);
     rpgStrandedCooldownMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgStrandedCooldownMs", 60000);
+    rpgStuckWatchdog    = sConfigMgr->GetOption<bool>("AiPlayerbot.RpgStuckWatchdog", true);
+    rpgStuckThresholdMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgStuckThresholdMs", 90000);
+    rpgStuckMoveEpsilon = sConfigMgr->GetOption<float>("AiPlayerbot.RpgStuckMoveEpsilon", 2.0f);
     gatherLeanBias        = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLeanBias", 1.0f);
     lowPriorityQuestDecayMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.LowPriorityQuestDecayMs", 1800000);
     doQuestSuppressScatter = sConfigMgr->GetOption<bool>("AiPlayerbot.DoQuestSuppressScatter", true);
