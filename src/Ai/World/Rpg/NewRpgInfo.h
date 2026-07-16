@@ -149,6 +149,10 @@ struct NewRpgInfo
     uint32 strandedSinceT{0};   // 0 = not currently stranded; else getMSTime() when bot first became stranded
     uint32 lastRelocateT{0};    // getMSTime() of last stranded relocate (anti-thrash); 0 = never relocated
 
+    // --- Decide-level idle-stuck watchdog (newrpg-stranded-relocate-settle) ---
+    WorldPosition idleStuckPos;   // last position sampled by the watchdog
+    uint32 idleStuckSinceT{0};    // getMSTime() the bot went motionless in a should-be-moving status; 0 = fresh/alive
+
     // MOVE_FAR
     float nearestMoveFarDis{FLT_MAX};
     uint32 stuckTs{0};
