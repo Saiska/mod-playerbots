@@ -2195,10 +2195,33 @@ void NewRpgBaseAction::EnterOccupation(NewRpgStatus status)
     }
 }
 
+// Statuses where standing still means the bot is failing to make progress (vs. Idle/Rest/Pastime/
+// Recover/Upkeep, which are stationary by design).
+static bool IsMovingStatus(NewRpgStatus s)
+{
+    switch (s)
+    {
+        case RPG_GO_GRIND:
+        case RPG_WANDER_RANDOM:
+        case RPG_WANDER_NPC:
+        case RPG_DO_QUEST:
+        case RPG_TRAVEL_FLIGHT:
+        case RPG_OUTDOOR_PVP:
+        case RPG_TRAVEL_MOUNT:
+        case RPG_GATHERING_CIRCUIT:
+            return true;
+        default:
+            return false;
+    }
+}
+
 void NewRpgBaseAction::Decide()
 {
     if (TryRelocateStranded())
         return;   // handled: either committed a relocate/idle, or waiting out the dwell
+
+    if (TryUnstickIdle())
+        return;   // handled: teleported a wedged bot and went Idle
 
     // LAYER 1 — NEEDS (strict priority). Inert until Task 5 fills the bodies.
     if (RecoverNeeded())  { botAI->rpgInfo.ChangeToRecover(); return; }   // RECOVER first (survival)
@@ -2291,5 +2314,57 @@ bool NewRpgBaseAction::TryRelocateStranded()
     botAI->rpgInfo.lastRelocateT  = getMSTime();
     botAI->rpgInfo.strandedSinceT = 0;
     botAI->rpgInfo.ChangeToIdle();   // CRASH RULE: last statement; nothing reads info/data after
+    return true;
+}
+
+bool NewRpgBaseAction::TryUnstickIdle()
+{
+    if (!sPlayerbotAIConfig.rpgStuckWatchdog)
+    { botAI->rpgInfo.idleStuckSinceT = 0; return false; }
+    if (botAI->HasActivePlayerMaster() || !InOpenWorld() || bot->IsInCombat())
+    { botAI->rpgInfo.idleStuckSinceT = 0; return false; }
+
+    NewRpgStatus st = botAI->rpgInfo.GetStatus();
+    WorldPosition cur(bot);
+
+    // Liveness — reset the timer and let Decide run normally when the bot is either
+    // stationary-by-design, or has actually moved (real displacement or a map change).
+    bool alive =
+        !IsMovingStatus(st) ||
+        botAI->rpgInfo.idleStuckSinceT == 0 ||
+        cur.GetMapId() != botAI->rpgInfo.idleStuckPos.GetMapId() ||
+        bot->GetExactDist(botAI->rpgInfo.idleStuckPos) > sPlayerbotAIConfig.rpgStuckMoveEpsilon;
+    if (alive)
+    {
+        botAI->rpgInfo.idleStuckPos    = cur;
+        botAI->rpgInfo.idleStuckSinceT = getMSTime();
+        return false;
+    }
+
+    // Should-be-moving AND motionless since idleStuckSinceT — wait out the window.
+    if (GetMSTimeDiffToNow(botAI->rpgInfo.idleStuckSinceT) < sPlayerbotAIConfig.rpgStuckThresholdMs)
+        return false;
+
+    // Anti-thrash: share the stranded cooldown so guard + watchdog can't ping-pong.
+    if (botAI->rpgInfo.lastRelocateT &&
+        GetMSTimeDiffToNow(botAI->rpgInfo.lastRelocateT) < sPlayerbotAIConfig.rpgStrandedCooldownMs)
+    { botAI->rpgInfo.idleStuckSinceT = 0; return false; }
+
+    WorldLocation dest = sTravelMgr.SelectSafeRelocateDest(bot);
+    if (dest == WorldLocation())
+    { botAI->rpgInfo.idleStuckSinceT = 0; return false; }
+
+    LOG_DEBUG("playerbots",
+        "[New RPG] {} idle-stuck in status {} at map {} ({},{},{}) for {}ms -> unstick to map {} ({},{},{})",
+        bot->GetName(), uint32(st), bot->GetMapId(),
+        bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(),
+        GetMSTimeDiffToNow(botAI->rpgInfo.idleStuckSinceT),
+        dest.GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+
+    bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+    bot->TeleportTo(dest);
+    botAI->rpgInfo.lastRelocateT   = getMSTime();
+    botAI->rpgInfo.idleStuckSinceT = 0;
+    botAI->rpgInfo.ChangeToIdle();   // CRASH RULE: last statement
     return true;
 }

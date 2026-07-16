@@ -153,6 +153,9 @@ protected:
     void Decide();
     // Layer-0 stranded guard: relocate a bot displaced off its content band. Returns true = handled.
     bool TryRelocateStranded();
+    // Layer-0 idle-stuck watchdog: teleport a bot that has been motionless in a should-be-moving
+    // status for RpgStuckThresholdMs. Returns true = handled (teleported, went Idle).
+    bool TryUnstickIdle();
     // Maps a candidate status to its Task-2 precondition (precondition ONLY — weights/cooldowns
     // are applied by Decide()). Deliberately changes behaviour vs the old CheckRpgStatusAvailable
     // (e.g. RPG_REST is now hub-gated, so a far bot never strands in field-rest).
