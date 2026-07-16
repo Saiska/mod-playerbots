@@ -890,9 +890,10 @@ bool PlayerbotAIConfig::Initialize()
     if (travelMountDistMax < travelMountDistMin) std::swap(travelMountDistMin, travelMountDistMax);
     gatheringCircuitTravelRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatheringCircuit.TravelRadius", 2000.0f);
     gatheringCircuitDurationSec = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.DurationSec", 3600);
-    LOG_INFO("playerbots", "[MoreOccupations] mountDist={}-{} circuitTravelRadius={} durationSec={}",
+    gatheringCircuitSkillFloorWindow = sConfigMgr->GetOption<uint32>("AiPlayerbot.GatheringCircuit.SkillFloorWindow", 75);
+    LOG_INFO("playerbots", "[MoreOccupations] mountDist={}-{} circuitTravelRadius={} durationSec={} skillFloorWindow={}",
              travelMountDistMin, travelMountDistMax,
-             gatheringCircuitTravelRadius, gatheringCircuitDurationSec);
+             gatheringCircuitTravelRadius, gatheringCircuitDurationSec, gatheringCircuitSkillFloorWindow);
 
     // --- occupation-machine config ---
     occupationWeight[RPG_DO_QUEST]          = sConfigMgr->GetOption<uint32>("AiPlayerbot.OccupationWeight.DoQuest",   25);

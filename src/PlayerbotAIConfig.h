@@ -549,6 +549,7 @@ public:
     float  travelMountDistMax{2000.0f};
     float  gatheringCircuitTravelRadius{2000.0f};
     uint32 gatheringCircuitDurationSec{3600};
+    uint32 gatheringCircuitSkillFloorWindow{75};   // skip nodes >window skill below the bot (0=off)
     float  pastimeSocialRadius;
     float  pastimeSocialClusterDist;
     // upkeep-sociability: dwell cluster overlay — peer-facing interactive one-shot on a dwell beat.

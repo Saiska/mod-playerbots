@@ -5286,7 +5286,18 @@ bool TravelMgr::AnyGatherNodeWithin(Player* bot, float radius) const
 
             for (GatherNode const& node : cellIt->second)
             {
-                if (!bot->HasSkill(node.skillId) || bot->GetSkillValue(node.skillId) < node.reqValue)
+                if (!bot->HasSkill(node.skillId))
+                    continue;
+                uint32 const nodeSkill = bot->GetSkillValue(node.skillId);
+                if (nodeSkill < node.reqValue)
+                    continue;
+                // gather-level-band: a high-skill gatherer skips trivial low-tier nodes so it stops
+                // vacuuming copper in starter zones (economy skew) — no in-band node -> it disengages
+                // gathering and drifts toward its tier. window=0 disables; the skill>window guard
+                // leaves new gatherers (skill<=window) unfloored so they can level on low ore.
+                uint32 const gatherFloorWin = sPlayerbotAIConfig.gatheringCircuitSkillFloorWindow;
+                if (gatherFloorWin > 0 && nodeSkill > gatherFloorWin
+                    && node.reqValue + gatherFloorWin < nodeSkill)
                     continue;
 
                 float const dx = node.posX - x;
@@ -5337,7 +5348,18 @@ bool TravelMgr::NearestGatherNode(Player* bot, float radius, std::vector<ObjectG
                 if (std::find(excludeSpawnIds.begin(), excludeSpawnIds.end(), node.spawnId) != excludeSpawnIds.end())
                     continue;
 
-                if (!bot->HasSkill(node.skillId) || bot->GetSkillValue(node.skillId) < node.reqValue)
+                if (!bot->HasSkill(node.skillId))
+                    continue;
+                uint32 const nodeSkill = bot->GetSkillValue(node.skillId);
+                if (nodeSkill < node.reqValue)
+                    continue;
+                // gather-level-band: a high-skill gatherer skips trivial low-tier nodes so it stops
+                // vacuuming copper in starter zones (economy skew) — no in-band node -> it disengages
+                // gathering and drifts toward its tier. window=0 disables; the skill>window guard
+                // leaves new gatherers (skill<=window) unfloored so they can level on low ore.
+                uint32 const gatherFloorWin = sPlayerbotAIConfig.gatheringCircuitSkillFloorWindow;
+                if (gatherFloorWin > 0 && nodeSkill > gatherFloorWin
+                    && node.reqValue + gatherFloorWin < nodeSkill)
                     continue;
 
                 float const dx = node.posX - x;
