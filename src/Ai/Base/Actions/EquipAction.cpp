@@ -80,24 +80,34 @@ void EquipAction::EquipItem(Item* item, bool disposeDisplaced)
         return;
     }
 
-    // Handle bags first
-    bool equippedBag = false;
+    // Handle bags: swap the loose bag into a bag slot. Only when the swap can actually
+    // succeed — an empty bag slot, or a slot holding an EMPTY bag. The core rejects moving
+    // a NON-EMPTY equipped bag out to a regular inventory slot (EQUIP_ERR_ITEMS_CANT_BE_
+    // SWAPPED), and since the item-usage gate keeps re-selecting a bigger loose bag every
+    // tick, a blind swap spams an endless "Equipping [bag]" / "Cannot swap these items"
+    // retry loop (e.g. a 26-slot Traveler's Backpack against four full 24-slot bags).
+    // Containers are handled here in full — never fall through to the gear-equip path.
     if (itemProto->Class == ITEM_CLASS_CONTAINER)
     {
-        // Attempt to equip as a bag
         uint8 newBagSlot = GetSmallestBagSlot();
-
         if (newBagSlot > 0)
         {
-            uint16 src = ((bagIndex << 8) | slot);
-            uint16 dst = ((INVENTORY_SLOT_BAG_0 << 8) | newBagSlot);
-            bot->SwapItem(src, dst);
-            equippedBag = true;
+            Bag* dstBag = (Bag*)bot->GetItemByPos(INVENTORY_SLOT_BAG_0, newBagSlot);
+            if (!dstBag || dstBag->IsEmpty())
+            {
+                uint16 src = ((bagIndex << 8) | slot);
+                uint16 dst = ((INVENTORY_SLOT_BAG_0 << 8) | newBagSlot);
+                bot->SwapItem(src, dst);
+
+                std::ostringstream out;
+                out << "Equipping " << chat->FormatItem(itemProto);
+                botAI->TellMaster(out);
+            }
         }
+        return;
     }
 
-    // If we didn't equip as a bag, try to equip as gear
-    if (!equippedBag)
+    // Equip as gear
     {
         // Ranged weapons aren't handled by the rest of the weapon equip logic
         // Handle them early here to avoid issues.

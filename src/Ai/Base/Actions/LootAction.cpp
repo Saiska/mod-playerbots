@@ -370,6 +370,13 @@ bool StoreLootAction::Execute(Event event)
 
     bot->SetLootGUID(guid);
 
+    // A deliberately-opened container item (satchel, box, ...) reports an item GUID here.
+    // It must be looted EMPTY or the core never destroys it, and FindOpenableItem re-finds
+    // it every tick off the immutable template HAS_LOOT flag — endless "Opened item" spam.
+    // So take everything from an opened item, bypassing the quality filter and the >80%
+    // bag-space guard below (same spirit as the LOOT_SKINNING gather exemption).
+    bool const isOpenedItem = guid.IsItem();
+
     if (gold > 0)
     {
         WorldPacket* packet = new WorldPacket(CMSG_LOOT_MONEY, 0);
@@ -395,7 +402,7 @@ bool StoreLootAction::Execute(Event event)
         if (lootslot_type != LOOT_SLOT_TYPE_ALLOW_LOOT && lootslot_type != LOOT_SLOT_TYPE_OWNER)
             continue;
 
-        if (loot_type != LOOT_SKINNING && !IsLootAllowed(itemid, botAI))
+        if (loot_type != LOOT_SKINNING && !isOpenedItem && !IsLootAllowed(itemid, botAI))
             continue;
 
         ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemid);
@@ -405,7 +412,13 @@ bool StoreLootAction::Execute(Event event)
         // Pre-loot guard applies to grouped bots too (was masterless-only): a bot grouped with a
         // real player otherwise over-loots non-stackable junk past 80% and jams its bags. Masterless
         // bots are unchanged (they already satisfied the dropped !HasActivePlayerMaster() term).
-        if (AI_VALUE(uint8, "bag space") > 80)
+        // EXEMPT gather loot (LOOT_SKINNING covers mining veins, herb nodes AND creature skinning —
+        // all gameobject-OpenLock gathers send LOOT_SKINNING, see EffectOpenLock). Gathering is
+        // intentional, highly-stackable acquisition: skipping it leaves the node undepleted so the
+        // harvest loop re-casts forever ("cast mining until end, mine stays, bot repeat"). The
+        // junk-over-loot concern only applies to mob-corpse loot. Mirrors the LOOT_SKINNING exemption
+        // in the IsLootAllowed filter above.
+        if (loot_type != LOOT_SKINNING && !isOpenedItem && AI_VALUE(uint8, "bag space") > 80)
         {
             uint32 maxStack = proto->GetMaxStackSize();
             if (maxStack == 1)
