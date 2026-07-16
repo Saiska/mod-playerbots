@@ -909,7 +909,9 @@ public:
     bool HasLevelContentOnMap(uint8 level, uint32 mapId)
     { auto it = mapsWithLevelContent.find(level);
       return it != mapsWithLevelContent.end() && it->second.count(mapId) > 0; }
-    WorldLocation SelectRelocateDest(Player* bot);   // random locsPerLevelCache[level] entry, or WorldLocation() if empty
+    // real-ground-Z relocate destination: a faction hub for the bot's level (innkeeper/flightmaster
+    // coords), widening to the nearest non-empty bracket; WorldLocation() if no hubs at all.
+    WorldLocation SelectSafeRelocateDest(Player* bot);
 
     // gather-travel-to-node: results from a nearest-node query against the boot-built index.
     struct GatherNodeHit

@@ -4542,11 +4542,31 @@ std::vector<std::vector<uint32>> TravelMgr::GetOptimalFlightDestinations(Player*
     return validDestinations;
 }
 
-WorldLocation TravelMgr::SelectRelocateDest(Player* bot)
+WorldLocation TravelMgr::SelectSafeRelocateDest(Player* bot)
 {
-    auto& locs = locsPerLevelCache[bot->GetLevel()];
-    if (locs.empty()) return WorldLocation();
-    return locs[urand(0, locs.size() - 1)];
+    uint8 level = bot->GetLevel();
+    auto const& byLevel = bot->GetTeamId() == TEAM_ALLIANCE ? allianceHubsPerLevelCache
+                                                            : hordeHubsPerLevelCache;
+
+    auto pick = [](std::vector<WorldLocation> const& v) -> WorldLocation
+    { return v.empty() ? WorldLocation() : v[urand(0, v.size() - 1)]; };
+
+    // primary: a hub for the bot's exact level
+    if (auto it = byLevel.find(level); it != byLevel.end() && !it->second.empty())
+        return pick(it->second);
+
+    // fallback: widen outward to the nearest non-empty bracket
+    for (int delta = 1; delta <= (int)DEFAULT_MAX_LEVEL; ++delta)
+    {
+        for (int lv : { (int)level + delta, (int)level - delta })
+        {
+            if (lv < 1 || lv > (int)DEFAULT_MAX_LEVEL)
+                continue;
+            if (auto it = byLevel.find((uint8)lv); it != byLevel.end() && !it->second.empty())
+                return pick(it->second);
+        }
+    }
+    return WorldLocation();   // no hubs at all (should never happen on a populated realm)
 }
 
 const std::vector<WorldLocation> TravelMgr::GetTeleportLocations(Player* bot)
