@@ -174,6 +174,8 @@ namespace
         { "repair_sell",    "Selling & repairing" },
         { "duel",           "Duelling" },
         { "dummy",          "Training on a dummy" },
+        { "upkeep",         "Resupplying" },
+        { "recover",        "Recovering" },
     };
 
     const char* LookupPhrase(const KeyPhrase* table, size_t n, std::string_view key)
@@ -7480,23 +7482,41 @@ void PlayerbotAI::UpdateGuildActivityStatus()
         return;
 
     // Stability guards (mirror DepositSurplusGoldToGuildBank): don't touch a torn-down bot / stale grid.
+    // NOTE: deliberately NOT gated on IsBotInitializing() — that window is sized to MaxRandomBots
+    // (~21min at 2500) and would freeze this real-guild-scoped note at its stale pre-restart value for
+    // the whole post-restart init. The per-bot guards below (in-world / not mid-teleport / not being
+    // removed) already make a per-bot report safe during init; the reporter is change-gated + scoped to
+    // one real guild, so the init-time load is trivial.
     if (!bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported()
-        || bot->IsDuringRemoveFromWorld() || sRandomPlayerbotMgr.IsBotInitializing())
+        || bot->IsDuringRemoveFromWorld())
         return;
 
     // Cheap composite change-detect BEFORE any string work.
     BotBehaviorId const beh = GetCurrentBehaviorId();
+    std::string     behKey = BehaviorKey(beh);
+    // RPG_UPKEEP / RPG_RECOVER are not in the BotBehaviorId spine (GetCurrentBehaviorId maps them to
+    // BEH_NONE), so without this they'd surface as "Idle". Name them explicitly — a bot running
+    // maintenance or regenerating is NOT idle (and upkeep in particular can last minutes).
+    if (beh == BEH_NONE)
+    {
+        switch (rpgInfo.GetStatus())
+        {
+            case RPG_UPKEEP:  behKey = "upkeep";  break;
+            case RPG_RECOVER: behKey = "recover"; break;
+            default: break;   // genuine RPG_IDLE / converging pastime -> "Idle"
+        }
+    }
     std::string     const sub = GetCurrentSubStateKey();
     uint32          const zone = bot->GetZoneId();
-    if (beh == m_lastReportBeh && sub == m_lastReportSub && zone == m_lastReportZone)
+    if (behKey == m_lastReportBehKey && sub == m_lastReportSub && zone == m_lastReportZone)
         return;
-    m_lastReportBeh = beh;
+    m_lastReportBehKey = behKey;
     m_lastReportSub = sub;
     m_lastReportZone = zone;
 
     AreaTableEntry const* area = sAreaTableStore.LookupEntry(zone);
     std::string const zoneName = area ? area->area_name[sWorld->GetDefaultDbcLocale()] : "";
-    GuildActivityText const t = DescribeActivity(BehaviorKey(beh), sub, zoneName);
+    GuildActivityText const t = DescribeActivity(behKey, sub, zoneName);
 
     Guild* guild = sGuildMgr->GetGuildById(bot->GetGuildId());
     if (!guild)

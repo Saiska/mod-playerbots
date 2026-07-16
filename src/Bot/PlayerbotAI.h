@@ -624,7 +624,7 @@ public:
     // Guild-note + optional debug guild-chat reporter. Self-gates (config + real-player guild + stability).
     // Called once per NewRpg tick from the lifecycle block; writes only on composite-state change.
     void UpdateGuildActivityStatus();
-    BotBehaviorId m_lastReportBeh{BEH_NONE};   // last reported composite: behavior
+    std::string   m_lastReportBehKey;          // last reported composite: behavior key
     std::string   m_lastReportSub;             //                          sub-state key
     uint32        m_lastReportZone{0};         //                          zone id
     uint32        m_lastGuildChatMs{0};        // last debug guild-chat emit (throttle)
