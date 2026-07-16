@@ -2277,7 +2277,7 @@ bool NewRpgBaseAction::TryRelocateStranded()
         GetMSTimeDiffToNow(botAI->rpgInfo.lastRelocateT) < sPlayerbotAIConfig.rpgStrandedCooldownMs)
     { botAI->rpgInfo.ChangeToIdle(); return true; }
 
-    WorldLocation dest = sTravelMgr.SelectRelocateDest(bot);
+    WorldLocation dest = sTravelMgr.SelectSafeRelocateDest(bot);
     if (dest == WorldLocation())          // level cache empty (extreme edge)
     { botAI->rpgInfo.ChangeToIdle(); return true; }
 
