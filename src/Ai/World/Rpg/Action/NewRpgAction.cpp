@@ -1457,10 +1457,21 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
         return true;                                   // HOLD — do not advance, do not move
     }
 
-    // Harvest in progress: hold here. The node despawning (caught above) is success; otherwise wait out
-    // the window. Re-issue the cast once if a transient nudge cancelled it (bot no longer casting).
+    // Harvest in progress: hold here. The node despawning (caught above) is success; otherwise give up
+    // after gatherHarvestHoldMs. This window is ABSOLUTE from the first cast — we may re-issue the cast
+    // (transient nudge recovery) but MUST NOT reset the clock, or a node whose loot can't clear (e.g.
+    // FULL BAGS -> mined ore can't be stored -> IsLootPossible stays true) loops forever and the bot
+    // never exits gathering to go sell/upkeep. (Bug: the old code reset harvestStartMs on every re-cast.)
     if (GetMSTimeDiffToNow(data->harvestStartMs) >= sPlayerbotAIConfig.gatherHarvestHoldMs)
     {
+        // If bags are full the ore can't be stored, so NO node in this circuit can complete. End the
+        // whole circuit now -> Decide() sees BagsFull() (LAYER-1) -> UPKEEP (sell), instead of burning
+        // the give-up window on every remaining node.
+        if (BagsFull())
+        {
+            info.ChangeToIdle();
+            return true;                 // CRASH RULE — ChangeToIdle is the last statement
+        }
         ++data->visited;                 // gave up on this node -> count it and move on
         PushGatherRecentVisited(*data, data->nodeSpawnId);
         data->nodeSpawnId = 0;
@@ -1476,8 +1487,7 @@ bool NewRpgGatheringCircuitAction::Execute(Event /*event*/)
         if (lootObj.IsLootPossible(bot))
         {
             context->GetValue<LootObject>("loot target")->Set(lootObj);
-            botAI->DoSpecificAction("open loot", Event(), true);
-            data->harvestStartMs = getMSTime();   // restart the window for the re-issued cast
+            botAI->DoSpecificAction("open loot", Event(), true);   // retry, but do NOT extend the window
         }
     }
     return true;   // still holding
