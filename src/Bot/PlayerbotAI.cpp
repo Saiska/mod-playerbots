@@ -1087,9 +1087,20 @@ void PlayerbotAI::Reset(bool full)
         // Otherwise the master-loss reset in UpdateAIGroupMaster() (SetMaster(nullptr) + Reset(true))
         // wipes the flag before the bot's NewRpg tick can consume it, and a real-player-mastered bot
         // that gets ungrouped never does its sell/redeem run.
+        // newrpg-stranded-relocate-settle: the anti-thrash relocate cooldown (lastRelocateT) and the
+        // Decide-level idle-stuck watchdog progress (idleStuckPos/idleStuckSinceT) must ALSO survive
+        // this full reset, otherwise a Refresh restarts the stuck clock and re-fires the relocate
+        // early. (strandedSinceT is intentionally NOT preserved — it only re-runs the harmless 8 s
+        // confirm-dwell.)
         uint32 const pendingUpkeepMs = rpgInfo.pendingUpkeepMs;
+        uint32 const lastRelocateT = rpgInfo.lastRelocateT;
+        WorldPosition const idleStuckPos = rpgInfo.idleStuckPos;
+        uint32 const idleStuckSinceT = rpgInfo.idleStuckSinceT;
         rpgInfo = NewRpgInfo();
         rpgInfo.pendingUpkeepMs = pendingUpkeepMs;
+        rpgInfo.lastRelocateT = lastRelocateT;
+        rpgInfo.idleStuckPos = idleStuckPos;
+        rpgInfo.idleStuckSinceT = idleStuckSinceT;
         // occupation-state-machine: stagger the first UPKEEP across the overdue window so a
         // fresh boot/relog does not send every bot to maintenance at once (the boot wave).
         // Back-date lastUpkeepMs by up to maintenanceOverdueMs, CLAMPED to getMSTime() to avoid
