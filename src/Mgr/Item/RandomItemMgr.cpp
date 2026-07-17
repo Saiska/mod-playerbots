@@ -761,7 +761,7 @@ bool RandomItemMgr::CanEquipArmor(uint8 clazz, uint32 level, ItemTemplate const*
         proto->SubClass == ITEM_SUBCLASS_ARMOR_SHIELD)
         return true;
 
-    if ((clazz == CLASS_WARRIOR || clazz == CLASS_PALADIN) && level >= 40)
+    if ((clazz == CLASS_WARRIOR || clazz == CLASS_PALADIN || clazz == CLASS_DEATH_KNIGHT) && level >= 40)
     {
         if (proto->SubClass != ITEM_SUBCLASS_ARMOR_PLATE && proto->InventoryType != INVTYPE_CLOAK)
             return false;

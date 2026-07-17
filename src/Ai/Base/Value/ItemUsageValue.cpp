@@ -412,8 +412,17 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         if (oldItem)
         {
             // uint32 oldStatWeight = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
+            // Keep the armor/weapon-proficiency gate (shouldEquip, set from CanEquipArmor/
+            // CanEquipWeapon above) when re-deciding on an occupied slot. Without the
+            // shouldEquip term this line re-decided purely on stat score, so a wrong-armor
+            // item that scored higher (e.g. a mail caster glove with Stamina beating a
+            // prot warrior's current plate glove) was ruled REPLACE -> the bot voted NEED
+            // and autogear then refused to equip it (the equipper DOES enforce proficiency).
+            // ANDing shouldEquip restores gate<->equipper parity: only genuinely equippable
+            // upgrades count, so the bot never Needs an item it will not wear. The empty-slot
+            // branch above already gates on shouldEquip; this makes the occupied path match.
             if (itemScore || oldScore)
-                shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
+                shouldEquipInSlot = shouldEquip && itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
         }
 
         // Bigger quiver

@@ -29,6 +29,11 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    // Skill-free disenchant of non-epic junk gear -> enchanting materials -> reagent vault.
+    // Returns true if at least one item was disenchanted. See the implementation for details.
+    bool DisenchantSurplusGear();
 };
 
 #endif

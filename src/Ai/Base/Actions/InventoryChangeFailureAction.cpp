@@ -95,6 +95,18 @@ bool InventoryChangeFailureAction::Execute(Event event)
     if (!msg.empty())
     {
         botAI->TellError(msg);
+
+        // Bags full: drive the disposal valve directly. "smart destroy item" (deposit
+        // surplus to the guild bank, then flush cheapest-first) is normally pushed by
+        // MaintenanceStrategy, but that strategy is not engaged for random bots -> a bot
+        // that fills its bags never clears space and repeats this message on every later
+        // loot store ("My inventory is full" spam). Firing it here ties cleanup to the
+        // actual failure event (no idle/per-tick cost). Only true out-of-space errors
+        // trigger it; the SmartDestroyItemAction bagSpace<90 guard keeps it a no-op if
+        // space was already freed by an earlier failure in the same store batch.
+        if (err == EQUIP_ERR_INVENTORY_FULL || err == EQUIP_ERR_BAG_FULL)
+            botAI->DoSpecificAction("smart destroy item");
+
         return true;
     }
 

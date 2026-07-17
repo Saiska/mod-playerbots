@@ -5,8 +5,12 @@
 
 #include "DestroyItemAction.h"
 
+#include "DatabaseEnv.h"
 #include "Event.h"
 #include "ItemCountValue.h"
+#include "ItemUsageValue.h"
+#include "LootMgr.h"
+#include "ObjectMgr.h"
 #include "Playerbots.h"
 
 bool DestroyItemAction::Execute(Event event)
@@ -59,15 +63,17 @@ bool SmartDestroyItemAction::Execute(Event /*event*/)
     if (bagSpace < 90)
         return false;
 
-    // Disenchant-before-destroy: reclaim a DE-eligible item into shards instead of destroying it.
-    // The DE action casts spell 13262 (ASYNC) and carries its own green-only real-player/guild guard,
-    // so fire ONE per tick and return — SmartDestroy re-fires next tick to drain the rest; the destroy
-    // branches below only run once no DE-eligible items remain (DoSpecificAction returns false).
-    if (sPlayerbotAIConfig.disenchantBeforeDestroy && !botAI->HasActivePlayerMaster() &&
-        botAI->HasSkill(SKILL_ENCHANTING) && !bot->IsInCombat() &&
-        botAI->DoSpecificAction("disenchant random item"))
+    // Disenchant-before-destroy: turn non-epic junk gear the bot won't equip into enchanting
+    // materials (-> reagent vault) instead of destroying it, preserving value. Skill-free and
+    // ungated on the player-master, so it also runs for a bot GROUPED with a real player — the
+    // case the old "disenchant random item" branch skipped (it required !HasActivePlayerMaster()
+    // AND the Enchanting skill AND cast spell 13262, so a grouped bot never disenchanted and its
+    // bags jammed with un-offloadable gear -> "My inventory is full" spam). See DisenchantSurplusGear().
+    if (sPlayerbotAIConfig.disenchantBeforeDestroy && !bot->IsInCombat() && DisenchantSurplusGear())
     {
-        return true;
+        bagSpace = AI_VALUE(uint8, "bag space");
+        if (bagSpace < 90)
+            return true;
     }
 
     // only destoy grey items if with real player/guild
@@ -127,4 +133,104 @@ bool SmartDestroyItemAction::Execute(Event /*event*/)
     }
 
     return false;
+}
+
+// Skill-free disenchant of non-epic junk gear (any bot: no Enchanting skill, no spell cast). A bot
+// grouped with a real player never runs the maintenance-strategy disenchant, and its mob-loot gear
+// has no offload channel (BoP can't enter a guild bank; world-drops don't match the top-up-only bank;
+// no vendor nearby while following) -> bags jam and it spams "My inventory is full". This rolls each
+// item's disenchant loot and banks the materials STRAIGHT INTO THE REAGENT VAULT (uncapped, DB-backed
+// custom_reagent_bank -- the same store the reagent deposit path uses), then destroys the source gear.
+// Value is preserved as enchanting materials AND every disenchant nets a freed bag slot. Routing the
+// materials through the bags instead (AutoStoreLoot) would swap gear for shards 1:1 and never free
+// space while the bags are already full -- which is exactly the stuck state this fixes.
+//
+// The vault is guild-scoped, so this needs a real guild; masterless / non-guild bots fall through to
+// the destroy/flush branches. Only gear the bot would NOT equip is eligible (we walk the
+// NONE/AH/VENDOR/DISENCHANT usage buckets, so EQUIP/REPLACE/BAD_EQUIP upgrade candidates are never
+// touched), capped at Disenchant.MaxQuality so epics are kept. Two-phase (snapshot ObjectGuids, then
+// act) because DestroyItem invalidates Item* pointers -- re-fetching by GUID keeps the walk safe.
+bool SmartDestroyItemAction::DisenchantSurplusGear()
+{
+    uint32 const guildId = bot->GetGuildId();
+    if (!guildId || !botAI->IsInRealGuild())
+        return false;
+
+    std::vector<ObjectGuid> targets;
+    for (uint32 usage : {(uint32)ITEM_USAGE_DISENCHANT, (uint32)ITEM_USAGE_AH,
+                         (uint32)ITEM_USAGE_VENDOR, (uint32)ITEM_USAGE_NONE})
+    {
+        std::vector<Item*> items = AI_VALUE2(std::vector<Item*>, "inventory items", "usage " + std::to_string(usage));
+        for (Item* item : items)
+        {
+            if (!item)
+                continue;
+
+            ItemTemplate const* proto = item->GetTemplate();
+            if (!proto || (proto->Class != ITEM_CLASS_ARMOR && proto->Class != ITEM_CLASS_WEAPON))
+                continue;
+
+            // No disenchant loot (jewellery, cloaks, tabards, off-hand holdables, ...) or epic+ -> keep.
+            if (proto->DisenchantID == 0)
+                continue;
+            if (proto->Quality < ITEM_QUALITY_UNCOMMON || proto->Quality > sPlayerbotAIConfig.disenchantMaxQuality)
+                continue;
+
+            targets.push_back(item->GetGUID());
+        }
+    }
+
+    uint32 count = 0;
+    for (ObjectGuid const& guid : targets)
+    {
+        Item* item = bot->GetItemByGuid(guid);
+        if (!item)
+            continue;
+
+        ItemTemplate const* proto = item->GetTemplate();
+        if (!proto || proto->DisenchantID == 0)
+            continue;
+
+        // Roll this item's disenchant loot and deposit each rolled material straight into the guild
+        // reagent vault (mirrors PlayerbotAI::TryDepositLootToGuildBank's vault INSERT). No bag round-trip.
+        Loot loot;
+        loot.FillLoot(proto->DisenchantID, LootTemplates_Disenchant, bot, true, true);
+        for (LootItem const& li : loot.items)
+        {
+            if (!li.itemid || li.count == 0)
+                continue;
+
+            ItemTemplate const* mat = sObjectMgr->GetItemTemplate(li.itemid);
+            if (!mat)
+                continue;
+
+            uint32 const subclass = (mat->Class == ITEM_CLASS_GEM) ? ITEM_SUBCLASS_JEWELCRAFTING : mat->SubClass;
+            CharacterDatabase.Execute(
+                "INSERT INTO custom_reagent_bank (owner_guid, item_entry, item_subclass, amount) "
+                "VALUES ({}, {}, {}, {}) ON DUPLICATE KEY UPDATE amount = amount + VALUES(amount)",
+                guildId, li.itemid, subclass, uint32(li.count));
+        }
+        loot.clear();
+
+        uint8 const bag = item->GetBagSlot();
+        uint8 const slot = item->GetSlot();
+        bot->DestroyItem(bag, slot, true);
+        ++count;
+
+        // No early-out on bag space here: disenchanting to the vault is non-destructive (materials
+        // are preserved), and stopping the moment bags dip below the fill threshold leaves only a
+        // few free slots that an actively-grinding grouped bot refills in seconds -> "My inventory
+        // is full" spam resumes. Clear ALL eligible junk gear in one pass so there's a real buffer.
+    }
+
+    if (count)
+    {
+        LOG_INFO("playerbots", "Bots disenchant-to-vault: {} disenchanted {} surplus item(s) (guild {})",
+                 bot->GetName(), count, guildId);
+        std::ostringstream out;
+        out << "Disenchanted " << count << " surplus item(s)";
+        botAI->TellMaster(out);
+    }
+
+    return count > 0;
 }
