@@ -14,11 +14,19 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 
+#include <utility>
+#include <vector>
+
 bool LootRollAction::Execute(Event /*event*/)
 {
     Group* group = bot->GetGroup();
     if (!group)
         return false;
+
+    // Snapshot every pending decision (itemGUID, vote) BEFORE casting any vote.
+    // CountRollVote can complete and delete a Roll, invalidating the Roll* list, so
+    // we must finish all Roll* dereferencing first, then vote from the snapshot.
+    std::vector<std::pair<ObjectGuid, RollVote>> decisions;
 
     std::vector<Roll*> rolls = group->GetRolls();
     for (Roll*& roll : rolls)
@@ -93,21 +101,27 @@ bool LootRollAction::Execute(Event /*event*/)
         else if (vote == GREED && !sPlayerbotAIConfig.lootGreedRollLevel)
             vote = PASS;
 
+        RollVote finalVote = vote;
         switch (group->GetLootMethod())
         {
             case MASTER_LOOT:
             case FREE_FOR_ALL:
-                group->CountRollVote(bot->GetGUID(), guid, PASS);
+                finalVote = PASS;
                 break;
             default:
-                group->CountRollVote(bot->GetGUID(), guid, vote);
                 break;
         }
-        // One item at a time
-        return true;
+        decisions.emplace_back(guid, finalVote);
     }
 
-    return false;
+    if (decisions.empty())
+        return false;
+
+    // All Roll* dereferencing is done; now it is safe to cast every vote at once.
+    for (auto const& decision : decisions)
+        group->CountRollVote(bot->GetGUID(), decision.first, decision.second);
+
+    return true;
 }
 
 RollVote LootRollAction::CalculateRollVote(ItemTemplate const* proto, ItemUsage usage)

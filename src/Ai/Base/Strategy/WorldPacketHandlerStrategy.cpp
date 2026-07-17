@@ -68,8 +68,9 @@ void WorldPacketHandlerStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
     //triggers.push_back(new TriggerNode("quest confirm", { NextAction("quest confirm", relevance) }));
     triggers.push_back(new TriggerNode("questgiver quest details", { NextAction("turn in query quest", relevance) }));
 
-    // loot roll
-    triggers.push_back(new TriggerNode("very often", { NextAction("loot roll", relevance) }));
+    // loot roll — reactive: fire the moment a pending group-loot vote exists,
+    // instead of the polled "very often" random trigger (~6s gate per item).
+    triggers.push_back(new TriggerNode("pending loot roll", { NextAction("loot roll", relevance) }));
 }
 
 WorldPacketHandlerStrategy::WorldPacketHandlerStrategy(PlayerbotAI* botAI) : PassTroughStrategy(botAI)

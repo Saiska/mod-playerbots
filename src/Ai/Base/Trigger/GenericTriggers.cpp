@@ -9,6 +9,7 @@
 
 #include "GenericBuffUtils.h"
 #include "CreatureAI.h"
+#include "Group.h"
 #include "ItemVisitors.h"
 #include "LastSpellCastValue.h"
 #include "ObjectGuid.h"
@@ -334,6 +335,21 @@ bool RandomTrigger::IsActive()
         k = 1;
 
     return (rand() % k) == 0;
+}
+
+bool LootRollTrigger::IsActive()
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (Roll* roll : group->GetRolls())
+    {
+        auto voteItr = roll->playerVote.find(bot->GetGUID());
+        if (voteItr != roll->playerVote.end() && voteItr->second == NOT_EMITED_YET)
+            return true;
+    }
+    return false;
 }
 
 bool AndTrigger::IsActive() { return ls && rs && ls->IsActive() && rs->IsActive(); }

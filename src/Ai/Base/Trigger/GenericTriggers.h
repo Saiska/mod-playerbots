@@ -470,6 +470,17 @@ protected:
     uint32 lastCheck;
 };
 
+// Reactive replacement for the polled "very often" random trigger on loot rolls:
+// active exactly while this bot has a pending (NOT_EMITED_YET) group-loot vote, so
+// the bot rolls the moment loot appears instead of waiting on the ~6s random gate.
+class LootRollTrigger : public Trigger
+{
+public:
+    LootRollTrigger(PlayerbotAI* botAI) : Trigger(botAI, "pending loot roll") {}
+
+    bool IsActive() override;
+};
+
 class AndTrigger : public Trigger
 {
 public:
