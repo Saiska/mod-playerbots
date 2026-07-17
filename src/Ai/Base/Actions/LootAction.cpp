@@ -76,7 +76,15 @@ bool OpenLootAction::Execute(Event /*event*/)
     bool result = DoLoot(lootObject);
     if (result)
     {
-        AI_VALUE(LootObjectStack*, "available loot")->Remove(lootObject.guid);
+        LootObjectStack* stack = AI_VALUE(LootObjectStack*, "available loot");
+        // Regular corpse loot: remember it so it is not re-added and re-opened while it still reads
+        // lootable from items the loot strategy skipped (the 2-3x re-loot-until-despawn loop). A
+        // gather/skinning interaction (skillId != SKILL_NONE) just releases so the corpse can still
+        // be skinned after being item-looted.
+        if (lootObject.skillId == SKILL_NONE)
+            stack->MarkLooted(lootObject.guid);
+        else
+            stack->Remove(lootObject.guid);
         context->GetValue<LootObject>("loot target")->Set(LootObject());
     }
     return result;

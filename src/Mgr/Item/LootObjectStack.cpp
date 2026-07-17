@@ -338,8 +338,21 @@ bool LootObject::IsLootPossible(Player* bot)
     return true;
 }
 
-bool LootObjectStack::Add(ObjectGuid guid)
+// How long a just-looted corpse is kept out of the regular-loot stack. The re-loot burst happens
+// within a few seconds; this comfortably outlasts it while still expiring well before the corpse
+// despawns. Gather/skinning adds bypass this entirely, so it never blocks skinning a looted corpse.
+static constexpr time_t LOOT_RECENT_COOLDOWN_SEC = 60;
+
+bool LootObjectStack::Add(ObjectGuid guid, bool gatherable)
 {
+    // A corpse stays flagged lootable while it still holds items the loot strategy skipped (greys/
+    // filtered), so without this it is re-added and re-opened every scan until it despawns -> the bot
+    // re-loots the same corpse 2-3x, taking nothing. Skip re-adding a recently (regular-)looted corpse.
+    // Gather/skinning adds are exempt (a corpse can be item-looted then skinned).
+    recentlyLooted.shrink(time(nullptr) - LOOT_RECENT_COOLDOWN_SEC);
+    if (!gatherable && recentlyLooted.find(guid) != recentlyLooted.end())
+        return false;
+
     if (availableLoot.size() >= MAX_LOOT_OBJECT_COUNT)
     {
         availableLoot.shrink(time(nullptr) - 30);
@@ -354,6 +367,17 @@ bool LootObjectStack::Add(ObjectGuid guid)
         return false;
 
     return true;
+}
+
+void LootObjectStack::MarkLooted(ObjectGuid guid)
+{
+    recentlyLooted.shrink(time(nullptr) - LOOT_RECENT_COOLDOWN_SEC);
+    // erase+insert so the cooldown restarts from this loot (LootTarget's set key is the guid; a plain
+    // insert would keep the older asOfTime).
+    recentlyLooted.erase(guid);
+    recentlyLooted.insert(guid);
+    // Also drop it from the active stack so it is not re-opened this tick.
+    Remove(guid);
 }
 
 void LootObjectStack::Remove(ObjectGuid guid)

@@ -57,5 +57,7 @@ bool AddGatheringLootAction::AddLoot(ObjectGuid guid)
     if (!loot.IsLootPossible(bot))
         return false;
 
-    return AddAllLootAction::AddLoot(guid);
+    // gatherable = true: bypass the recently-looted skip so a corpse the bot already item-looted can
+    // still be skinned, and gather nodes are never suppressed.
+    return AI_VALUE(LootObjectStack*, "available loot")->Add(guid, true);
 }

@@ -71,8 +71,13 @@ class LootObjectStack
 public:
     LootObjectStack(Player* bot) : bot(bot) {}
 
-    bool Add(ObjectGuid guid);
+    // gatherable = this add is for a gather/skinning interaction (skillId != SKILL_NONE); such adds
+    // bypass the recently-looted skip so a corpse the bot already item-looted can still be skinned.
+    bool Add(ObjectGuid guid, bool gatherable = false);
     void Remove(ObjectGuid guid);
+    // Remember a corpse the bot just finished (regular) looting so it is not re-added and re-opened
+    // while it still shows lootable from items the loot strategy deliberately skipped (grey/filtered).
+    void MarkLooted(ObjectGuid guid);
     void Clear();
     bool CanLoot(float maxDistance);
     LootObject GetLoot(float maxDistance = 0);
@@ -82,6 +87,7 @@ private:
 
     Player* bot;
     LootTargetList availableLoot;
+    LootTargetList recentlyLooted;
 };
 
 #endif
