@@ -6267,6 +6267,56 @@ bool PlayerbotAI::IsInRealGuild()
     return PlayerbotGuildMgr::instance().IsRealGuild(bot->GetGuildId());
 }
 
+// Playerbots: if the guild reagent vault is enabled, this bot is in a real guild, and `item` is a
+// stackable trade-good/gem, deposit the whole stack into the guild's uncapped DB-backed reagent vault
+// (custom_reagent_bank) and destroy it from bags; return true. Returns false otherwise (caller falls
+// through to its own guild-bank / sell / destroy path). Shared by the loot seam
+// (TryDepositLootToGuildBank) and the epic seam (DepositEpicsToGuildBank).
+bool PlayerbotAI::TryDepositReagentToVault(Item* item)
+{
+    if (!item)
+        return false;
+
+    ItemTemplate const* proto = item->GetTemplate();
+    if (!proto)
+        return false;
+
+    uint32 const myGuild = bot->GetGuildId();
+    bool const realGuild = IsInRealGuild();
+
+    if (!sPlayerbotAIConfig.guildReagentVaultEnable || !realGuild)
+        return false;
+
+    if (!((proto->Class == ITEM_CLASS_TRADE_GOODS || proto->Class == ITEM_CLASS_GEM) &&
+          proto->GetMaxStackSize() > 1))
+        return false;
+
+    uint32 const entry = item->GetEntry();
+    uint32 const subclass = (proto->Class == ITEM_CLASS_GEM) ? ITEM_SUBCLASS_JEWELCRAFTING
+                                                             : proto->SubClass;
+    uint32 const count = item->GetCount();
+    uint8 const bag = item->GetBagSlot();     // capture before DestroyItem invalidates Item*
+    uint8 const slot = item->GetSlot();
+
+    CharacterDatabase.Execute(
+        "INSERT INTO custom_reagent_bank (owner_guid, item_entry, item_subclass, amount) "
+        "VALUES ({}, {}, {}, {}) ON DUPLICATE KEY UPDATE amount = amount + VALUES(amount)",
+        myGuild, entry, subclass, count);
+
+    bot->DestroyItem(bag, slot, true);        // item now lives in the vault (pure DB)
+
+    LOG_INFO("playerbots", "Bots reagent-vault deposit: {} -> {} x{} (guild {})",
+             bot->GetName(), proto->Name1, count, myGuild);
+
+    uint32 const dbgGuild = sPlayerbotAIConfig.guildBankDepositDebugGuildId;
+    bool const trace = sPlayerbotAIConfig.guildBankDepositDebug && myGuild != 0
+                       && (dbgGuild ? myGuild == dbgGuild : realGuild);
+    if (trace)
+        LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> VAULTED x{} (guild {})",
+                 bot->GetName(), entry, count, myGuild);
+    return true;
+}
+
 bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
 {
     if (!item)
@@ -6327,35 +6377,10 @@ bool PlayerbotAI::TryDepositLootToGuildBank(Item* item)
         return false;
     }
 
-    // --- Vault-first: unlimited guild reagent vault for stackable mats/gems ----------
-    // Reagents (stackable trade goods / gems) go to the guild's uncapped DB-backed vault
-    // (custom_reagent_bank) instead of the 588-slot guild bank. realGuild is already
-    // verified above, so a non-zero myGuild here is a real guild. Non-reagents fall through
-    // to the existing guild-bank deposit path unchanged.
-    if (sPlayerbotAIConfig.guildReagentVaultEnable &&
-        (proto->Class == ITEM_CLASS_TRADE_GOODS || proto->Class == ITEM_CLASS_GEM) &&
-        proto->GetMaxStackSize() > 1)
-    {
-        uint32 const subclass = (proto->Class == ITEM_CLASS_GEM) ? ITEM_SUBCLASS_JEWELCRAFTING
-                                                                 : proto->SubClass;
-        uint32 const count = item->GetCount();
-        uint8 const bag = item->GetBagSlot();     // capture before DestroyItem invalidates Item*
-        uint8 const slot = item->GetSlot();
-
-        CharacterDatabase.Execute(
-            "INSERT INTO custom_reagent_bank (owner_guid, item_entry, item_subclass, amount) "
-            "VALUES ({}, {}, {}, {}) ON DUPLICATE KEY UPDATE amount = amount + VALUES(amount)",
-            myGuild, entry, subclass, count);
-
-        bot->DestroyItem(bag, slot, true);        // item now lives in the vault (pure DB)
-
-        LOG_INFO("playerbots", "Bots reagent-vault deposit: {} -> {} x{} (guild {})",
-                 bot->GetName(), proto->Name1, count, myGuild);
-        if (trace)
-            LOG_INFO("playerbots", "[GBDeposit dbg] {} item={} -> VAULTED x{} (guild {})",
-                     bot->GetName(), entry, count, myGuild);
+    // Vault-first: stackable reagents (trade goods / gems) go to the guild's uncapped reagent vault
+    // instead of the 588-slot guild bank. See TryDepositReagentToVault (shared with the epic seam).
+    if (TryDepositReagentToVault(item))
         return true;
-    }
 
     // Quality floor (default white) — greys are never banked.
     if (proto->Quality < sPlayerbotAIConfig.guildBankDepositMinQuality)
@@ -6568,6 +6593,16 @@ void PlayerbotAI::DepositEpicsToGuildBank()
         ItemUsage u = GetAiObjectContext()->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
         if (u == ITEM_USAGE_EQUIP || u == ITEM_USAGE_REPLACE || u == ITEM_USAGE_QUEST)
             continue;   // keep-guard: never bank a wanted/pending/quest item
+        // Epic stackable reagents (WotLK epic gems, Nether Vortex, …) belong in the guild reagent
+        // vault, not the 588-slot guild bank — same routing as non-epic reagents at the loot seam.
+        // TryDepositReagentToVault destroys `item` on success, so read `p` (the stable template) for
+        // the log and `continue` before any further use of `item`.
+        if (TryDepositReagentToVault(item))
+        {
+            LOG_INFO("playerbots", "Bots epic-vault deposit: {} -> {} (guild {})",
+                     bot->GetName(), p->Name1, bot->GetGuildId());
+            continue;
+        }
         if (FindAnyDepositTab(bot, guild, item->GetBagSlot(), item->GetSlot()))
             LOG_INFO("playerbots", "Bots epic-deposit: {} -> {} (guild {})", bot->GetName(), p->Name1, bot->GetGuildId());
     }

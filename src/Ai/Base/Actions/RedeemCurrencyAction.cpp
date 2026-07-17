@@ -11,6 +11,7 @@
 #include "StatsWeightCalculator.h"
 #include "StringFormat.h"
 #include <atomic>
+#include <map>
 #include <unordered_set>
 #ifdef _WIN32
 #include <excpt.h>
@@ -234,6 +235,12 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
         uint32 const probeEnterBal = bal;   // [RedeemProbe] to measure how much this pass drained
         char const* probeBranch = "none";   // [RedeemProbe] last branch that acted this pass
 
+        // Value-weighted sink (B2): the guild reagent-vault amounts for this currency's affordable sink
+        // entries, read lazily once when the sink branch first fires this currency. Persists across the
+        // inner buy loop so successive sinks spread across scarce entries; resets per currency.
+        std::map<uint32, uint32> vaultStock;
+        bool vaultLoaded = false;
+
         // Save-first pre-scan: is there an upgrade this bot wants but can't yet afford at the entering
         // balance? Needed by the sink budget below BEFORE the buy loop runs (sinkBudget is computed once,
         // up front). Mirrors the main loop's eligibility checks (not already bought this Execute, usable,
@@ -252,14 +259,15 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
         }
 
         // Proportional sink/convert split. Spend up to `sinkBudget` currency on craft-mat sinks this pass,
-        // then convert the remainder down. A currency with a convert target is capped at sinkPct% of its
-        // entering balance; one WITHOUT a convert target save-first hoards toward the next unaffordable
-        // upgrade (saveTarget) and sinks only once nothing is left to save for (== sink 100%, as today) —
-        // otherwise the un-convertible top currency could never accumulate past a single tier. Gear buys
-        // are orthogonal and do NOT count against this budget.
+        // then convert the remainder down. BOTH branches save-first hoard toward the next unaffordable
+        // upgrade (saveTarget): while a gear goal exists in this currency they sink 0, so gear (step 1) and
+        // convert-down (step 3) get the whole balance. Once nothing is left to save for, a convertible
+        // currency is capped at sinkPct% of its entering balance and an un-convertible one sinks 100% (as
+        // today) — otherwise the un-convertible top currency could never accumulate past a single tier.
+        // Gear buys are orthogonal and do NOT count against this budget.
         bool const hasConvert = sCurrencyGearIndex.ConvertTargetFor(c) != 0;
         uint32 const sinkBudget = hasConvert
-            ? probeEnterBal * sinkPct / 100
+            ? (saveTarget ? 0 : probeEnterBal * sinkPct / 100)
             : (saveTarget ? 0 : probeEnterBal);
         uint32 spentOnSink = 0;
 
@@ -322,8 +330,11 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                 // no room, or PayCost failed (missing a non-currency reqitem) -> fall through to the sink
             }
 
-            // 2) no upgrade -> random affordable sink (gems/mats -> reagent vault), but only until this
-            //    tier's sink budget is spent; past that the remainder converts down (step 3).
+            // 2) no upgrade -> sink surplus into a craft reagent (-> reagent vault), but only until this
+            //    tier's sink budget is spent; past that the remainder converts down (step 3). Selection is
+            //    value-weighted (AiPlayerbot.TokenRedeemSinkStrategy=1): buy the reagent scarcest relative to
+            //    its worth, argmin(vaultAmount / max(SellPrice,1)); ties / nothing-stocked -> highest SellPrice.
+            //    strategy=0 or a bot with no guild -> legacy random affordable pick.
             if (spentOnSink < sinkBudget)
             {
                 std::vector<CurrencyGearIndex::SinkOption> aff;
@@ -331,17 +342,75 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
                     if (s.cost <= bal) aff.push_back(s);
                 if (!aff.empty())
                 {
-                    CurrencyGearIndex::SinkOption s = aff[urand(0, aff.size() - 1)];
+                    uint32 const guildId = bot->GetGuildId();
+                    CurrencyGearIndex::SinkOption s;
+                    if (sPlayerbotAIConfig.tokenRedeemSinkStrategy == 0 || guildId == 0)
+                    {
+                        s = aff[urand(0, aff.size() - 1)];   // legacy random / no vault to balance
+                    }
+                    else
+                    {
+                        // Read the guild's vault stock for these affordable entries ONCE for this currency
+                        // (lazy: only when the sink branch first fires), scoped to a handful of ids. Missing
+                        // entry -> 0. After each buy we bump the picked id's cached amount so successive buys
+                        // in this pass spread instead of piling onto one.
+                        if (!vaultLoaded)
+                        {
+                            vaultLoaded = true;
+                            std::string ids;
+                            for (auto const& a : aff)
+                                ids += (ids.empty() ? "" : ",") + std::to_string(a.itemId);
+                            if (QueryResult vr = CharacterDatabase.Query(
+                                    "SELECT item_entry, amount FROM custom_reagent_bank "
+                                    "WHERE owner_guid = {} AND item_entry IN ({})", guildId, ids))
+                            {
+                                do
+                                {
+                                    Field* f = vr->Fetch();
+                                    vaultStock[f[0].Get<uint32>()] = f[1].Get<uint32>();
+                                } while (vr->NextRow());
+                            }
+                        }
+                        // argmin(amount / max(SellPrice,1)); tie / all-zero -> highest SellPrice wins.
+                        bool have = false;
+                        float bestScore = 0.0f;
+                        uint32 bestSell = 0;
+                        for (auto const& a : aff)
+                        {
+                            auto const it = vaultStock.find(a.itemId);
+                            uint32 const amt = (it != vaultStock.end()) ? it->second : 0;
+                            ItemTemplate const* pt = sObjectMgr->GetItemTemplate(a.itemId);
+                            uint32 const sell = pt ? pt->SellPrice : 0;
+                            float const score = float(amt) / float(std::max<uint32>(sell, 1));
+                            if (!have || score < bestScore || (score == bestScore && sell > bestSell))
+                            {
+                                have = true;
+                                bestScore = score;
+                                bestSell = sell;
+                                s = a;
+                            }
+                        }
+                    }
                     ItemPosCountVec sdest;
                     if (bot->GetItemCount(c, false) >= s.cost &&
                         bot->CanStoreNewItem(INVENTORY_SLOT_BAG_0, NULL_SLOT, sdest, s.itemId, 1) == EQUIP_ERR_OK)
                     {
+                        if (probeWatch)
+                        {
+                            auto const it = vaultStock.find(s.itemId);
+                            uint32 const amt = (it != vaultStock.end()) ? it->second : 0;
+                            ItemTemplate const* pt = sObjectMgr->GetItemTemplate(s.itemId);
+                            LOG_INFO("playerbots",
+                                     "[RedeemProbe] {} c={} sink-pick item={} vaultAmt={} sellPrice={}",
+                                     bot->GetName(), c, s.itemId, amt, pt ? pt->SellPrice : 0);
+                        }
                         bot->DestroyItemCount(c, s.cost, true);            // room verified above; no currency lost
                         StoreNewItemInInventorySlot(bot, s.itemId, 1);
                         acted = true;
                         ++buys;
                         spentOnSink += s.cost;
                         probeBranch = "sink";
+                        ++vaultStock[s.itemId];   // reflect this buy so the next pick spreads
                         continue;
                     }
                 }

@@ -626,6 +626,19 @@ AiPlayerbot.GuildBankDeposit.KeepStacks = 1
 #        (custom_reagent_bank) instead of the 588-slot guild bank. 1 = on (default), 0 = off.
 AiPlayerbot.GuildReagentVault.Enable = 1
 
+#
+#    AiPlayerbot.TokenRedeemSinkStrategy
+#        When a bot redeems emblem/token currency and has no gear left to buy, it sinks the
+#        surplus into crafting reagents (-> guild reagent vault). This selects WHICH reagent:
+#        0 = legacy random affordable pick.
+#        1 = value-weighted: buy the reagent scarcest relative to its worth
+#            (argmin(vaultAmount / max(SellPrice,1))), topping up valuable under-stocked mats.
+#        Bots with no guild fall back to random regardless.
+#        Default: 1
+#
+
+AiPlayerbot.TokenRedeemSinkStrategy = 1
+
 #    AiPlayerbot.GuildBankGoldDeposit.Enable
 #        Bots in a guild with a real player deposit their SURPLUS gold into the guild bank money on
 #        vendor/maintenance passes, keeping a repair reserve sized to their equipped gear.

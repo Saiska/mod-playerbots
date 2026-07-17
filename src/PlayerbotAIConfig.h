@@ -467,6 +467,7 @@ public:
     bool tokenRedeemEnable;
     uint32 tokenRedeemMaxBuysPerTick;
     uint32 tokenRedeemSinkPercent;
+    uint32 tokenRedeemSinkStrategy;
     bool tokenRedeemDebugScan;
     bool upkeepOnGroupLeave;
     bool guildBankDepositEpics;

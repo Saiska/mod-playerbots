@@ -589,6 +589,9 @@ public:
     // Playerbots: if this bot is in a real guild and `item` is a tradeable, white-or-better
     // item whose entry already exists in a depositable guild-bank tab with room, deposit it and
     // return true (caller then skips its own sell/destroy). Returns false otherwise.
+    // Vault-first reagent deposit: stackable trade-good/gem -> guild reagent vault (see .cpp). Shared
+    // by the loot and epic deposit seams. Returns true if the item was vaulted.
+    bool TryDepositReagentToVault(Item* item);
     bool TryDepositLootToGuildBank(Item* item);
     void DepositSurplusToGuildBank();
     void DepositEpicsToGuildBank();
