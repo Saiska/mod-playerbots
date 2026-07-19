@@ -152,14 +152,17 @@ static bool GrantAndEquip(Player* bot, uint32 gearId)
     uint16 dest;
     if (bot->CanEquipItem(NULL_SLOT, dest, item, true, true) == EQUIP_ERR_OK)
     {
-        // Detach the item from its backpack slot BEFORE equipping. Otherwise the bag slot keeps a
-        // reference to the now-equipped item -> a dangling/half-alive Item* that a later GetItemCount
-        // walk dereferences -> C0000005 (live-confirmed: bag=255 slot=37 after a "bought+equipped" gear buy).
-        // Mirrors PlayerbotFactory.cpp's store-then-equip idiom (RemoveItem before EquipItem).
-        uint8 const itemBag = item->GetBagSlot();
-        uint8 const itemSlot = item->GetSlot();
-        bot->RemoveItem(itemBag, itemSlot, true);   // detach (update=true keeps the Item object, just unslots it)
-        bot->EquipItem(dest, item, true);
+        // Equip via a proper SWAP, not raw EquipItem. The target equipment slot is (almost) always
+        // already occupied by the bot's current piece; bot->EquipItem(dest, item) is written for an
+        // EMPTY slot and does NOT relocate the incumbent -> the freshly-bought item is discarded and
+        // DESTROYED while the old piece stays on (root-caused 2026-07-19: every emblem buy self-nuked
+        // "GONE-in-equip", the paid emblems were pure waste, and the bot never progressed past its raid
+        // loot). SwapItem is the game's own drag-to-equip path: it equips `item` into `dest` and moves
+        // the displaced piece back to the source bag slot (freed as `item` leaves it), where the bot's
+        // normal epic-deposit disposal banks it. Positions are packed (bag << 8) | slot; `dest` is
+        // already such a packed equip position from CanEquipItem.
+        uint16 const src = (uint16(item->GetBagSlot()) << 8) | item->GetSlot();
+        bot->SwapItem(src, dest);
         bot->AutoUnequipOffhandIfNeed();
     }
     return true;
@@ -178,8 +181,12 @@ bool RedeemCurrencyAction::Execute(Event /*event*/)
         return false;
 
     // Stand down while the fleet is still loading/randomizing after boot (login ramp): inventories are being
-    // torn down + rebuilt en masse then, and walking one derefs a freed Item*. The reliably-reproduced crash.
-    if (sRandomPlayerbotMgr.IsBotInitializing())
+    // torn down + rebuilt en masse then, and walking one derefs a freed Item*. This fleet-wide uptime timer
+    // (MaxRandomBots * 0.51 s ~= 21 min at 2500 bots) was a band-aid for the redeem-equip dangling-Item*
+    // crash — since root-caused + fixed (f650d07f, 2026-07-08). The per-bot readiness guard just below is the
+    // real protection. Decoupled by default so tests/redeem aren't blocked for ~21 min after every restart;
+    // re-enable via AiPlayerbot.TokenRedeemRespectInitStanddown = 1 if a boot-ramp crash ever resurfaces.
+    if (sPlayerbotAIConfig.tokenRedeemRespectInitStanddown && sRandomPlayerbotMgr.IsBotInitializing())
         return false;
 
     // Only walk inventory when this bot is in a fully valid, stable state (not loading/teleporting/removing).

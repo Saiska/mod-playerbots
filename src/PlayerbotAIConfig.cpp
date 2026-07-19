@@ -777,6 +777,10 @@ bool PlayerbotAIConfig::Initialize()
     // Diagnostic (2026-07-08 crash hunt): SEH-probe the bot's inventory for a half-alive Item* around
     // each redeem mutation, log the producing step, and bail instead of crashing. Turn off once fixed.
     tokenRedeemDebugScan = sConfigMgr->GetOption<bool>("AiPlayerbot.TokenRedeemDebugScan", true);
+    // Fleet-wide post-boot redeem stand-down (IsBotInitializing ~21 min): a legacy band-aid for a since-fixed
+    // crash. Default OFF (the per-bot readiness guard is the real protection); flip to 1 to restore the wait.
+    tokenRedeemRespectInitStanddown =
+        sConfigMgr->GetOption<bool>("AiPlayerbot.TokenRedeemRespectInitStanddown", false);
     // upkeep-on-group-leave: when a bot leaves/loses its group (e.g. an instance run ends), it does a
     // maintenance run — sell + token redeem with the emblems it just earned — like a real player would.
     upkeepOnGroupLeave = sConfigMgr->GetOption<bool>("AiPlayerbot.UpkeepOnGroupLeave", true);

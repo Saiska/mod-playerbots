@@ -469,6 +469,7 @@ public:
     uint32 tokenRedeemSinkPercent;
     uint32 tokenRedeemSinkStrategy;
     bool tokenRedeemDebugScan;
+    bool tokenRedeemRespectInitStanddown;
     bool upkeepOnGroupLeave;
     bool guildBankDepositEpics;
     bool lootGreedRollLevel;
