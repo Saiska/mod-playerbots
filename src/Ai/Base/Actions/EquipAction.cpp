@@ -426,11 +426,16 @@ void EquipAction::EquipItem(Item* item, bool disposeDisplaced)
             bot->GetSession()->HandleAutoEquipItemSlotOpcode(nicePacket);
         }
 
-        // Dispose the displaced item so it cannot bounce back and drive same-slot
-        // re-equip churn. Autonomous upgrade path only (disposeDisplaced); never a
-        // weapon (a caster's displaced 1H must survive — see caster-2h-1h-oh-combo-eval);
-        // never an item still equipped (guards a failed equip). Guild-bank-first (kept
-        // whole, recoverable) else destroy — mirrors DestroyItemAction::DestroyItem.
+        // Best-effort top-up deposit of the displaced item; if it doesn't match an existing bank
+        // stack, LEAVE IT IN THE BAG — never destroy here. Destroy is a last-resort event owned by
+        // the bag-full graduated disposal (SmartDestroyItemAction: deposit -> disenchant -> sell ->
+        // destroy-cheapest, gated at 90% full). Crucially the next upkeep's DepositEpicsToGuildBank
+        // banks any tradeable, unwanted epic to ANY tab (FindAnyDepositTab, bypassing this top-up-only
+        // path), so a displaced epic reaches the guild bank on its own — the old `else DestroyItem`
+        // here nuked valuable displaced gear before that could happen. Anti-churn no longer needs the
+        // immediate eviction: the single-slot scoring guard above (same StatsWeightCalculator) blocks
+        // a lower-scored displaced piece from bouncing back. Autonomous upgrade path only; never a
+        // weapon (a caster's displaced 1H must survive); never an item still equipped (failed equip).
         if (disposeDisplaced && displacedGuid)
         {
             if (Item* displaced = bot->GetItemByGuid(displacedGuid))
@@ -438,8 +443,7 @@ void EquipAction::EquipItem(Item* item, bool disposeDisplaced)
                 if (!displaced->IsEquipped() &&
                     displaced->GetTemplate()->Class != ITEM_CLASS_WEAPON)
                 {
-                    if (!botAI->TryDepositLootToGuildBank(displaced))
-                        bot->DestroyItem(displaced->GetBagSlot(), displaced->GetSlot(), true);
+                    botAI->TryDepositLootToGuildBank(displaced);   // top-up if it fits; else keep in bag
                 }
             }
         }
