@@ -259,7 +259,10 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
                                        dest.GetPositionZ(),
                                        dest.GetOrientation());
         up.stepStartMs = 0;          // dwell starts only after settle + confirm
-        up.dwellMs     = dwellMs;
+        float const wf = sPlayerbotAIConfig.upkeepWorkloadScaleEnable
+                             ? std::max(up.workloadPct / 100.0f, sPlayerbotAIConfig.upkeepWorkloadDwellFloor)
+                             : 1.0f;
+        up.dwellMs     = (uint32)(dwellMs * wf);
         // up.target stays empty until the post-settle confirm scan resolves the live object.
     }
 

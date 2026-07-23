@@ -705,7 +705,11 @@ bool NewRpgStatusUpdateAction::UpkeepDwell(NewRpgInfo::Upkeep& up, uint32 secs, 
     if (up.stepStartMs == 0)
     {
         up.stepStartMs = getMSTime();
-        up.dwellMs = secs * IN_MILLISECONDS;
+        // upkeep-workload-scaling: shrink the dwell by bag fullness (floor keeps it visible).
+        float const wf = sPlayerbotAIConfig.upkeepWorkloadScaleEnable
+                             ? std::max(up.workloadPct / 100.0f, sPlayerbotAIConfig.upkeepWorkloadDwellFloor)
+                             : 1.0f;
+        up.dwellMs = (uint32)(secs * IN_MILLISECONDS * wf);
         if (!action.empty())
         {
             // "sell" must carry the vendor event so SellAction takes the RS_VENDOR path (which also
@@ -950,7 +954,10 @@ bool NewRpgStatusUpdateAction::PoseAtNearbyNpc(uint32 npcFlag, uint32 dwellMs, N
     {
         bot->SetFacingToObject(npcObj);
         up.stepStartMs = getMSTime();
-        up.dwellMs     = dwellMs;
+        float const wf = sPlayerbotAIConfig.upkeepWorkloadScaleEnable
+                             ? std::max(up.workloadPct / 100.0f, sPlayerbotAIConfig.upkeepWorkloadDwellFloor)
+                             : 1.0f;
+        up.dwellMs     = (uint32)(dwellMs * wf);
     }
     TickEmoteCadence(BEH_WANDER_NPC, (uint8)POI_NONE, /*skipSustainedPose=*/false, up.chosenDwellPose);
     return GetMSTimeDiffToNow(up.stepStartMs) < up.dwellMs;
