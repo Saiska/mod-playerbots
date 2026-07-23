@@ -658,6 +658,29 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                     return true;   // CRASH RULE
                 }
 
+                // upkeep-workload-scaling: snapshot bag-fullness ONCE now (bot/botAI live here;
+                // ChangeToUpkeep has no bot*). Roll each cosmetic step's keep/skip once so the
+                // episode is deterministic. Enable=0 leaves the defaults (100 / all-keep) => no-op.
+                if (sPlayerbotAIConfig.upkeepWorkloadScaleEnable)
+                {
+                    up.workloadPct = AI_VALUE(uint8, "bag space");
+                    up.cosmeticKeep = 0;
+                    bool const cap = (up.tier == NewRpgInfo::UPKEEP_TIER_CAPITAL);
+                    // capital cosmetic steps {2,3,4,5,8}; local cosmetic step {3}
+                    uint8 const steps[] = { 2, 3, 4, 5, 8 };
+                    for (uint8 s : steps)
+                    {
+                        if (!cap && s != 3)
+                            continue;   // LOCAL: only step 3 is cosmetic
+                        if (roll_chance_f(up.workloadPct))
+                            up.cosmeticKeep |= (uint16)(1u << s);
+                    }
+                    LOG_INFO("playerbots",
+                             "[UpkeepWorkload] {} bagSpace={} keptCosmetics={:#06x} tier={}",
+                             bot->GetName(), uint32(up.workloadPct), up.cosmeticKeep,
+                             cap ? "CAPITAL" : "LOCAL");
+                }
+
                 up.step = 1;   // 0 = acquire done; pipelines start at step 1
                 return true;
             }
