@@ -764,6 +764,13 @@ bool NewRpgStatusUpdateAction::TickUpkeepLocal(NewRpgInfo::Upkeep& up)
         }
         case 3:   // QUESTGIVER — cosmetic loiter pose (skip if none nearby).
         {
+            if (!(up.cosmeticKeep & (1u << up.step)))
+            {
+                up.step = 4;
+                up.target.Clear();
+                up.stepStartMs = 0;
+                return true;
+            }
             if (PoseAtNearbyNpc(UNIT_NPC_FLAG_QUESTGIVER,
                                 urand(sPlayerbotAIConfig.upkeepQuestGiverMinSec,
                                       sPlayerbotAIConfig.upkeepQuestGiverMaxSec) * IN_MILLISECONDS, up))
@@ -812,6 +819,15 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
         }
         case 2:   // BANK pose (cosmetic — no transaction).
         {
+            if (!(up.cosmeticKeep & (1u << up.step)))   // upkeep-workload-scaling: skip this pose
+            {
+                up.step = 3;
+                up.target.Clear();
+                up.poseArriveT = 0;
+                up.posePos = WorldPosition();
+                up.stepStartMs = 0;
+                return true;
+            }
             if (PoseAtProp(RS_BANK,
                            urand(sPlayerbotAIConfig.upkeepBankMinSec, sPlayerbotAIConfig.upkeepBankMaxSec) * IN_MILLISECONDS,
                            up))
@@ -825,6 +841,15 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
         }
         case 3:   // AUCTION HOUSE pose.
         {
+            if (!(up.cosmeticKeep & (1u << up.step)))
+            {
+                up.step = 4;
+                up.target.Clear();
+                up.poseArriveT = 0;
+                up.posePos = WorldPosition();
+                up.stepStartMs = 0;
+                return true;
+            }
             if (PoseAtProp(RS_AUCTION_HOUSE,
                            urand(sPlayerbotAIConfig.upkeepAHMinSec, sPlayerbotAIConfig.upkeepAHMaxSec) * IN_MILLISECONDS,
                            up))
@@ -838,6 +863,15 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
         }
         case 4:   // MAILBOX pose.
         {
+            if (!(up.cosmeticKeep & (1u << up.step)))
+            {
+                up.step = 5;
+                up.target.Clear();
+                up.poseArriveT = 0;
+                up.posePos = WorldPosition();
+                up.stepStartMs = 0;
+                return true;
+            }
             if (PoseAtProp(RS_MAILBOX,
                            urand(sPlayerbotAIConfig.upkeepMailMinSec, sPlayerbotAIConfig.upkeepMailMaxSec) * IN_MILLISECONDS,
                            up))
@@ -851,6 +885,15 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
         }
         case 5:   // CLASS TRAINER pose.
         {
+            if (!(up.cosmeticKeep & (1u << up.step)))
+            {
+                up.step = 6;
+                up.target.Clear();
+                up.poseArriveT = 0;
+                up.posePos = WorldPosition();
+                up.stepStartMs = 0;
+                return true;
+            }
             if (PoseAtProp(RS_CLASS_TRAINER,
                            urand(sPlayerbotAIConfig.upkeepTrainerMinSec, sPlayerbotAIConfig.upkeepTrainerMaxSec) * IN_MILLISECONDS,
                            up))
@@ -903,6 +946,13 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
         }
         case 8:   // QUESTGIVER — cosmetic loiter pose (skip if none nearby).
         {
+            if (!(up.cosmeticKeep & (1u << up.step)))
+            {
+                up.step = 9;
+                up.target.Clear();
+                up.stepStartMs = 0;
+                return true;
+            }
             if (PoseAtNearbyNpc(UNIT_NPC_FLAG_QUESTGIVER,
                                 urand(sPlayerbotAIConfig.upkeepQuestGiverMinSec,
                                       sPlayerbotAIConfig.upkeepQuestGiverMaxSec) * IN_MILLISECONDS, up))
