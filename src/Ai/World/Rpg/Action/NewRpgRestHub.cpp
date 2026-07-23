@@ -54,6 +54,7 @@ PropKind kindOf(uint8 restSubtype)
         case RS_CLASS_TRAINER: return PK_CLASS_TRAINER;
         case RS_MAILBOX:       return PK_MAILBOX;
         case RS_DUMMY:         return PK_DUMMY;
+        case RS_VENDOR:        return PK_VENDOR;
         default:               return PROPKIND_COUNT;
     }
 }

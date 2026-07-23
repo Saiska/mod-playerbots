@@ -17,7 +17,7 @@
 // std::array with a literal 5 because PropKind is only forward-declared there; pin it to the
 // enum here (NewRpgRestHub.h is in scope) so a future PropKind addition can't silently
 // under-allocate. Mirrors the RS_COUNT==16 guard in NewRpgRestHub.cpp.
-static_assert(PROPKIND_COUNT == 5, "capitalPropLocations array size in TravelMgr.h must match PROPKIND_COUNT");
+static_assert(PROPKIND_COUNT == 6, "capitalPropLocations array size in TravelMgr.h must match PROPKIND_COUNT");
 
 #include "AreaDefines.h"
 #include "Creature.h"
@@ -5081,7 +5081,8 @@ void TravelMgr::PrepareDestinationCache()
                                            creatureTemplate->Entry)
                                  != sPlayerbotAIConfig.pastimeDummyEntries.end();
             if (flags & (UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_AUCTIONEER |
-                         UNIT_NPC_FLAG_TRAINER | UNIT_NPC_FLAG_TRAINER_CLASS) || isDummy)
+                         UNIT_NPC_FLAG_TRAINER | UNIT_NPC_FLAG_TRAINER_CLASS |
+                         UNIT_NPC_FLAG_VENDOR) || isDummy)
             {
                 // z is the prop NPC's own ground z — do NOT lift it (+2 made pose bots float/stack
                 // vertically, esp. at the AH). Per-bot horizontal scatter is applied at pose time.
@@ -5096,6 +5097,8 @@ void TravelMgr::PrepareDestinationCache()
                     capitalPropLocations[areaId][PK_AUCTIONEER].push_back(propLoc);
                 if (flags & (UNIT_NPC_FLAG_TRAINER | UNIT_NPC_FLAG_TRAINER_CLASS))
                     capitalPropLocations[areaId][PK_CLASS_TRAINER].push_back(propLoc);
+                if (flags & UNIT_NPC_FLAG_VENDOR)
+                    capitalPropLocations[areaId][PK_VENDOR].push_back(propLoc);
                 if (isDummy)
                     capitalPropLocations[areaId][PK_DUMMY].push_back(propLoc);
             }

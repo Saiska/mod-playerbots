@@ -1059,7 +1059,7 @@ private:
     std::map<uint32, LevelBracket> zone2LevelBracket;
     // upkeep-capital-pose-prop-resolve — per-capital-zone prop coordinates, built once at boot.
     // Index: [capital zoneId] -> [PropKind] -> spawn positions in that capital.
-    std::unordered_map<uint32, std::array<std::vector<WorldPosition>, 5>> capitalPropLocations;
+    std::unordered_map<uint32, std::array<std::vector<WorldPosition>, 6>> capitalPropLocations;
 
     // gather-travel-to-node — one gatherable mining/herb CHEST spawn in the index.
     struct GatherNode

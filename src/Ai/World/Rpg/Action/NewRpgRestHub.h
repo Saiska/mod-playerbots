@@ -27,6 +27,7 @@ enum PropKind : uint8
     PK_CLASS_TRAINER,
     PK_MAILBOX,
     PK_DUMMY,
+    PK_VENDOR,
     PROPKIND_COUNT
 };
 
