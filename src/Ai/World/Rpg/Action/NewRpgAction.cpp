@@ -663,7 +663,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 // episode is deterministic. Enable=0 leaves the defaults (100 / all-keep) => no-op.
                 if (sPlayerbotAIConfig.upkeepWorkloadScaleEnable)
                 {
-                    up.workloadPct = AI_VALUE(uint8, "bag space");
+                    up.workloadPct = context->GetValue<uint8>("bag space")->Get();   // AI_VALUE macro not in scope in this TU
                     up.cosmeticKeep = 0;
                     bool const cap = (up.tier == NewRpgInfo::UPKEEP_TIER_CAPITAL);
                     // capital cosmetic steps {2,3,4,5,8}; local cosmetic step {3}
