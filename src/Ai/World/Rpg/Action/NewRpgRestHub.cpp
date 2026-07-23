@@ -296,6 +296,8 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
             prop = SelectTrainingDummy();                         // training dummy (Creature, no npcFlag)
         else if (d.target == TK_GO_TYPE)
             prop = SelectNearestGoOfType(d.npcFlagOrGoType);     // mailbox (GameObject)
+        else if (d.target == TK_VENDOR)
+            prop = SelectVendorNpc();                             // upkeep SELL vendor (reuses rest-engine resolver)
         else
             prop = SelectNearestNpcWithFlag(d.npcFlagOrGoType);  // banker/auctioneer/trainer (NPC)
 
@@ -308,6 +310,14 @@ bool NewRpgBaseAction::PoseAtProp(uint8 restSubtype, uint32 dwellMs, NewRpgInfo:
         }
         up.target      = prop;
         up.stepStartMs = getMSTime();   // dwell clock starts now
+        // upkeep-workload-scaling: the vendor SELL step performs its transaction ONCE, on the
+        // tick we resolve the live vendor. Mirrors the rest engine's RS_VENDOR arm (EngageAndHold).
+        if (restSubtype == RS_VENDOR)
+        {
+            if (sPlayerbotAIConfig.tokenRedeemEnable)
+                botAI->DoSpecificAction("redeem currency");
+            botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);
+        }
         // upkeep-sociability: roll one held pose for this bot's dwell so the capital crowd isn't all EMOTE_STATE_TALK.
         RestSubtypeDef const& pdRoll = kRestTable[restSubtype];
         up.chosenDwellPose = ResolveHeldPose(pdRoll.palette,

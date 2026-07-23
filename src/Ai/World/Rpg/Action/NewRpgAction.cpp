@@ -795,25 +795,22 @@ bool NewRpgStatusUpdateAction::TickUpkeepLocal(NewRpgInfo::Upkeep& up)
 // rest coda, which owns those ops, is reached via TickUpkeepFinish at step 8).
 bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
 {
-    // Travel to the capital anchor before the errand chain. The pose steps resolve + hop to their own
-    // prop, and the inn step owns its own movement, so only gate the leading SELL on the hub distance.
-    if (up.step == 1 && bot->GetExactDist(up.hubPos) > 30.0f)
-    {
-        if (DriveTravel(up.hubPos) == TravelResult::EN_ROUTE)
-            return true;
-    }
+    // upkeep-workload-scaling: step-1 hub gate removed — PoseAtProp(RS_VENDOR) drives step-1 movement
+    // straight to the vendor prop. up.hubPos is still set at acquire (acquire-once gate + capitalZone).
 
     switch (up.step)
     {
-        case 1:   // SELL (+guild-bank deposit) — fire once, hold a randomized dwell.
+        case 1:   // SELL — walk to a vendor, redeem + sell on arrival (workload-scaled dwell).
         {
-            if (up.stepStartMs == 0 && sPlayerbotAIConfig.tokenRedeemEnable)
-                botAI->DoSpecificAction("redeem currency");   // synthetic, in-place; once, before the sell/deposit dwell
-            if (!UpkeepDwell(up, urand(sPlayerbotAIConfig.upkeepSellMinSec, sPlayerbotAIConfig.upkeepSellMaxSec),
-                             "sell", true))
+            if (PoseAtProp(RS_VENDOR,
+                           urand(sPlayerbotAIConfig.upkeepSellMinSec, sPlayerbotAIConfig.upkeepSellMaxSec)
+                               * IN_MILLISECONDS,
+                           up))
                 return true;
             up.step = 2;
             up.target.Clear();
+            up.poseArriveT = 0;
+            up.posePos = WorldPosition();
             up.stepStartMs = 0;
             return true;
         }
