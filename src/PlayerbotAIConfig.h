@@ -606,6 +606,8 @@ public:
     uint32 upkeepTrainerMinSec{120}, upkeepTrainerMaxSec{240};
     bool   upkeepDummyTestEnable{true};
     uint32 upkeepDummyTestMinMin{10}, upkeepDummyTestMaxMin{20};
+    bool upkeepWorkloadScaleEnable;
+    float upkeepWorkloadDwellFloor;
     float    restHubWitnessRange{120.0f};      // real-player witness radius for TP gate
     float    restHubTravelBudget{4000.0f};     // max foot/mount distance before field-rest (witnessed)
     // rest-upkeep-consolidation

@@ -119,6 +119,12 @@ struct NewRpgInfo
         uint32        capitalZone{0};            // chosen capital zoneId (CAPITAL tier; resolved once at acquire)
         uint32        poseArriveT{0};            // ms ts the bot reached the current prop (0=en route); gates the settle
         uint32        chosenDwellPose{0xFFFFFFFF};   // upkeep-sociability: per-bot held pose, rolled once on dwell entry (0xFFFFFFFF = unrolled)
+        // upkeep-workload-scaling: snapshotted ONCE at the acquire tick (bag fullness 0-100).
+        // Default 100 = full = current behavior for any episode that never snapshots.
+        uint8         workloadPct{100};
+        // upkeep-workload-scaling: per-cosmetic-step keep/skip, rolled once at acquire.
+        // Bit i set => run cosmetic step i; unset => skip it. Default all-keep.
+        uint16        cosmeticKeep{0xFFFF};
     };
 
     uint32 startT{0};  // start timestamp of the current status

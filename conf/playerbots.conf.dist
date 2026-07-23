@@ -1649,6 +1649,16 @@ AiPlayerbot.Rest.AfterUpkeepChance = 0.50
 AiPlayerbot.Upkeep.QuestGiverMinSec = 45
 AiPlayerbot.Upkeep.QuestGiverMaxSec = 90
 
+#    AiPlayerbot.Upkeep.WorkloadScaleEnable
+#        Scale upkeep episode length by bag fullness: skip cosmetic city poses and
+#        shorten step dwells when the bot has little to offload. 0 = current fixed-length behavior.
+#        Default: 1
+AiPlayerbot.Upkeep.WorkloadScaleEnable = 1
+#    AiPlayerbot.Upkeep.WorkloadDwellFloor
+#        Minimum dwell multiplier for a step that DOES run, so it stays briefly visible
+#        instead of collapsing to an instant pass-through. Default: 0.2
+AiPlayerbot.Upkeep.WorkloadDwellFloor = 0.2
+
 #
 #    AiPlayerbot.Upkeep.CapitalChance
 #        Probability (0..1) an UPKEEP trip is the scenic CAPITAL run vs a quick LOCAL run.

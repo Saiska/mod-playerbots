@@ -842,6 +842,10 @@ bool PlayerbotAIConfig::Initialize()
     upkeepDummyTestEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.Upkeep.DummyTestEnable", true);
     upkeepDummyTestMinMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.DummyTestMinMin", 10);
     upkeepDummyTestMaxMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.Upkeep.DummyTestMaxMin", 20);
+    upkeepWorkloadScaleEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.Upkeep.WorkloadScaleEnable", true);
+    upkeepWorkloadDwellFloor  = sConfigMgr->GetOption<float>("AiPlayerbot.Upkeep.WorkloadDwellFloor", 0.2f);
+    if (upkeepWorkloadDwellFloor < 0.0f) upkeepWorkloadDwellFloor = 0.0f;
+    if (upkeepWorkloadDwellFloor > 1.0f) upkeepWorkloadDwellFloor = 1.0f;
     // clamp: urand requires min<=max and the rest path requires >=1
     if (upkeepSellMinSec > upkeepSellMaxSec)       std::swap(upkeepSellMinSec, upkeepSellMaxSec);
     if (upkeepBankMinSec > upkeepBankMaxSec)       std::swap(upkeepBankMinSec, upkeepBankMaxSec);
