@@ -807,6 +807,18 @@ bool NewRpgStatusUpdateAction::TickUpkeepCapital(NewRpgInfo::Upkeep& up)
                                * IN_MILLISECONDS,
                            up))
                 return true;
+            // upkeep-workload-scaling: PoseAtProp returned false. If it never resolved a vendor
+            // (up.target still empty — no PK_VENDOR prop / travel gave up / forbidden-quarter reject),
+            // the on-arrival redeem+sell never fired. Preserve the old unconditional in-place offload
+            // (the guild-bank deposit that rides on the "vendor" sell needs no NPC) so a full-bag bot
+            // always offloads even when no reachable vendor resolved this episode. If up.target is SET,
+            // PoseAtProp already sold at CONFIRM — do NOT re-fire (would double-sell/deposit).
+            if (up.target.IsEmpty())
+            {
+                if (sPlayerbotAIConfig.tokenRedeemEnable)
+                    botAI->DoSpecificAction("redeem currency");
+                botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);
+            }
             up.step = 2;
             up.target.Clear();
             up.poseArriveT = 0;
