@@ -761,23 +761,38 @@ bool RandomItemMgr::CanEquipArmor(uint8 clazz, uint32 level, ItemTemplate const*
         proto->SubClass == ITEM_SUBCLASS_ARMOR_SHIELD)
         return true;
 
+    // Slots with NO armour-proficiency requirement: anyone can wear them regardless of
+    // leather/mail/plate skill. Cloaks were already exempted inline (InventoryType !=
+    // INVTYPE_CLOAK) in each class/subclass gate below, but rings, trinkets, necks and
+    // held off-hands were NOT — so an uncommon+ item in those slots wrongly failed the
+    // gate and resolved to BAD_EQUIP -> GREED -> PASS on group-loot rolls, while the
+    // equip path (which skips this gate) still equipped it (e.g. from the guild bank at
+    // upkeep). Treat them like cloaks: skip the proficiency rejection but still apply the
+    // stat-suitability check (CheckItemStats) at the bottom, so a rogue still won't Need
+    // a spell-power ring. Restores gate<->equipper parity.
+    bool const noProfSlot = proto->InventoryType == INVTYPE_CLOAK ||
+                            proto->InventoryType == INVTYPE_FINGER ||
+                            proto->InventoryType == INVTYPE_TRINKET ||
+                            proto->InventoryType == INVTYPE_NECK ||
+                            proto->InventoryType == INVTYPE_HOLDABLE;
+
     if ((clazz == CLASS_WARRIOR || clazz == CLASS_PALADIN || clazz == CLASS_DEATH_KNIGHT) && level >= 40)
     {
-        if (proto->SubClass != ITEM_SUBCLASS_ARMOR_PLATE && proto->InventoryType != INVTYPE_CLOAK)
+        if (proto->SubClass != ITEM_SUBCLASS_ARMOR_PLATE && !noProfSlot)
             return false;
     }
 
     if (((clazz == CLASS_WARRIOR || clazz == CLASS_PALADIN) && level < 40) ||
         ((clazz == CLASS_HUNTER || clazz == CLASS_SHAMAN) && level >= 40))
     {
-        if (proto->SubClass != ITEM_SUBCLASS_ARMOR_MAIL && proto->InventoryType != INVTYPE_CLOAK)
+        if (proto->SubClass != ITEM_SUBCLASS_ARMOR_MAIL && !noProfSlot)
             return false;
     }
 
     if (((clazz == CLASS_HUNTER || clazz == CLASS_SHAMAN) && level < 40) ||
         (clazz == CLASS_DRUID || clazz == CLASS_ROGUE))
     {
-        if (proto->SubClass != ITEM_SUBCLASS_ARMOR_LEATHER && proto->InventoryType != INVTYPE_CLOAK)
+        if (proto->SubClass != ITEM_SUBCLASS_ARMOR_LEATHER && !noProfSlot)
             return false;
     }
 
