@@ -417,37 +417,16 @@ bool StoreLootAction::Execute(Event event)
         if (!proto)
             continue;
 
-        // Pre-loot guard applies to grouped bots too (was masterless-only): a bot grouped with a
-        // real player otherwise over-loots non-stackable junk past 80% and jams its bags. Masterless
-        // bots are unchanged (they already satisfied the dropped !HasActivePlayerMaster() term).
-        // EXEMPT gather loot (LOOT_SKINNING covers mining veins, herb nodes AND creature skinning —
-        // all gameobject-OpenLock gathers send LOOT_SKINNING, see EffectOpenLock). Gathering is
-        // intentional, highly-stackable acquisition: skipping it leaves the node undepleted so the
-        // harvest loop re-casts forever ("cast mining until end, mine stays, bot repeat"). The
-        // junk-over-loot concern only applies to mob-corpse loot. Mirrors the LOOT_SKINNING exemption
-        // in the IsLootAllowed filter above.
-        if (loot_type != LOOT_SKINNING && !isOpenedItem && AI_VALUE(uint8, "bag space") > 80)
-        {
-            uint32 maxStack = proto->GetMaxStackSize();
-            if (maxStack == 1)
-                continue;
-
-            std::vector<Item*> found = parseItems(chat->FormatItem(proto));
-
-            bool hasFreeStack = false;
-
-            for (auto stack : found)
-            {
-                if (stack->GetCount() + itemcount < maxStack)
-                {
-                    hasFreeStack = true;
-                    break;
-                }
-            }
-
-            if (!hasFreeStack)
-                continue;
-        }
+        // 80% pre-loot bag-space guard REMOVED (2026-07-24, Fixer): bots now loot corpses in full,
+        // no exception. Rationale — a corpse only becomes skinnable once EVERY loot item is removed
+        // (Creature::AllLootRemovedFromCorpse sets UNIT_FLAG_SKINNABLE, fired from LootHandler only
+        // when loot->isLooted()). The old guard skipped non-stackable / no-partial-stack corpse items
+        // once bags were >80% full, leaving a leftover on the corpse → it never flipped skinnable →
+        // no leather (for bots AND grouped real players). During farming bags sit >80% routinely, so
+        // skinning was broadly broken. Grays cost ZERO net bag space (mod-junk-to-gold converts POOR
+        // items to gold and destroys them the instant they're looted), and residual overflow from
+        // non-gray AH-able junk is handled by the 90% void-flush (SmartDestroyItemAction) + upkeep
+        // sell. So full-loot is safe within the existing space-management architecture.
 
         Player* master = botAI->GetMaster();
         if (sRandomPlayerbotMgr.IsRandomBot(bot) && master)
